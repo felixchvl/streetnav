@@ -1,0 +1,421 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		664D4F272C1C476500A68BB1 /* ArchibikeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F262C1C476500A68BB1 /* ArchibikeApp.swift */; };
+		664D4F292C1C476500A68BB1 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F282C1C476500A68BB1 /* ContentView.swift */; };
+		664D4F2B2C1C476600A68BB1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 664D4F2A2C1C476600A68BB1 /* Assets.xcassets */; };
+		664D4F2E2C1C476600A68BB1 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 664D4F2D2C1C476600A68BB1 /* Preview Assets.xcassets */; };
+		664D4F3B2C1C506B00A68BB1 /* MapboxCoreMaps.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F372C1C506B00A68BB1 /* MapboxCoreMaps.xcframework */; };
+		664D4F3C2C1C506B00A68BB1 /* MapboxCoreMaps.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F372C1C506B00A68BB1 /* MapboxCoreMaps.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		664D4F3D2C1C506B00A68BB1 /* MapboxCommon.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F382C1C506B00A68BB1 /* MapboxCommon.xcframework */; };
+		664D4F3E2C1C506B00A68BB1 /* MapboxCommon.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F382C1C506B00A68BB1 /* MapboxCommon.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		664D4F3F2C1C506B00A68BB1 /* MapboxMaps.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F392C1C506B00A68BB1 /* MapboxMaps.xcframework */; };
+		664D4F402C1C506B00A68BB1 /* MapboxMaps.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F392C1C506B00A68BB1 /* MapboxMaps.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		664D4F412C1C506B00A68BB1 /* Turf.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F3A2C1C506B00A68BB1 /* Turf.xcframework */; };
+		664D4F422C1C506B00A68BB1 /* Turf.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F3A2C1C506B00A68BB1 /* Turf.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		665656712C2597A600383A05 /* Fonctions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656702C2597A600383A05 /* Fonctions.swift */; };
+		665656732C27783400383A05 /* OverlayHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656722C27783400383A05 /* OverlayHome.swift */; };
+		665656752C2778A300383A05 /* BikeMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656742C2778A300383A05 /* BikeMap.swift */; };
+		665656772C29935600383A05 /* RecupHealthKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656762C29935600383A05 /* RecupHealthKit.swift */; };
+		665656792C29942C00383A05 /* RecupObsidian.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656782C29942C00383A05 /* RecupObsidian.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		664D4F432C1C506B00A68BB1 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				664D4F422C1C506B00A68BB1 /* Turf.xcframework in Embed Frameworks */,
+				664D4F3C2C1C506B00A68BB1 /* MapboxCoreMaps.xcframework in Embed Frameworks */,
+				664D4F3E2C1C506B00A68BB1 /* MapboxCommon.xcframework in Embed Frameworks */,
+				664D4F402C1C506B00A68BB1 /* MapboxMaps.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		664D4F232C1C476500A68BB1 /* Archibike.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Archibike.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		664D4F262C1C476500A68BB1 /* ArchibikeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchibikeApp.swift; sourceTree = "<group>"; };
+		664D4F282C1C476500A68BB1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		664D4F2A2C1C476600A68BB1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		664D4F2D2C1C476600A68BB1 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		664D4F342C1C488A00A68BB1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		664D4F372C1C506B00A68BB1 /* MapboxCoreMaps.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:GJZR2MEM28:Mapbox, Inc."; lastKnownFileType = wrapper.xcframework; name = MapboxCoreMaps.xcframework; path = ../../../Downloads/artifacts/MapboxCoreMaps.xcframework; sourceTree = "<group>"; };
+		664D4F382C1C506B00A68BB1 /* MapboxCommon.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:GJZR2MEM28:Mapbox, Inc."; lastKnownFileType = wrapper.xcframework; name = MapboxCommon.xcframework; path = ../../../Downloads/artifacts/MapboxCommon.xcframework; sourceTree = "<group>"; };
+		664D4F392C1C506B00A68BB1 /* MapboxMaps.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:GJZR2MEM28:Mapbox, Inc."; lastKnownFileType = wrapper.xcframework; name = MapboxMaps.xcframework; path = ../../../Downloads/artifacts/MapboxMaps.xcframework; sourceTree = "<group>"; };
+		664D4F3A2C1C506B00A68BB1 /* Turf.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:GJZR2MEM28:Mapbox, Inc."; lastKnownFileType = wrapper.xcframework; name = Turf.xcframework; path = ../../../Downloads/artifacts/Turf.xcframework; sourceTree = "<group>"; };
+		665656702C2597A600383A05 /* Fonctions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fonctions.swift; sourceTree = "<group>"; };
+		665656722C27783400383A05 /* OverlayHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayHome.swift; sourceTree = "<group>"; };
+		665656742C2778A300383A05 /* BikeMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeMap.swift; sourceTree = "<group>"; };
+		665656762C29935600383A05 /* RecupHealthKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecupHealthKit.swift; sourceTree = "<group>"; };
+		665656782C29942C00383A05 /* RecupObsidian.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecupObsidian.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		664D4F202C1C476500A68BB1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				664D4F412C1C506B00A68BB1 /* Turf.xcframework in Frameworks */,
+				664D4F3B2C1C506B00A68BB1 /* MapboxCoreMaps.xcframework in Frameworks */,
+				664D4F3D2C1C506B00A68BB1 /* MapboxCommon.xcframework in Frameworks */,
+				664D4F3F2C1C506B00A68BB1 /* MapboxMaps.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		664D4F1A2C1C476500A68BB1 = {
+			isa = PBXGroup;
+			children = (
+				664D4F252C1C476500A68BB1 /* Archibike */,
+				664D4F242C1C476500A68BB1 /* Products */,
+				664D4F362C1C506B00A68BB1 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		664D4F242C1C476500A68BB1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				664D4F232C1C476500A68BB1 /* Archibike.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		664D4F252C1C476500A68BB1 /* Archibike */ = {
+			isa = PBXGroup;
+			children = (
+				664D4F342C1C488A00A68BB1 /* Info.plist */,
+				664D4F262C1C476500A68BB1 /* ArchibikeApp.swift */,
+				664D4F282C1C476500A68BB1 /* ContentView.swift */,
+				665656742C2778A300383A05 /* BikeMap.swift */,
+				665656722C27783400383A05 /* OverlayHome.swift */,
+				664D4F2A2C1C476600A68BB1 /* Assets.xcassets */,
+				664D4F2C2C1C476600A68BB1 /* Preview Content */,
+				665656702C2597A600383A05 /* Fonctions.swift */,
+				665656762C29935600383A05 /* RecupHealthKit.swift */,
+				665656782C29942C00383A05 /* RecupObsidian.swift */,
+			);
+			path = Archibike;
+			sourceTree = "<group>";
+		};
+		664D4F2C2C1C476600A68BB1 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				664D4F2D2C1C476600A68BB1 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		664D4F362C1C506B00A68BB1 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				664D4F382C1C506B00A68BB1 /* MapboxCommon.xcframework */,
+				664D4F372C1C506B00A68BB1 /* MapboxCoreMaps.xcframework */,
+				664D4F392C1C506B00A68BB1 /* MapboxMaps.xcframework */,
+				664D4F3A2C1C506B00A68BB1 /* Turf.xcframework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		664D4F222C1C476500A68BB1 /* Archibike */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 664D4F312C1C476600A68BB1 /* Build configuration list for PBXNativeTarget "Archibike" */;
+			buildPhases = (
+				664D4F1F2C1C476500A68BB1 /* Sources */,
+				664D4F202C1C476500A68BB1 /* Frameworks */,
+				664D4F212C1C476500A68BB1 /* Resources */,
+				664D4F432C1C506B00A68BB1 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Archibike;
+			productName = Archibike;
+			productReference = 664D4F232C1C476500A68BB1 /* Archibike.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		664D4F1B2C1C476500A68BB1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 1540;
+				TargetAttributes = {
+					664D4F222C1C476500A68BB1 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+				};
+			};
+			buildConfigurationList = 664D4F1E2C1C476500A68BB1 /* Build configuration list for PBXProject "Archibike" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 664D4F1A2C1C476500A68BB1;
+			packageReferences = (
+			);
+			productRefGroup = 664D4F242C1C476500A68BB1 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				664D4F222C1C476500A68BB1 /* Archibike */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		664D4F212C1C476500A68BB1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				664D4F2E2C1C476600A68BB1 /* Preview Assets.xcassets in Resources */,
+				664D4F2B2C1C476600A68BB1 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		664D4F1F2C1C476500A68BB1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				665656752C2778A300383A05 /* BikeMap.swift in Sources */,
+				664D4F292C1C476500A68BB1 /* ContentView.swift in Sources */,
+				664D4F272C1C476500A68BB1 /* ArchibikeApp.swift in Sources */,
+				665656712C2597A600383A05 /* Fonctions.swift in Sources */,
+				665656772C29935600383A05 /* RecupHealthKit.swift in Sources */,
+				665656792C29942C00383A05 /* RecupObsidian.swift in Sources */,
+				665656732C27783400383A05 /* OverlayHome.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		664D4F2F2C1C476600A68BB1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		664D4F302C1C476600A68BB1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		664D4F322C1C476600A68BB1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Archibike/Preview Content\"";
+				DEVELOPMENT_TEAM = LJUBJ5GTAT;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Archibike/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.felixchevalier.Archibike;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		664D4F332C1C476600A68BB1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Archibike/Preview Content\"";
+				DEVELOPMENT_TEAM = LJUBJ5GTAT;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Archibike/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.felixchevalier.Archibike;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		664D4F1E2C1C476500A68BB1 /* Build configuration list for PBXProject "Archibike" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				664D4F2F2C1C476600A68BB1 /* Debug */,
+				664D4F302C1C476600A68BB1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		664D4F312C1C476600A68BB1 /* Build configuration list for PBXNativeTarget "Archibike" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				664D4F322C1C476600A68BB1 /* Debug */,
+				664D4F332C1C476600A68BB1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 664D4F1B2C1C476500A68BB1 /* Project object */;
+}
