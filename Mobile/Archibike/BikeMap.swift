@@ -1,20 +1,22 @@
-//
-//  BikeMap.swift
-//  Archibike
-//
-//  Created by Félix Chevalier on 22/06/2024.
-//
-
+import CoreLocation
+import MapKit
 import SwiftUI
+
+#if canImport(MapboxMaps)
 @_spi(Experimental) import MapboxMaps
+#endif
 
 struct BikeMap: View {
+    private let center = CLLocationCoordinate2D(latitude: 48.85165079999999, longitude: 2.3624705)
+
     var body: some View {
-        let myMapInitOptions = MapInitOptions(styleURI: StyleURI(rawValue: "mapbox://styles/felixchvl/clxni2hhh000h01pa760oc6y9"))
-        let center = CLLocationCoordinate2D(latitude: 48.85165079999999, longitude: 2.3624705)
+        #if canImport(MapboxMaps)
         Map(initialViewport: .camera(center: center, zoom: 18, bearing: 50, pitch: 60))
             .ignoresSafeArea()
-        
+        #else
+        Map(position: .constant(.region(MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)))))
+            .ignoresSafeArea()
+        #endif
     }
 }
 
