@@ -22,3 +22,5 @@ if __name__ == "__main__":
     output_file = '/Users/felixchevalier/Desktop/Archibike/files_with_location.txt'
     # Exécute la fonction principale
     find_files_with_location(input_directory, output_file)
+
+
