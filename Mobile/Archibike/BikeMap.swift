@@ -20,6 +20,9 @@ struct BikeMap: View {
     }
 }
 
-#Preview {
-    BikeMap()
+struct BikeMap_Previews: PreviewProvider {
+    static var previews: some View {
+        BikeMap()
+            .previewDisplayName("Bike Map")
+    }
 }

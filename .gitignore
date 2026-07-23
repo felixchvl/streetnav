@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# IDE and Xcode user state
+.idea/
+*.iml
+xcuserdata/
+*.xcuserstate

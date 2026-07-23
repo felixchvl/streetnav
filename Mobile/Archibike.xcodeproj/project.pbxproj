@@ -11,37 +11,24 @@
 		664D4F292C1C476500A68BB1 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F282C1C476500A68BB1 /* ContentView.swift */; };
 		664D4F2B2C1C476600A68BB1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 664D4F2A2C1C476600A68BB1 /* Assets.xcassets */; };
 		664D4F2E2C1C476600A68BB1 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 664D4F2D2C1C476600A68BB1 /* Preview Assets.xcassets */; };
-		664D4F3B2C1C506B00A68BB1 /* MapboxCoreMaps.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F372C1C506B00A68BB1 /* MapboxCoreMaps.xcframework */; };
-		664D4F3C2C1C506B00A68BB1 /* MapboxCoreMaps.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F372C1C506B00A68BB1 /* MapboxCoreMaps.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		664D4F3D2C1C506B00A68BB1 /* MapboxCommon.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F382C1C506B00A68BB1 /* MapboxCommon.xcframework */; };
-		664D4F3E2C1C506B00A68BB1 /* MapboxCommon.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F382C1C506B00A68BB1 /* MapboxCommon.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		664D4F3F2C1C506B00A68BB1 /* MapboxMaps.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F392C1C506B00A68BB1 /* MapboxMaps.xcframework */; };
-		664D4F402C1C506B00A68BB1 /* MapboxMaps.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F392C1C506B00A68BB1 /* MapboxMaps.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		664D4F412C1C506B00A68BB1 /* Turf.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F3A2C1C506B00A68BB1 /* Turf.xcframework */; };
-		664D4F422C1C506B00A68BB1 /* Turf.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 664D4F3A2C1C506B00A68BB1 /* Turf.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		665656712C2597A600383A05 /* Fonctions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656702C2597A600383A05 /* Fonctions.swift */; };
 		665656732C27783400383A05 /* OverlayHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656722C27783400383A05 /* OverlayHome.swift */; };
 		665656752C2778A300383A05 /* BikeMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656742C2778A300383A05 /* BikeMap.swift */; };
 		665656772C29935600383A05 /* RecupHealthKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656762C29935600383A05 /* RecupHealthKit.swift */; };
 		665656792C29942C00383A05 /* RecupObsidian.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656782C29942C00383A05 /* RecupObsidian.swift */; };
+		STNB0010000000000000001 /* StreetnavPrototypeRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0010000000000000001 /* StreetnavPrototypeRootView.swift */; };
+		STNB0020000000000000002 /* StreetnavModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0020000000000000002 /* StreetnavModels.swift */; };
+		STNB0030000000000000003 /* StreetnavMockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0030000000000000003 /* StreetnavMockData.swift */; };
+		STNB0040000000000000004 /* StreetnavPrototypeServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0040000000000000004 /* StreetnavPrototypeServices.swift */; };
+		STNB0050000000000000005 /* StreetnavComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0050000000000000005 /* StreetnavComponents.swift */; };
+		STNB0060000000000000006 /* StreetnavMapSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0060000000000000006 /* StreetnavMapSurface.swift */; };
+		STNB0070000000000000007 /* StreetnavRecommendedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0070000000000000007 /* StreetnavRecommendedView.swift */; };
+		STNB0080000000000000008 /* StreetnavPrototypeGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0080000000000000008 /* StreetnavPrototypeGallery.swift */; };
+		STNB0090000000000000009 /* StreetnavMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0090000000000000009 /* StreetnavMotion.swift */; };
+		STNB0100000000000000010 /* StreetnavPrototypeTuningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */; };
+		STNB0110000000000000011 /* StreetnavPrototypePreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXCopyFilesBuildPhase section */
-		664D4F432C1C506B00A68BB1 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				664D4F422C1C506B00A68BB1 /* Turf.xcframework in Embed Frameworks */,
-				664D4F3C2C1C506B00A68BB1 /* MapboxCoreMaps.xcframework in Embed Frameworks */,
-				664D4F3E2C1C506B00A68BB1 /* MapboxCommon.xcframework in Embed Frameworks */,
-				664D4F402C1C506B00A68BB1 /* MapboxMaps.xcframework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		664D4F232C1C476500A68BB1 /* Archibike.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Archibike.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -50,10 +37,6 @@
 		664D4F2A2C1C476600A68BB1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		664D4F2D2C1C476600A68BB1 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		664D4F342C1C488A00A68BB1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		664D4F372C1C506B00A68BB1 /* MapboxCoreMaps.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:GJZR2MEM28:Mapbox, Inc."; lastKnownFileType = wrapper.xcframework; name = MapboxCoreMaps.xcframework; path = ../../../Downloads/artifacts/MapboxCoreMaps.xcframework; sourceTree = "<group>"; };
-		664D4F382C1C506B00A68BB1 /* MapboxCommon.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:GJZR2MEM28:Mapbox, Inc."; lastKnownFileType = wrapper.xcframework; name = MapboxCommon.xcframework; path = ../../../Downloads/artifacts/MapboxCommon.xcframework; sourceTree = "<group>"; };
-		664D4F392C1C506B00A68BB1 /* MapboxMaps.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:GJZR2MEM28:Mapbox, Inc."; lastKnownFileType = wrapper.xcframework; name = MapboxMaps.xcframework; path = ../../../Downloads/artifacts/MapboxMaps.xcframework; sourceTree = "<group>"; };
-		664D4F3A2C1C506B00A68BB1 /* Turf.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:GJZR2MEM28:Mapbox, Inc."; lastKnownFileType = wrapper.xcframework; name = Turf.xcframework; path = ../../../Downloads/artifacts/Turf.xcframework; sourceTree = "<group>"; };
 		665656702C2597A600383A05 /* Fonctions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fonctions.swift; sourceTree = "<group>"; };
 		665656722C27783400383A05 /* OverlayHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayHome.swift; sourceTree = "<group>"; };
 		665656742C2778A300383A05 /* BikeMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeMap.swift; sourceTree = "<group>"; };
@@ -66,10 +49,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				664D4F412C1C506B00A68BB1 /* Turf.xcframework in Frameworks */,
-				664D4F3B2C1C506B00A68BB1 /* MapboxCoreMaps.xcframework in Frameworks */,
-				664D4F3D2C1C506B00A68BB1 /* MapboxCommon.xcframework in Frameworks */,
-				664D4F3F2C1C506B00A68BB1 /* MapboxMaps.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -96,6 +75,17 @@
 		664D4F252C1C476500A68BB1 /* Archibike */ = {
 			isa = PBXGroup;
 			children = (
+				STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */,
+				STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */,
+				STNP0090000000000000009 /* StreetnavMotion.swift */,
+				STNP0080000000000000008 /* StreetnavPrototypeGallery.swift */,
+				STNP0070000000000000007 /* StreetnavRecommendedView.swift */,
+				STNP0060000000000000006 /* StreetnavMapSurface.swift */,
+				STNP0050000000000000005 /* StreetnavComponents.swift */,
+				STNP0040000000000000004 /* StreetnavPrototypeServices.swift */,
+				STNP0030000000000000003 /* StreetnavMockData.swift */,
+				STNP0020000000000000002 /* StreetnavModels.swift */,
+				STNP0010000000000000001 /* StreetnavPrototypeRootView.swift */,
 				664D4F342C1C488A00A68BB1 /* Info.plist */,
 				664D4F262C1C476500A68BB1 /* ArchibikeApp.swift */,
 				664D4F282C1C476500A68BB1 /* ContentView.swift */,
@@ -121,10 +111,6 @@
 		664D4F362C1C506B00A68BB1 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				664D4F382C1C506B00A68BB1 /* MapboxCommon.xcframework */,
-				664D4F372C1C506B00A68BB1 /* MapboxCoreMaps.xcframework */,
-				664D4F392C1C506B00A68BB1 /* MapboxMaps.xcframework */,
-				664D4F3A2C1C506B00A68BB1 /* Turf.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -139,7 +125,6 @@
 				664D4F1F2C1C476500A68BB1 /* Sources */,
 				664D4F202C1C476500A68BB1 /* Frameworks */,
 				664D4F212C1C476500A68BB1 /* Resources */,
-				664D4F432C1C506B00A68BB1 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -202,6 +187,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				STNB0110000000000000011 /* StreetnavPrototypePreviews.swift in Sources */,
+				STNB0100000000000000010 /* StreetnavPrototypeTuningView.swift in Sources */,
+				STNB0090000000000000009 /* StreetnavMotion.swift in Sources */,
+				STNB0080000000000000008 /* StreetnavPrototypeGallery.swift in Sources */,
+				STNB0070000000000000007 /* StreetnavRecommendedView.swift in Sources */,
+				STNB0060000000000000006 /* StreetnavMapSurface.swift in Sources */,
+				STNB0050000000000000005 /* StreetnavComponents.swift in Sources */,
+				STNB0040000000000000004 /* StreetnavPrototypeServices.swift in Sources */,
+				STNB0030000000000000003 /* StreetnavMockData.swift in Sources */,
+				STNB0020000000000000002 /* StreetnavModels.swift in Sources */,
+				STNB0010000000000000001 /* StreetnavPrototypeRootView.swift in Sources */,
 				665656752C2778A300383A05 /* BikeMap.swift in Sources */,
 				664D4F292C1C476500A68BB1 /* ContentView.swift in Sources */,
 				664D4F272C1C476500A68BB1 /* ArchibikeApp.swift in Sources */,
