@@ -2,7 +2,7 @@ import CoreLocation
 import MapKit
 import SwiftUI
 
-struct ContentView: View {
+struct StreetnavLegacyDemoView: View {
     @State private var camera = MapCameraPosition.region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 48.8637, longitude: 2.3708),
@@ -534,8 +534,8 @@ private struct StreetnavDemoManeuverCard: View {
     }
 }
 
-struct ContentView_Previews: PreviewProvider {
+struct StreetnavLegacyDemoView_Previews: PreviewProvider {
     static var previews: some View {
-        ContentView().previewDisplayName("Streetnav Demo")
+        StreetnavLegacyDemoView().previewDisplayName("Streetnav Demo")
     }
 }

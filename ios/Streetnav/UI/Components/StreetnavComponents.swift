@@ -72,7 +72,7 @@ struct StreetnavPrimaryAction: View {
             .frame(maxWidth: .infinity, minHeight: 52)
             .padding(.horizontal, 18)
             .background(isDisabled ? Color.secondary.opacity(0.25) : Color.accentColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .foregroundStyle(isDisabled ? .secondary : .white)
+            .foregroundStyle(isDisabled ? Color.secondary : Color.white)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled || isLoading)

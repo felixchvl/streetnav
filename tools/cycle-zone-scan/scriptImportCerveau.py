@@ -1,4 +1,7 @@
 import os  # Module pour interagir avec le système de fichiers
+from pathlib import Path
+
+OUTPUT_DIRECTORY = Path(__file__).resolve().parent / "outputs"
 import requests  # Module pour faire des requêtes HTTP
 import geojson  # Module pour manipuler des objets GeoJSON
 from geojson import Feature, FeatureCollection  # Classes GeoJSON pour les features et les collections de features
@@ -93,6 +96,7 @@ def main(input_directory, output_file):
 if __name__ == "__main__":
     # Définit le répertoire d'entrée et le fichier de sortie
     input_directory = '/Users/felixchevalier/Library/Mobile Documents/iCloud~md~obsidian/Documents/Cerveau'
-    output_file = '/Users/felixchevalier/Desktop/Archibike/cerveau.geojson'
+    OUTPUT_DIRECTORY.mkdir(exist_ok=True)
+    output_file = OUTPUT_DIRECTORY / "cerveau.geojson"
     # Exécute la fonction principale
     main(input_directory, output_file)

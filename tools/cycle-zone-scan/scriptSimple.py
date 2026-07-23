@@ -1,4 +1,7 @@
 import os
+from pathlib import Path
+
+OUTPUT_DIRECTORY = Path(__file__).resolve().parent / "outputs"
 
 def find_files_with_location(input_directory, output_file):
     # Ouvre le fichier de sortie en mode écriture
@@ -19,7 +22,8 @@ def find_files_with_location(input_directory, output_file):
 if __name__ == "__main__":
     # Définit le répertoire d'entrée et le fichier de sortie
     input_directory = '/Users/felixchevalier/Library/Mobile Documents/iCloud~md~obsidian/Documents/Cerveau'
-    output_file = '/Users/felixchevalier/Desktop/Archibike/files_with_location.txt'
+    OUTPUT_DIRECTORY.mkdir(exist_ok=True)
+    output_file = OUTPUT_DIRECTORY / "files_with_location.txt"
     # Exécute la fonction principale
     find_files_with_location(input_directory, output_file)
 

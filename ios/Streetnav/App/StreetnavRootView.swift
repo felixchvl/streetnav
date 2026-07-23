@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct StreetnavPrototypeRootView: View {
+struct StreetnavRootView: View {
     #if DEBUG
     @State private var developerDestination: DeveloperDestination?
     #endif
@@ -21,7 +21,7 @@ struct StreetnavPrototypeRootView: View {
             }
             .padding(.top, 62)
             .padding(.trailing, 16)
-            .accessibilityLabel("Outils prototype")
+            .accessibilityLabel("Outils de developpement")
             .sheet(item: $developerDestination) { destination in
                 switch destination {
                 case .gallery:

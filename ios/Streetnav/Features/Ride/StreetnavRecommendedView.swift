@@ -1,12 +1,17 @@
 import SwiftUI
 
+@MainActor
 struct StreetnavRecommendedView: View {
     @StateObject private var model: StreetnavPrototypeViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentedSheet: SheetKind?
     @State private var showsEndConfirmation = false
 
-    init(model: StreetnavPrototypeViewModel = StreetnavPrototypeViewModel()) {
+    init() {
+        _model = StateObject(wrappedValue: StreetnavPrototypeViewModel())
+    }
+
+    init(model: StreetnavPrototypeViewModel) {
         _model = StateObject(wrappedValue: model)
     }
 

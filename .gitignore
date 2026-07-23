@@ -11,3 +11,7 @@ __pycache__/
 *.iml
 xcuserdata/
 *.xcuserstate
+
+# Generated local tool outputs
+tools/**/outputs/*
+!tools/**/outputs/.gitkeep

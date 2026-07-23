@@ -85,7 +85,7 @@ struct NavigationInstruction: Identifiable, Hashable {
     let spokenLabel: String
 }
 
-struct RouteAlternative: Identifiable, Hashable {
+struct RouteAlternative: Identifiable {
     let id = UUID()
     let title: String
     let subtitle: String
@@ -94,7 +94,7 @@ struct RouteAlternative: Identifiable, Hashable {
     let routeCoordinates: [CLLocationCoordinate2D]
 }
 
-struct StreetnavRoute: Identifiable, Hashable {
+struct StreetnavRoute: Identifiable {
     let id = UUID()
     let name: String
     let durationMinutes: Int

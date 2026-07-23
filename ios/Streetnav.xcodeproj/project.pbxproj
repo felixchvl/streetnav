@@ -7,16 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		664D4F272C1C476500A68BB1 /* ArchibikeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F262C1C476500A68BB1 /* ArchibikeApp.swift */; };
-		664D4F292C1C476500A68BB1 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F282C1C476500A68BB1 /* ContentView.swift */; };
+		664D4F272C1C476500A68BB1 /* StreetnavApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F262C1C476500A68BB1 /* StreetnavApp.swift */; };
+		664D4F292C1C476500A68BB1 /* StreetnavLegacyDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F282C1C476500A68BB1 /* StreetnavLegacyDemoView.swift */; };
 		664D4F2B2C1C476600A68BB1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 664D4F2A2C1C476600A68BB1 /* Assets.xcassets */; };
 		664D4F2E2C1C476600A68BB1 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 664D4F2D2C1C476600A68BB1 /* Preview Assets.xcassets */; };
-		665656712C2597A600383A05 /* Fonctions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656702C2597A600383A05 /* Fonctions.swift */; };
-		665656732C27783400383A05 /* OverlayHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656722C27783400383A05 /* OverlayHome.swift */; };
-		665656752C2778A300383A05 /* BikeMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656742C2778A300383A05 /* BikeMap.swift */; };
-		665656772C29935600383A05 /* RecupHealthKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656762C29935600383A05 /* RecupHealthKit.swift */; };
-		665656792C29942C00383A05 /* RecupObsidian.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665656782C29942C00383A05 /* RecupObsidian.swift */; };
-		STNB0010000000000000001 /* StreetnavPrototypeRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0010000000000000001 /* StreetnavPrototypeRootView.swift */; };
+		STNB0010000000000000001 /* StreetnavRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0010000000000000001 /* StreetnavRootView.swift */; };
 		STNB0020000000000000002 /* StreetnavModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0020000000000000002 /* StreetnavModels.swift */; };
 		STNB0030000000000000003 /* StreetnavMockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0030000000000000003 /* StreetnavMockData.swift */; };
 		STNB0040000000000000004 /* StreetnavPrototypeServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0040000000000000004 /* StreetnavPrototypeServices.swift */; };
@@ -31,9 +26,9 @@
 
 
 /* Begin PBXFileReference section */
-		664D4F232C1C476500A68BB1 /* Archibike.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Archibike.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		664D4F262C1C476500A68BB1 /* ArchibikeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchibikeApp.swift; sourceTree = "<group>"; };
-		664D4F282C1C476500A68BB1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		664D4F232C1C476500A68BB1 /* Streetnav.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Streetnav.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		664D4F262C1C476500A68BB1 /* StreetnavApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavApp.swift; sourceTree = "<group>"; };
+		664D4F282C1C476500A68BB1 /* StreetnavLegacyDemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavLegacyDemoView.swift; sourceTree = "<group>"; };
 		664D4F2A2C1C476600A68BB1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		664D4F2D2C1C476600A68BB1 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		664D4F342C1C488A00A68BB1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -42,6 +37,17 @@
 		665656742C2778A300383A05 /* BikeMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeMap.swift; sourceTree = "<group>"; };
 		665656762C29935600383A05 /* RecupHealthKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecupHealthKit.swift; sourceTree = "<group>"; };
 		665656782C29942C00383A05 /* RecupObsidian.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecupObsidian.swift; sourceTree = "<group>"; };
+STNP0010000000000000001 /* StreetnavRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavRootView.swift; sourceTree = "<group>"; };
+STNP0020000000000000002 /* StreetnavModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavModels.swift; sourceTree = "<group>"; };
+STNP0030000000000000003 /* StreetnavMockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavMockData.swift; sourceTree = "<group>"; };
+STNP0040000000000000004 /* StreetnavPrototypeServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavPrototypeServices.swift; sourceTree = "<group>"; };
+STNP0050000000000000005 /* StreetnavComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavComponents.swift; sourceTree = "<group>"; };
+STNP0060000000000000006 /* StreetnavMapSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavMapSurface.swift; sourceTree = "<group>"; };
+STNP0070000000000000007 /* StreetnavRecommendedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavRecommendedView.swift; sourceTree = "<group>"; };
+STNP0080000000000000008 /* StreetnavPrototypeGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavPrototypeGallery.swift; sourceTree = "<group>"; };
+STNP0090000000000000009 /* StreetnavMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavMotion.swift; sourceTree = "<group>"; };
+STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavPrototypeTuningView.swift; sourceTree = "<group>"; };
+STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavPrototypePreviews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,7 +64,7 @@
 		664D4F1A2C1C476500A68BB1 = {
 			isa = PBXGroup;
 			children = (
-				664D4F252C1C476500A68BB1 /* Archibike */,
+				664D4F252C1C476500A68BB1 /* Streetnav */,
 				664D4F242C1C476500A68BB1 /* Products */,
 				664D4F362C1C506B00A68BB1 /* Frameworks */,
 			);
@@ -67,39 +73,26 @@
 		664D4F242C1C476500A68BB1 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				664D4F232C1C476500A68BB1 /* Archibike.app */,
+				664D4F232C1C476500A68BB1 /* Streetnav.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		664D4F252C1C476500A68BB1 /* Archibike */ = {
-			isa = PBXGroup;
-			children = (
-				STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */,
-				STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */,
-				STNP0090000000000000009 /* StreetnavMotion.swift */,
-				STNP0080000000000000008 /* StreetnavPrototypeGallery.swift */,
-				STNP0070000000000000007 /* StreetnavRecommendedView.swift */,
-				STNP0060000000000000006 /* StreetnavMapSurface.swift */,
-				STNP0050000000000000005 /* StreetnavComponents.swift */,
-				STNP0040000000000000004 /* StreetnavPrototypeServices.swift */,
-				STNP0030000000000000003 /* StreetnavMockData.swift */,
-				STNP0020000000000000002 /* StreetnavModels.swift */,
-				STNP0010000000000000001 /* StreetnavPrototypeRootView.swift */,
-				664D4F342C1C488A00A68BB1 /* Info.plist */,
-				664D4F262C1C476500A68BB1 /* ArchibikeApp.swift */,
-				664D4F282C1C476500A68BB1 /* ContentView.swift */,
-				665656742C2778A300383A05 /* BikeMap.swift */,
-				665656722C27783400383A05 /* OverlayHome.swift */,
-				664D4F2A2C1C476600A68BB1 /* Assets.xcassets */,
-				664D4F2C2C1C476600A68BB1 /* Preview Content */,
-				665656702C2597A600383A05 /* Fonctions.swift */,
-				665656762C29935600383A05 /* RecupHealthKit.swift */,
-				665656782C29942C00383A05 /* RecupObsidian.swift */,
-			);
-			path = Archibike;
-			sourceTree = "<group>";
-		};
+664D4F252C1C476500A68BB1 /* Streetnav */ = {
+	isa = PBXGroup;
+	children = (
+		STGRAPP00000000000000001 /* App */,
+		STGRCORE0000000000000002 /* Core */,
+		STGRFEAT0000000000000003 /* Features */,
+		STGRUI000000000000000004 /* UI */,
+		STGRDEV00000000000000005 /* Development */,
+		664D4F342C1C488A00A68BB1 /* Info.plist */,
+		664D4F2A2C1C476600A68BB1 /* Assets.xcassets */,
+		664D4F2C2C1C476600A68BB1 /* Preview Content */,
+	);
+	path = Streetnav;
+	sourceTree = "<group>";
+};
 		664D4F2C2C1C476600A68BB1 /* Preview Content */ = {
 			isa = PBXGroup;
 			children = (
@@ -115,12 +108,28 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+STGRAPP00000000000000001 /* App */ = { isa = PBXGroup; children = ( 664D4F262C1C476500A68BB1 /* StreetnavApp.swift */, STNP0010000000000000001 /* StreetnavRootView.swift */, ); path = App; sourceTree = "<group>"; };
+STGRCORE0000000000000002 /* Core */ = { isa = PBXGroup; children = ( STGRMODE0000000000000006 /* Models */, STGRMOCK0000000000000007 /* MockData */, STGRSERV0000000000000008 /* Services */, STGRMOTN0000000000000009 /* Motion */, ); path = Core; sourceTree = "<group>"; };
+STGRMODE0000000000000006 /* Models */ = { isa = PBXGroup; children = ( STNP0020000000000000002 /* StreetnavModels.swift */, ); path = Models; sourceTree = "<group>"; };
+STGRMOCK0000000000000007 /* MockData */ = { isa = PBXGroup; children = ( STNP0030000000000000003 /* StreetnavMockData.swift */, ); path = MockData; sourceTree = "<group>"; };
+STGRSERV0000000000000008 /* Services */ = { isa = PBXGroup; children = ( STNP0040000000000000004 /* StreetnavPrototypeServices.swift */, ); path = Services; sourceTree = "<group>"; };
+STGRMOTN0000000000000009 /* Motion */ = { isa = PBXGroup; children = ( STNP0090000000000000009 /* StreetnavMotion.swift */, ); path = Motion; sourceTree = "<group>"; };
+STGRFEAT0000000000000003 /* Features */ = { isa = PBXGroup; children = ( STGRMAP000000000000000A /* Map */, STGRRIDE000000000000000B /* Ride */, ); path = Features; sourceTree = "<group>"; };
+STGRMAP000000000000000A /* Map */ = { isa = PBXGroup; children = ( STNP0060000000000000006 /* StreetnavMapSurface.swift */, ); path = Map; sourceTree = "<group>"; };
+STGRRIDE000000000000000B /* Ride */ = { isa = PBXGroup; children = ( STNP0070000000000000007 /* StreetnavRecommendedView.swift */, ); path = Ride; sourceTree = "<group>"; };
+STGRUI000000000000000004 /* UI */ = { isa = PBXGroup; children = ( STGRCOMP000000000000000C /* Components */, ); path = UI; sourceTree = "<group>"; };
+STGRCOMP000000000000000C /* Components */ = { isa = PBXGroup; children = ( STNP0050000000000000005 /* StreetnavComponents.swift */, ); path = Components; sourceTree = "<group>"; };
+STGRDEV00000000000000005 /* Development */ = { isa = PBXGroup; children = ( STGRLEGC000000000000000D /* Legacy */, STGRDEBG000000000000000E /* Debug */, STGRPREV000000000000000F /* Previews */, STGRVARI0000000000000010 /* Variations */, ); path = Development; sourceTree = "<group>"; };
+STGRLEGC000000000000000D /* Legacy */ = { isa = PBXGroup; children = ( 664D4F282C1C476500A68BB1 /* StreetnavLegacyDemoView.swift */, ); path = Legacy; sourceTree = "<group>"; };
+STGRDEBG000000000000000E /* Debug */ = { isa = PBXGroup; children = ( STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */, ); path = Debug; sourceTree = "<group>"; };
+STGRPREV000000000000000F /* Previews */ = { isa = PBXGroup; children = ( STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */, ); path = Previews; sourceTree = "<group>"; };
+STGRVARI0000000000000010 /* Variations */ = { isa = PBXGroup; children = ( STNP0080000000000000008 /* StreetnavPrototypeGallery.swift */, ); path = Variations; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		664D4F222C1C476500A68BB1 /* Archibike */ = {
+		664D4F222C1C476500A68BB1 /* Streetnav */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 664D4F312C1C476600A68BB1 /* Build configuration list for PBXNativeTarget "Archibike" */;
+			buildConfigurationList = 664D4F312C1C476600A68BB1 /* Build configuration list for PBXNativeTarget "Streetnav" */;
 			buildPhases = (
 				664D4F1F2C1C476500A68BB1 /* Sources */,
 				664D4F202C1C476500A68BB1 /* Frameworks */,
@@ -130,9 +139,9 @@
 			);
 			dependencies = (
 			);
-			name = Archibike;
-			productName = Archibike;
-			productReference = 664D4F232C1C476500A68BB1 /* Archibike.app */;
+			name = Streetnav;
+			productName = Streetnav;
+			productReference = 664D4F232C1C476500A68BB1 /* Streetnav.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -150,7 +159,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 664D4F1E2C1C476500A68BB1 /* Build configuration list for PBXProject "Archibike" */;
+			buildConfigurationList = 664D4F1E2C1C476500A68BB1 /* Build configuration list for PBXProject "Streetnav" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -165,7 +174,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				664D4F222C1C476500A68BB1 /* Archibike */,
+				664D4F222C1C476500A68BB1 /* Streetnav */,
 			);
 		};
 /* End PBXProject section */
@@ -197,10 +206,10 @@
 				STNB0040000000000000004 /* StreetnavPrototypeServices.swift in Sources */,
 				STNB0030000000000000003 /* StreetnavMockData.swift in Sources */,
 				STNB0020000000000000002 /* StreetnavModels.swift in Sources */,
-				STNB0010000000000000001 /* StreetnavPrototypeRootView.swift in Sources */,
+				STNB0010000000000000001 /* StreetnavRootView.swift in Sources */,
 				665656752C2778A300383A05 /* BikeMap.swift in Sources */,
-				664D4F292C1C476500A68BB1 /* ContentView.swift in Sources */,
-				664D4F272C1C476500A68BB1 /* ArchibikeApp.swift in Sources */,
+				664D4F292C1C476500A68BB1 /* StreetnavLegacyDemoView.swift in Sources */,
+				664D4F272C1C476500A68BB1 /* StreetnavApp.swift in Sources */,
 				665656712C2597A600383A05 /* Fonctions.swift in Sources */,
 				665656772C29935600383A05 /* RecupHealthKit.swift in Sources */,
 				665656792C29942C00383A05 /* RecupObsidian.swift in Sources */,
@@ -337,11 +346,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"Archibike/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"Streetnav/Preview Content\"";
 				DEVELOPMENT_TEAM = LJUBJ5GTAT;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Archibike/Info.plist;
+				INFOPLIST_FILE = Streetnav/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -352,7 +361,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.felixchevalier.Archibike;
+				PRODUCT_BUNDLE_IDENTIFIER = com.felixchevalier.streetnav;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -367,11 +376,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"Archibike/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"Streetnav/Preview Content\"";
 				DEVELOPMENT_TEAM = LJUBJ5GTAT;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Archibike/Info.plist;
+				INFOPLIST_FILE = Streetnav/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -382,7 +391,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.felixchevalier.Archibike;
+				PRODUCT_BUNDLE_IDENTIFIER = com.felixchevalier.streetnav;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -393,7 +402,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		664D4F1E2C1C476500A68BB1 /* Build configuration list for PBXProject "Archibike" */ = {
+		664D4F1E2C1C476500A68BB1 /* Build configuration list for PBXProject "Streetnav" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				664D4F2F2C1C476600A68BB1 /* Debug */,
@@ -402,7 +411,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		664D4F312C1C476600A68BB1 /* Build configuration list for PBXNativeTarget "Archibike" */ = {
+		664D4F312C1C476600A68BB1 /* Build configuration list for PBXNativeTarget "Streetnav" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				664D4F322C1C476600A68BB1 /* Debug */,
