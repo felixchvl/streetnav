@@ -21,6 +21,9 @@ holding a copy of it (Apple Health, Ride with GPS, Strava...). Runs in the `stre
 - `streetnav_server/rwgps_sync.py` - read-only Ride with GPS import, every 10 minutes (systemd timer).
 - `streetnav_server/strava_import.py` - one-off import of Strava's official account archive (the
   Strava API is subscriber-only), see below.
+- `streetnav_server/file_import.py` - import of a folder of FIT, GPX or TCX files, such as the FIT
+  files HealthFit exports from Apple Health (source `file`, below Apple Health and Strava).
+- `streetnav_server/activity_files.py` - the file readers shared by both imports.
 - `tests/` - `python -m unittest discover -s tests`, no database needed.
 - `deploy/` - idempotent `install.sh`, systemd units, nightly `pg_dump` (03:30, 14 kept, in
   `/var/backups/streetnav`).
@@ -49,6 +52,22 @@ what a Strava crop is. `--check-web DIR` compares the result with an export read
 replaces an archive track that does not match it. On the 2026-10-28 archive (2,380 activities,
 2,175 tracks), 154 of 157 website traces matched; the 3 others were alpine ski days. The archive
 names a trail run "Run": the sport type cannot be more precise than the CSV's display name.
+
+## Apple Health files
+
+HealthFit exports every Apple Health workout as a FIT file to its iCloud Drive folder. Copy that
+folder to the container and run `venv/bin/python -m streetnav_server.file_import DIR --dry-run`, then
+without `--dry-run` (same user and environment as above). Each file is a copy; re-running only
+updates them.
+
+## State on 2026-10-28
+
+Loaded in this order: Ride with GPS (2,490 copies), the Strava archive (2,380), HealthFit's export
+(2,437 FIT files, October 2022 onwards). Result: 2,575 activities from 2019-12 to today, 2,281 with a
+track. Every activity that has a Strava copy takes its data from Strava; the others from the Apple
+Health files (191) or Ride with GPS (10, mostly old entries without GPS). All 2,674 Wandrer
+activities match an activity. Six Strava activities were duplicates on Strava itself and share an
+activity with their twin.
 
 ## Remote access (not enabled yet)
 
