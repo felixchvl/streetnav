@@ -21,17 +21,15 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
-import gzip
-import io
 import json
 import math
 import os
 import re
 import sys
-import xml.etree.ElementTree as ET
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
+from .activity_files import read_file
 from .registry import ActivityCopy, connect, record_run, upsert
 
 CYCLING = {"Ride", "EBikeRide", "EMountainBikeRide", "GravelRide", "MountainBikeRide", "VirtualRide",
@@ -44,7 +42,6 @@ SPORTS = {"Run": "running", "TrailRun": "running", "VirtualRun": "running", "Wal
 # The CSV holds display names; most are the sport type with its spaces removed ("E-Bike Ride").
 DISPLAY_TYPES = {"Football (Soccer)": "Soccer", "Rock Climb": "RockClimbing", "HIIT": "HighIntensityIntervalTraining"}
 CSV_DATE = "%b %d, %Y, %I:%M:%S %p"  # UTC, e.g. "Oct 28, 2026, 9:02:30 AM"
-SEMICIRCLE_DEG = 180 / 2**31         # FIT positions are in semicircles
 SAME_TRACE_M = 50                    # website and archive tracks must start and end this close
 
 
@@ -95,69 +92,6 @@ def read_csv(archive_dir: str) -> list[Row]:
         return [Row(header, values) for values in reader]
 
 
-# --- activity files: (unix s, lon, lat, altitude, bpm) samples --------------------------------
-
-def _utc(t: datetime) -> int:
-    return int((t if t.tzinfo else t.replace(tzinfo=timezone.utc)).timestamp())
-
-
-def fit_samples(data: bytes) -> list[tuple]:
-    import fitparse  # only FIT files need it
-    out = []
-    for message in fitparse.FitFile(io.BytesIO(data)).get_messages("record"):
-        v = message.get_values()
-        if v.get("timestamp") is None:
-            continue
-        lat, lon = v.get("position_lat"), v.get("position_long")
-        has_pos = lat is not None and lon is not None
-        alt = v.get("enhanced_altitude") if v.get("enhanced_altitude") is not None else v.get("altitude")
-        out.append((_utc(v["timestamp"]), lon * SEMICIRCLE_DEG if has_pos else None,
-                    lat * SEMICIRCLE_DEG if has_pos else None, alt, v.get("heart_rate")))
-    return out
-
-
-def xml_samples(data: bytes) -> list[tuple]:
-    """GPX <trkpt> and TCX <Trackpoint> elements."""
-    local = lambda tag: tag.rsplit("}", 1)[-1]
-    out = []
-    for _, el in ET.iterparse(io.BytesIO(data.lstrip())):
-        tag = local(el.tag)
-        if tag not in ("trkpt", "Trackpoint"):
-            continue
-        t = alt = bpm = None
-        lat, lon = (float(el.get("lat")), float(el.get("lon"))) if tag == "trkpt" else (None, None)
-        for child in el.iter():
-            name, text = local(child.tag), (child.text or "").strip()
-            if name in ("time", "Time") and text:
-                t = _utc(datetime.fromisoformat(text.replace("Z", "+00:00")))
-            elif name in ("ele", "AltitudeMeters") and text:
-                alt = float(text)
-            elif name == "LatitudeDegrees" and text:
-                lat = float(text)
-            elif name == "LongitudeDegrees" and text:
-                lon = float(text)
-            elif name == "hr" and text:
-                bpm = int(float(text))
-            elif name == "HeartRateBpm":
-                bpm = next((int(float(v.text)) for v in child if (v.text or "").strip()), bpm)
-        if t is not None:
-            out.append((t, lon, lat, alt, bpm))
-        el.clear()
-    return out
-
-
-def file_samples(path: str) -> list[tuple]:
-    with open(path, "rb") as f:
-        data = f.read()
-    if path.endswith(".gz"):
-        data, path = gzip.decompress(data), path[:-3]
-    if path.endswith(".fit"):
-        return fit_samples(data)
-    if path.endswith((".gpx", ".tcx")):
-        return xml_samples(data)
-    return []  # e.g. JSON strength sets: no track
-
-
 # --- website export, used as a check ----------------------------------------------------------
 
 def load_web(web_dir: str) -> tuple[dict[str, dict], dict[str, str], dict[str, dict]]:
@@ -199,7 +133,7 @@ def to_copy(row: Row, archive_dir: str, web: tuple | None, report: Counter, note
     elapsed = row.number(("Elapsed Time", 1), ("Elapsed Time", 0))
     sport_type = sport_type_of(row.text("Activity Type") or "")
 
-    samples = file_samples(os.path.join(archive_dir, row.text("Filename"))) if row.text("Filename") else []
+    samples = read_file(os.path.join(archive_dir, row.text("Filename")))[0] if row.text("Filename") else []
     if elapsed:  # Strava's crop: keep the samples of the edited time window only
         start_s = started.timestamp()
         samples = [s for s in samples if start_s - 1 <= s[0] <= start_s + elapsed + 1]
