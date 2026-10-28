@@ -6,7 +6,7 @@ import unittest
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-from streetnav_server import strava_import as si
+from streetnav_server import activity_files, strava_import as si
 
 T0 = datetime(2026, 10, 28, 9, 2, 20, tzinfo=timezone.utc)
 HEADER = ["Activity ID", "Activity Date", "Activity Name", "Activity Type", "Activity Description", "Elapsed Time",
@@ -79,7 +79,7 @@ class ArchiveTest(unittest.TestCase):
                '</LatitudeDegrees><LongitudeDegrees>2.3</LongitudeDegrees></Position><AltitudeMeters>40</AltitudeMeters>'
                '<HeartRateBpm><Value>131</Value></HeartRateBpm></Trackpoint></Track></Lap></Activity></Activities>'
                '</TrainingCenterDatabase>')
-        self.assertEqual(si.xml_samples(tcx.encode()), [(int(T0.timestamp()) + 10, 2.3, 48.8, 40.0, 131)])
+        self.assertEqual(activity_files.xml_samples(tcx.encode()), [(int(T0.timestamp()) + 10, 2.3, 48.8, 40.0, 131)])
 
     def test_website_check(self):
         cropped = [p for p in self.recorded if 10 <= p[0] <= 40]
