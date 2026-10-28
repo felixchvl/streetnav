@@ -1,0 +1,12 @@
+[Unit]
+Description=Streetnav: import new Ride with GPS trips
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=streetnav
+WorkingDirectory=/opt/streetnav
+EnvironmentFile=/etc/streetnav/streetnav.env
+ExecStart=/opt/streetnav/venv/bin/python -m streetnav_server.rwgps_sync
+MemoryMax=384M
