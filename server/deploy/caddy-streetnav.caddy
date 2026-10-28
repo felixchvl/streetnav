@@ -1,0 +1,14 @@
+# Remote access to the API through the home Caddy (LXC 110), HTTPS only.
+# Caddy closes any connection that does not present a certificate signed by the Streetnav client
+# CA (see make-client-cert.sh), so requests from anything but the iPhone never reach the API.
+# Needs Caddy >= 2.8 for trust_pool, and a DNS A record pointing to the home public IP.
+
+streetnav.felixchevalier.fr {
+	tls {
+		client_auth {
+			mode require_and_verify
+			trust_pool file /etc/caddy/streetnav-client-ca.pem
+		}
+	}
+	reverse_proxy 192.168.1.62:8080
+}
