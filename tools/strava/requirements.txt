@@ -1,0 +1,4 @@
+stravalib
+requests
+pandas
+python-dotenv
