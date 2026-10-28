@@ -31,3 +31,18 @@ Copy this `server/` folder into the container and run `bash server/deploy/instal
 Secrets are generated once in `/etc/streetnav/streetnav.env` (database URL, API token, Ride with
 GPS key and auth token) and never overwritten. `install.sh` restarts PostgreSQL: do not run it
 while an import is in progress.
+
+## Remote access (not enabled yet)
+
+The iPhone reaches the API from anywhere through the home Caddy, without a VPN:
+
+1. `deploy/make-client-cert.sh ~/.config/streetnav/pki iphone` creates a private CA and the
+   iPhone's certificate (`iphone.p12`). The folder holds private keys: never commit it.
+2. Copy `ca.pem` to `/etc/caddy/streetnav-client-ca.pem` on the Caddy container, add
+   `deploy/caddy-streetnav.caddy` to its sites and reload Caddy.
+3. Add a DNS A record `streetnav.felixchevalier.fr` pointing to the home public IP.
+4. The app imports `iphone.p12` into its own keychain (a profile installed in iOS Settings is not
+   readable by apps) and answers Caddy's client-certificate challenge with it, then sends the
+   bearer token as usual.
+
+Without the certificate the TLS handshake fails, so nothing reaches FastAPI.
