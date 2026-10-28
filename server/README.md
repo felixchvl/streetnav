@@ -19,9 +19,9 @@ holding a copy of it (Apple Health, Ride with GPS, Strava...). Runs in the `stre
   - `GET /reconcile?missing_in=rwgps&since` - activities with a track and no copy on that service,
   - `POST /activities` - push a workout (the iOS app sends Apple Health workouts here).
 - `streetnav_server/rwgps_sync.py` - read-only Ride with GPS import, every 10 minutes (systemd timer).
-- `streetnav_server/strava_import.py` - one-off import of a Strava export read from the web session
-  (the Strava API is subscriber-only): activity rows, gear names, and the tracks of the activities
-  whose Strava version differs from the other copies. Run it with `--dry-run` first.
+- `streetnav_server/strava_import.py` - one-off import of Strava's official account archive (the
+  Strava API is subscriber-only), see below.
+- `tests/` - `python -m unittest discover -s tests`, no database needed.
 - `deploy/` - idempotent `install.sh`, systemd units, nightly `pg_dump` (03:30, 14 kept, in
   `/var/backups/streetnav`).
 
@@ -31,6 +31,24 @@ Copy this `server/` folder into the container and run `bash server/deploy/instal
 Secrets are generated once in `/etc/streetnav/streetnav.env` (database URL, API token, Ride with
 GPS key and auth token) and never overwritten. `install.sh` restarts PostgreSQL: do not run it
 while an import is in progress.
+
+## Strava import
+
+1. Request the archive at `strava.com/athlete/download_my_account`, with Strava's display language
+   set to English (the CSV headers and dates are parsed). The link arrives by e-mail.
+2. Copy only `activities.csv` and `activities/` to the container: the rest of the archive holds
+   logins, contacts and messages.
+3. Run, as the `streetnav` user from `/opt/streetnav` with `/etc/streetnav/streetnav.env` loaded:
+   `venv/bin/python -m streetnav_server.strava_import ARCHIVE_DIR --dry-run`, then without `--dry-run`.
+   `--check-only` reads and checks the files without touching the database.
+
+The CSV carries the hand edits (name, sport type, commute flag, gear, cropped elapsed time and
+distance); the files are the original uploads, so each one is cut to the CSV's time window, which is
+what a Strava crop is. `--check-web DIR` compares the result with an export read from the website
+(`activities.json`, `gear.json`, `streams-*.json`): differences are listed, and a website trace
+replaces an archive track that does not match it. On the 2026-10-28 archive (2,380 activities,
+2,175 tracks), 154 of 157 website traces matched; the 3 others were alpine ski days. The archive
+names a trail run "Run": the sport type cannot be more precise than the CSV's display name.
 
 ## Remote access (not enabled yet)
 
