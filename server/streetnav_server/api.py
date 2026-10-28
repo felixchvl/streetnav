@@ -66,7 +66,8 @@ def list_activities(since: datetime | None = None, until: datetime | None = None
                     limit: int = Query(200, le=2000)) -> list[dict]:
     with connect() as conn:
         rows = conn.execute(
-            """SELECT a.id, a.started_at, a.ended_at, a.sport, a.distance_m, a.duration_s, a.calories, a.avg_hr,
+            """SELECT a.id, a.started_at, a.ended_at, a.sport, a.sport_type, a.name, a.commute, a.gear,
+                      a.distance_m, a.duration_s, a.calories, a.avg_hr,
                       a.elevation_gain_m, a.primary_source, a.track IS NOT NULL,
                       array_agg(s.source ORDER BY s.source)
                FROM activity a JOIN activity_source s ON s.activity_id = a.id
@@ -75,7 +76,8 @@ def list_activities(since: datetime | None = None, until: datetime | None = None
                  AND (%(sport)s::text IS NULL OR a.sport = %(sport)s)
                GROUP BY a.id ORDER BY a.started_at DESC LIMIT %(limit)s""",
             {"since": since, "until": until, "sport": sport, "limit": limit}).fetchall()
-    keys = ("id", "started_at", "ended_at", "sport", "distance_m", "duration_s", "calories", "avg_hr",
+    keys = ("id", "started_at", "ended_at", "sport", "sport_type", "name", "commute", "gear",
+            "distance_m", "duration_s", "calories", "avg_hr",
             "elevation_gain_m", "primary_source", "has_track", "sources")
     return [dict(zip(keys, r)) for r in rows]
 
@@ -84,7 +86,8 @@ def list_activities(since: datetime | None = None, until: datetime | None = None
 def get_activity(activity_id: int) -> dict:
     with connect() as conn:
         row = conn.execute(
-            """SELECT id, started_at, ended_at, sport, indoor, distance_m, duration_s, moving_s, calories, avg_hr,
+            """SELECT id, started_at, ended_at, sport, sport_type, name, description, commute, gear, indoor,
+                      distance_m, duration_s, moving_s, calories, avg_hr,
                       max_hr, elevation_gain_m, primary_source, ST_AsGeoJSON(track)::json
                FROM activity WHERE id = %s""", (activity_id,)).fetchone()
         if row is None:
@@ -92,7 +95,8 @@ def get_activity(activity_id: int) -> dict:
         sources = conn.execute(
             "SELECT source, external_id, device, fetched_at FROM activity_source WHERE activity_id = %s",
             (activity_id,)).fetchall()
-    keys = ("id", "started_at", "ended_at", "sport", "indoor", "distance_m", "duration_s", "moving_s", "calories",
+    keys = ("id", "started_at", "ended_at", "sport", "sport_type", "name", "description", "commute", "gear", "indoor",
+            "distance_m", "duration_s", "moving_s", "calories",
             "avg_hr", "max_hr", "elevation_gain_m", "primary_source", "track")
     return {**dict(zip(keys, row)),
             "sources": [dict(zip(("source", "external_id", "device", "fetched_at"), s)) for s in sources]}

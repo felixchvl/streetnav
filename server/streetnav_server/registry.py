@@ -9,10 +9,14 @@ from datetime import datetime
 import psycopg
 
 SAME_ACTIVITY_SECONDS = 90
-# Higher wins: its metrics and track replace those of a lower-priority source.
-SOURCE_PRIORITY = {"healthkit": 4, "file": 3, "rwgps": 2, "strava": 1, "wandrer": 0}
+# Otherwise a copy joins the activity it overlaps the most, if that overlap covers at least this
+# share of the shorter of the two (a ride cropped at the start no longer starts at the same time).
+SAME_ACTIVITY_OVERLAP = 0.5
+# Higher wins: its metrics and track replace those of a lower-priority source. Strava comes first
+# because that is where rides were edited by hand (cropped, commute flag, bike, sport type).
+SOURCE_PRIORITY = {"strava": 5, "healthkit": 4, "file": 3, "rwgps": 2, "wandrer": 0}
 METRICS = ("ended_at", "sport", "indoor", "distance_m", "duration_s", "moving_s", "calories",
-           "avg_hr", "max_hr", "elevation_gain_m")
+           "avg_hr", "max_hr", "elevation_gain_m", "name", "description", "sport_type", "commute", "gear")
 
 
 def connect() -> psycopg.Connection:
@@ -35,6 +39,11 @@ class ActivityCopy:
     avg_hr: float | None = None
     max_hr: float | None = None
     elevation_gain_m: float | None = None
+    name: str | None = None
+    description: str | None = None
+    sport_type: str | None = None
+    commute: bool | None = None
+    gear: str | None = None
     points: list[tuple[float, float, float, int]] = field(default_factory=list)  # lon, lat, alt, unix s
     heart_rate: list[tuple[int, int]] = field(default_factory=list)              # unix s, bpm
     device: str | None = None
@@ -64,6 +73,16 @@ def upsert(conn: psycopg.Connection, copy: ActivityCopy) -> tuple[int, str]:
                    ORDER BY abs(extract(epoch FROM started_at - %(t)s)) LIMIT 1""",
                 {"t": copy.started_at, "w": SAME_ACTIVITY_SECONDS})
             row = cur.fetchone()
+            if row is None and copy.ended_at is not None:
+                cur.execute(
+                    """SELECT id FROM activity
+                       WHERE ended_at IS NOT NULL AND started_at < %(e)s AND ended_at > %(t)s
+                         AND extract(epoch FROM least(ended_at, %(e)s) - greatest(started_at, %(t)s))
+                             >= %(share)s * least(extract(epoch FROM ended_at - started_at),
+                                                  extract(epoch FROM %(e)s - %(t)s))
+                       ORDER BY least(ended_at, %(e)s) - greatest(started_at, %(t)s) DESC LIMIT 1""",
+                    {"t": copy.started_at, "e": copy.ended_at, "share": SAME_ACTIVITY_OVERLAP})
+                row = cur.fetchone()
             activity_id, outcome = (row[0], "merged") if row else (None, "created")
 
         values = {k: getattr(copy, k) for k in METRICS}
