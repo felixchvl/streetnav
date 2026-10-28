@@ -8,15 +8,20 @@ holding a copy of it (Apple Health, Ride with GPS, Strava...). Runs in the `stre
 
 - `sql/` - PostgreSQL 17 + PostGIS schema: `activity` (metrics, track as `LineStringZM`: lon, lat,
   altitude, Unix time), `activity_source` (each service's copy), `activity_heart_rate`, `sync_run`.
-- `streetnav_server/registry.py` - merge rule: a copy starting within 90 s of an existing activity
-  is attached to it; the highest-priority source (healthkit > file > rwgps > strava) provides the
-  metrics and the track, lower ones only fill gaps.
+- `streetnav_server/registry.py` - merge rule: a copy starting within 90 s of an existing activity,
+  or overlapping at least half of it, is attached to it; the highest-priority source
+  (strava > healthkit > file > rwgps) provides the metrics, the hand edits (name, commute, gear,
+  sport type) and the track, lower ones only fill gaps. Strava comes first because that is where
+  rides were cropped and classified by hand.
 - `streetnav_server/api.py` - FastAPI on port 8080. All endpoints but `/health` need
   `Authorization: Bearer <STREETNAV_API_TOKEN>`:
   - `GET /status`, `GET /activities?since&until&sport&limit`, `GET /activities/{id}` (GeoJSON track),
   - `GET /reconcile?missing_in=rwgps&since` - activities with a track and no copy on that service,
   - `POST /activities` - push a workout (the iOS app sends Apple Health workouts here).
 - `streetnav_server/rwgps_sync.py` - read-only Ride with GPS import, every 10 minutes (systemd timer).
+- `streetnav_server/strava_import.py` - one-off import of a Strava export read from the web session
+  (the Strava API is subscriber-only): activity rows, gear names, and the tracks of the activities
+  whose Strava version differs from the other copies. Run it with `--dry-run` first.
 - `deploy/` - idempotent `install.sh`, systemd units, nightly `pg_dump` (03:30, 14 kept, in
   `/var/backups/streetnav`).
 
