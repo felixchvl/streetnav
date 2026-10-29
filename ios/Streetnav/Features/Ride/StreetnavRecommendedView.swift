@@ -426,10 +426,18 @@ struct StreetnavPlannerSheet: View {
 
 struct StreetnavIntegrationSheet: View {
     @ObservedObject var model: StreetnavPrototypeViewModel
+    @ObservedObject private var healthSync = StreetnavHealthSync.shared
 
     var body: some View {
         NavigationStack {
             List {
+                Section("Apple Sante") {
+                    NavigationLink {
+                        StreetnavHealthSyncView()
+                    } label: {
+                        row("Synchro avec le serveur", detail: healthText, symbol: "heart.text.square")
+                    }
+                }
                 Section("Strava") {
                     row("Etat", detail: stravaText, symbol: stravaSymbol)
                     row("Derniere synchronisation", detail: model.integrations.lastStravaSyncText, symbol: "clock")
@@ -471,6 +479,12 @@ struct StreetnavIntegrationSheet: View {
         } icon: {
             Image(systemName: symbol)
         }
+    }
+
+    private var healthText: String {
+        if healthSync.isSyncing { return "synchro" }
+        if healthSync.lastError != nil { return "erreur" }
+        return healthSync.lastSync == nil ? "a configurer" : "a jour"
     }
 
     private var stravaText: String {

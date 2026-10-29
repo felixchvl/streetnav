@@ -18,6 +18,10 @@ Streetnav est une application iOS locale de découverte à vélo. L’applicatio
 3. Les données fictives restent dans `Core/MockData` jusqu’à ce qu’une intégration locale réelle les remplace.
 4. Une étape cohérente = un commit : par exemple « ajouter le modèle d’itinéraire », puis « afficher l’itinéraire ».
 
+## Apple Santé
+
+L’app est la seule porte d’entrée d’Apple Santé vers le serveur Streetnav (`server/`). `Core/Health/StreetnavHealthSync.swift` lit les entraînements, leurs tracés et la fréquence cardiaque, sans jamais écrire dans Santé, et les envoie à l’API du serveur : tout l’historique la première fois, puis chaque entraînement ajouté ou supprimé (iOS réveille l’app en arrière-plan). L’adresse du serveur et le jeton se règlent dans Intégrations → Apple Santé. `Development/Debug/StreetnavHealthSeeder.swift` n’est compilé que pour le simulateur : il y crée des entraînements fictifs pour essayer la synchro.
+
 ## Outils locaux
 
 Les scripts Python sont adaptés pour scanner, importer et transformer des données sur le Mac. Ils ne sont pas embarqués dans l’application. Le code Swift reste réservé à l’app iOS et à toute logique qui doit tourner sur l’iPhone.

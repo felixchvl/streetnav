@@ -22,6 +22,9 @@
 		STNB0090000000000000009 /* StreetnavMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0090000000000000009 /* StreetnavMotion.swift */; };
 		STNB0100000000000000010 /* StreetnavPrototypeTuningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */; };
 		STNB0110000000000000011 /* StreetnavPrototypePreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */; };
+		STNB0120000000000000012 /* StreetnavHealthSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0120000000000000012 /* StreetnavHealthSync.swift */; };
+		STNB0130000000000000013 /* StreetnavHealthSyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0130000000000000013 /* StreetnavHealthSyncView.swift */; };
+		STNB0140000000000000014 /* StreetnavHealthSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0140000000000000014 /* StreetnavHealthSeeder.swift */; };
 /* End PBXBuildFile section */
 
 
@@ -32,11 +35,6 @@
 		664D4F2A2C1C476600A68BB1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		664D4F2D2C1C476600A68BB1 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		664D4F342C1C488A00A68BB1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		665656702C2597A600383A05 /* Fonctions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fonctions.swift; sourceTree = "<group>"; };
-		665656722C27783400383A05 /* OverlayHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayHome.swift; sourceTree = "<group>"; };
-		665656742C2778A300383A05 /* BikeMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeMap.swift; sourceTree = "<group>"; };
-		665656762C29935600383A05 /* RecupHealthKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecupHealthKit.swift; sourceTree = "<group>"; };
-		665656782C29942C00383A05 /* RecupObsidian.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecupObsidian.swift; sourceTree = "<group>"; };
 STNP0010000000000000001 /* StreetnavRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavRootView.swift; sourceTree = "<group>"; };
 STNP0020000000000000002 /* StreetnavModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavModels.swift; sourceTree = "<group>"; };
 STNP0030000000000000003 /* StreetnavMockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavMockData.swift; sourceTree = "<group>"; };
@@ -48,6 +46,10 @@ STNP0080000000000000008 /* StreetnavPrototypeGallery.swift */ = {isa = PBXFileRe
 STNP0090000000000000009 /* StreetnavMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavMotion.swift; sourceTree = "<group>"; };
 STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavPrototypeTuningView.swift; sourceTree = "<group>"; };
 STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavPrototypePreviews.swift; sourceTree = "<group>"; };
+STNP0120000000000000012 /* StreetnavHealthSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSync.swift; sourceTree = "<group>"; };
+STNP0130000000000000013 /* StreetnavHealthSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSyncView.swift; sourceTree = "<group>"; };
+STNP0140000000000000014 /* StreetnavHealthSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSeeder.swift; sourceTree = "<group>"; };
+STNP0150000000000000015 /* Streetnav.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Streetnav.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -87,6 +89,7 @@ STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */ = {isa = PBXFileR
 		STGRUI000000000000000004 /* UI */,
 		STGRDEV00000000000000005 /* Development */,
 		664D4F342C1C488A00A68BB1 /* Info.plist */,
+		STNP0150000000000000015 /* Streetnav.entitlements */,
 		664D4F2A2C1C476600A68BB1 /* Assets.xcassets */,
 		664D4F2C2C1C476600A68BB1 /* Preview Content */,
 	);
@@ -109,21 +112,23 @@ STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */ = {isa = PBXFileR
 			sourceTree = "<group>";
 		};
 STGRAPP00000000000000001 /* App */ = { isa = PBXGroup; children = ( 664D4F262C1C476500A68BB1 /* StreetnavApp.swift */, STNP0010000000000000001 /* StreetnavRootView.swift */, ); path = App; sourceTree = "<group>"; };
-STGRCORE0000000000000002 /* Core */ = { isa = PBXGroup; children = ( STGRMODE0000000000000006 /* Models */, STGRMOCK0000000000000007 /* MockData */, STGRSERV0000000000000008 /* Services */, STGRMOTN0000000000000009 /* Motion */, ); path = Core; sourceTree = "<group>"; };
+STGRCORE0000000000000002 /* Core */ = { isa = PBXGroup; children = ( STGRMODE0000000000000006 /* Models */, STGRMOCK0000000000000007 /* MockData */, STGRSERV0000000000000008 /* Services */, STGRMOTN0000000000000009 /* Motion */, STGRHLTH0000000000000011 /* Health */, ); path = Core; sourceTree = "<group>"; };
 STGRMODE0000000000000006 /* Models */ = { isa = PBXGroup; children = ( STNP0020000000000000002 /* StreetnavModels.swift */, ); path = Models; sourceTree = "<group>"; };
 STGRMOCK0000000000000007 /* MockData */ = { isa = PBXGroup; children = ( STNP0030000000000000003 /* StreetnavMockData.swift */, ); path = MockData; sourceTree = "<group>"; };
 STGRSERV0000000000000008 /* Services */ = { isa = PBXGroup; children = ( STNP0040000000000000004 /* StreetnavPrototypeServices.swift */, ); path = Services; sourceTree = "<group>"; };
 STGRMOTN0000000000000009 /* Motion */ = { isa = PBXGroup; children = ( STNP0090000000000000009 /* StreetnavMotion.swift */, ); path = Motion; sourceTree = "<group>"; };
-STGRFEAT0000000000000003 /* Features */ = { isa = PBXGroup; children = ( STGRMAP000000000000000A /* Map */, STGRRIDE000000000000000B /* Ride */, ); path = Features; sourceTree = "<group>"; };
+STGRFEAT0000000000000003 /* Features */ = { isa = PBXGroup; children = ( STGRMAP000000000000000A /* Map */, STGRRIDE000000000000000B /* Ride */, STGRFHLT0000000000000012 /* Health */, ); path = Features; sourceTree = "<group>"; };
 STGRMAP000000000000000A /* Map */ = { isa = PBXGroup; children = ( STNP0060000000000000006 /* StreetnavMapSurface.swift */, ); path = Map; sourceTree = "<group>"; };
 STGRRIDE000000000000000B /* Ride */ = { isa = PBXGroup; children = ( STNP0070000000000000007 /* StreetnavRecommendedView.swift */, ); path = Ride; sourceTree = "<group>"; };
 STGRUI000000000000000004 /* UI */ = { isa = PBXGroup; children = ( STGRCOMP000000000000000C /* Components */, ); path = UI; sourceTree = "<group>"; };
 STGRCOMP000000000000000C /* Components */ = { isa = PBXGroup; children = ( STNP0050000000000000005 /* StreetnavComponents.swift */, ); path = Components; sourceTree = "<group>"; };
 STGRDEV00000000000000005 /* Development */ = { isa = PBXGroup; children = ( STGRLEGC000000000000000D /* Legacy */, STGRDEBG000000000000000E /* Debug */, STGRPREV000000000000000F /* Previews */, STGRVARI0000000000000010 /* Variations */, ); path = Development; sourceTree = "<group>"; };
 STGRLEGC000000000000000D /* Legacy */ = { isa = PBXGroup; children = ( 664D4F282C1C476500A68BB1 /* StreetnavLegacyDemoView.swift */, ); path = Legacy; sourceTree = "<group>"; };
-STGRDEBG000000000000000E /* Debug */ = { isa = PBXGroup; children = ( STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */, ); path = Debug; sourceTree = "<group>"; };
+STGRDEBG000000000000000E /* Debug */ = { isa = PBXGroup; children = ( STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */, STNP0140000000000000014 /* StreetnavHealthSeeder.swift */, ); path = Debug; sourceTree = "<group>"; };
 STGRPREV000000000000000F /* Previews */ = { isa = PBXGroup; children = ( STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */, ); path = Previews; sourceTree = "<group>"; };
 STGRVARI0000000000000010 /* Variations */ = { isa = PBXGroup; children = ( STNP0080000000000000008 /* StreetnavPrototypeGallery.swift */, ); path = Variations; sourceTree = "<group>"; };
+STGRHLTH0000000000000011 /* Health */ = { isa = PBXGroup; children = ( STNP0120000000000000012 /* StreetnavHealthSync.swift */, ); path = Health; sourceTree = "<group>"; };
+STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP0130000000000000013 /* StreetnavHealthSyncView.swift */, ); path = Health; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -207,13 +212,11 @@ STGRVARI0000000000000010 /* Variations */ = { isa = PBXGroup; children = ( STNP0
 				STNB0030000000000000003 /* StreetnavMockData.swift in Sources */,
 				STNB0020000000000000002 /* StreetnavModels.swift in Sources */,
 				STNB0010000000000000001 /* StreetnavRootView.swift in Sources */,
-				665656752C2778A300383A05 /* BikeMap.swift in Sources */,
+				STNB0120000000000000012 /* StreetnavHealthSync.swift in Sources */,
+				STNB0130000000000000013 /* StreetnavHealthSyncView.swift in Sources */,
+				STNB0140000000000000014 /* StreetnavHealthSeeder.swift in Sources */,
 				664D4F292C1C476500A68BB1 /* StreetnavLegacyDemoView.swift in Sources */,
 				664D4F272C1C476500A68BB1 /* StreetnavApp.swift in Sources */,
-				665656712C2597A600383A05 /* Fonctions.swift in Sources */,
-				665656772C29935600383A05 /* RecupHealthKit.swift in Sources */,
-				665656792C29942C00383A05 /* RecupObsidian.swift in Sources */,
-				665656732C27783400383A05 /* OverlayHome.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -344,6 +347,7 @@ STGRVARI0000000000000010 /* Variations */ = { isa = PBXGroup; children = ( STNP0
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Streetnav/Streetnav.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Streetnav/Preview Content\"";
@@ -351,6 +355,9 @@ STGRVARI0000000000000010 /* Variations */ = { isa = PBXGroup; children = ( STNP0
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Streetnav/Info.plist;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Streetnav lit tes entrainements, leurs traces et ta frequence cardiaque pour les envoyer a ton serveur Streetnav. Il n'ecrit jamais dans Sante.";
+				"INFOPLIST_KEY_NSHealthUpdateUsageDescription[sdk=iphonesimulator*]" = "Simulateur seulement : ajoute des entrainements fictifs pour essayer la synchro.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Streetnav envoie tes entrainements a ton serveur Streetnav sur le reseau de la maison.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -374,6 +381,7 @@ STGRVARI0000000000000010 /* Variations */ = { isa = PBXGroup; children = ( STNP0
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Streetnav/Streetnav.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Streetnav/Preview Content\"";
@@ -381,6 +389,9 @@ STGRVARI0000000000000010 /* Variations */ = { isa = PBXGroup; children = ( STNP0
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Streetnav/Info.plist;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Streetnav lit tes entrainements, leurs traces et ta frequence cardiaque pour les envoyer a ton serveur Streetnav. Il n'ecrit jamais dans Sante.";
+				"INFOPLIST_KEY_NSHealthUpdateUsageDescription[sdk=iphonesimulator*]" = "Simulateur seulement : ajoute des entrainements fictifs pour essayer la synchro.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Streetnav envoie tes entrainements a ton serveur Streetnav sur le reseau de la maison.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
