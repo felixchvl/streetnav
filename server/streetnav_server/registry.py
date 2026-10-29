@@ -142,6 +142,28 @@ def upsert(conn: psycopg.Connection, copy: ActivityCopy) -> tuple[int, str]:
     return activity_id, outcome
 
 
+def remove(conn: psycopg.Connection, source: str, external_id: str) -> tuple[int | None, str]:
+    """Forgets a copy deleted where it came from; returns (activity id, 'deleted' | 'detached' | 'unknown').
+
+    An activity left without any copy is deleted. Otherwise it keeps its metrics and track, since the registry does
+    not keep each copy's own values, and the best remaining source becomes primary: its next sync rewrites them."""
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM activity_source WHERE source = %s AND external_id = %s RETURNING activity_id",
+                    (source, external_id))
+        row = cur.fetchone()
+        if row is None:
+            return None, "unknown"
+        activity_id = row[0]
+        cur.execute("SELECT source FROM activity_source WHERE activity_id = %s", (activity_id,))
+        remaining = [r[0] for r in cur.fetchall()]
+        if not remaining:
+            cur.execute("DELETE FROM activity WHERE id = %s", (activity_id,))
+            return activity_id, "deleted"
+        cur.execute("UPDATE activity SET primary_source = %s, updated_at = now() WHERE id = %s AND primary_source = %s",
+                    (max(remaining, key=SOURCE_PRIORITY.__getitem__), activity_id, source))
+    return activity_id, "detached"
+
+
 def record_run(conn: psycopg.Connection, source: str, counts: dict[str, int], message: str = "") -> None:
     with conn.cursor() as cur:
         cur.execute(

@@ -17,14 +17,17 @@ holding a copy of it (Apple Health, Ride with GPS, Strava...). Runs in the `stre
   `Authorization: Bearer <STREETNAV_API_TOKEN>`:
   - `GET /status`, `GET /activities?since&until&sport&limit`, `GET /activities/{id}` (GeoJSON track),
   - `GET /reconcile?missing_in=rwgps&since` - activities with a track and no copy on that service,
-  - `POST /activities` - push a workout (the iOS app sends Apple Health workouts here).
+  - `POST /activities` - push a workout (the iOS app sends Apple Health workouts here),
+  - `DELETE /copies/{source}/{external_id}` - forget a copy deleted at its source (a workout deleted in
+    Apple Health); an activity left without any copy is deleted.
 - `streetnav_server/rwgps_sync.py` - read-only Ride with GPS import, every 10 minutes (systemd timer).
 - `streetnav_server/strava_import.py` - one-off import of Strava's official account archive (the
   Strava API is subscriber-only), see below.
 - `streetnav_server/file_import.py` - import of a folder of FIT, GPX or TCX files, such as the FIT
   files HealthFit exports from Apple Health (source `file`, below Apple Health and Strava).
 - `streetnav_server/activity_files.py` - the file readers shared by both imports.
-- `tests/` - `python -m unittest discover -s tests`, no database needed.
+- `tests/` - `python -m unittest discover -s tests`. The registry tests also need
+  `STREETNAV_TEST_DATABASE_URL`, a throwaway PostGIS database they empty; without it they are skipped.
 - `deploy/` - idempotent `install.sh`, systemd units, nightly `pg_dump` (03:30, 14 kept, in
   `/var/backups/streetnav`).
 
@@ -52,6 +55,15 @@ what a Strava crop is. `--check-web DIR` compares the result with an export read
 replaces an archive track that does not match it. On the 2026-10-28 archive (2,380 activities,
 2,175 tracks), 154 of 157 website traces matched; the 3 others were alpine ski days. The archive
 names a trail run "Run": the sport type cannot be more precise than the CSV's display name.
+
+## Apple Health from the iPhone app
+
+The iOS app reads Apple Health (read only) and sends each workout to `POST /activities` as source
+`healthkit`, with its route and heart rate: the whole history on the first sync, then every workout added
+or deleted, iOS waking the app in the background. Set the server address and the API token in the app,
+under Integrations → Apple Santé. Its copies attach to the activities already loaded from the HealthFit files
+and take over from them (Strava still comes first). Until remote access is enabled, the iPhone reaches the
+server on the home network only (`http://192.168.1.62:8080`).
 
 ## Apple Health files
 
