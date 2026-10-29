@@ -1,4 +1,4 @@
-"""Streetnav HTTP API: read the activity registry, and let the iPhone app push Apple Health workouts.
+"""Streetnav HTTP API: read the activity registry, and let the iPhone app push (and delete) Apple Health workouts.
 
 Every endpoint except /health needs `Authorization: Bearer <STREETNAV_API_TOKEN>`.
 """
@@ -11,7 +11,7 @@ from datetime import datetime
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .registry import ActivityCopy, connect, upsert
+from .registry import ActivityCopy, connect, remove, upsert
 
 app = FastAPI(title="Streetnav", version="1")
 
@@ -41,6 +41,9 @@ class WorkoutIn(BaseModel):
         default_factory=list, description="[longitude, latitude, altitude m, unix seconds]")
     heart_rate: list[tuple[int, int]] = Field(default_factory=list, description="[unix seconds, bpm]")
     device: str | None = None
+    name: str | None = None
+    sport_type: str | None = Field(default=None, description="Strava's name, e.g. Ride, Walk, WeightTraining")
+    raw: dict | None = Field(default=None, description="kept as is, e.g. the workout's source app and metadata")
 
 
 @app.get("/health")
@@ -120,11 +123,21 @@ def reconcile(missing_in: str = "rwgps", since: datetime | None = None, with_tra
 
 @app.post("/activities", dependencies=[Depends(require_token)])
 def push_activity(workout: WorkoutIn) -> dict:
-    copy = ActivityCopy(**workout.model_dump(exclude={"points", "heart_rate"}),
+    copy = ActivityCopy(**workout.model_dump(exclude={"points", "heart_rate", "raw"}),
                         points=[tuple(p) for p in workout.points],
                         heart_rate=[tuple(h) for h in workout.heart_rate],
-                        raw={"received_at": datetime.now().isoformat()})
+                        raw={**(workout.raw or {}), "received_at": datetime.now().isoformat()})
     with connect() as conn:
         activity_id, outcome = upsert(conn, copy)
+        conn.commit()
+    return {"id": activity_id, "outcome": outcome}
+
+
+@app.delete("/copies/{source}/{external_id}", dependencies=[Depends(require_token)])
+def delete_copy(source: str, external_id: str) -> dict:
+    """A copy deleted where it came from (the iOS app reports workouts deleted in Apple Health). Deleting an unknown
+    copy succeeds too, so the app can safely send a deletion again."""
+    with connect() as conn:
+        activity_id, outcome = remove(conn, source, external_id)
         conn.commit()
     return {"id": activity_id, "outcome": outcome}
