@@ -9,6 +9,11 @@ import SwiftUI
 
 @main
 struct StreetnavApp: App {
+    init() {
+        // iOS only hands new Apple Health workouts to an app in the background if it asks again at every launch.
+        StreetnavHealthSync.shared.startObserving()
+    }
+
     var body: some Scene {
         WindowGroup {
             StreetnavRootView()
