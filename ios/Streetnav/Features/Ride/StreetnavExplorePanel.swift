@@ -37,13 +37,12 @@ struct StreetnavExplorePanel: View {
     /// Just the search bar, 65 points tall on screen like the one in Maps.
     static let collapsed = PresentationDetent.height(76)
     static let summary = PresentationDetent.height(292)
-    /// A place's card: its name, three buttons and the trip's figures.
-    static let place = PresentationDetent.height(244)
     static let route = PresentationDetent.height(452)
     static let readiness = PresentationDetent.height(386)
 
     static func detents(for state: PrototypeFlowState) -> Set<PresentationDetent> {
-        state == .home ? [collapsed, place, middleDetent(for: state), .large] : [collapsed, middleDetent(for: state), .large]
+        // Three positions, as in Maps: the search bar, half open and fully open.
+        [collapsed, middleDetent(for: state), .large]
     }
 
     /// Tall enough for the step's main button, no more, so that the map keeps most of the screen.
@@ -273,7 +272,7 @@ struct StreetnavExplorePanel: View {
     private func choose(_ suggestion: StreetnavSuggestion) {
         query = ""
         searchFocused = false
-        detent = StreetnavExplorePanel.place
+        detent = StreetnavExplorePanel.summary
         choosing = suggestion
         Task {
             await places.choose(suggestion)

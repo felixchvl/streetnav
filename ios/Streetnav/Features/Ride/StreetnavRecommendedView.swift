@@ -123,7 +123,7 @@ struct StreetnavRecommendedView: View {
         switch model.flowState {
         case .routePreview: return 452
         case .readiness: return 386
-        case .home: return places.place == nil ? 292 : 250
+        case .home: return 292
         default: return 292
         }
     }

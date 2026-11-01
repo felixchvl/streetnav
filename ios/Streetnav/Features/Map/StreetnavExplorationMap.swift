@@ -25,6 +25,9 @@ struct StreetnavExplorationMap: View {
     var recenter: () -> Void = {}
 
     @State private var look: Look = .standard
+    /// The map's heading, rounded to the degree so that the view only redraws when the compass would change.
+    @State private var bearing: Double = 0
+    @State private var camera = CameraBox()
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @Environment(\.colorScheme) private var colorScheme
 
@@ -48,11 +51,19 @@ struct StreetnavExplorationMap: View {
         }
         .overlay(alignment: .bottomLeading) {
             if showsButtons, mode.isRouteStep == false {
-                threeDButton
-                    .padding(.leading, 22)
-                    // Above Mapbox's logo, which sits on the panel where Maps has its Look Around button.
-                    .padding(.bottom, panelOverlap + 46)
-                    .transition(.opacity)
+                // As in Maps: the compass, only while the map is turned, above the 2D/3D button.
+                VStack(spacing: 10) {
+                    if abs(bearing) >= 2 {
+                        StreetnavCompass(bearing: bearing, action: pointNorth)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                    threeDButton
+                }
+                .padding(.leading, 22)
+                // Above Mapbox's logo, which sits on the panel where Maps has its Look Around button.
+                .padding(.bottom, panelOverlap + 46)
+                .transition(.opacity)
+                .animation(.snappy, value: abs(bearing) >= 2)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showsButtons)
@@ -106,9 +117,17 @@ struct StreetnavExplorationMap: View {
                 .showsAccuracyRing(true)
         }
         .mapStyle(mapStyle)
+        .onCameraChanged { changed in
+            let state = changed.cameraState
+            camera.state = state
+            // -180…180, whole degrees.
+            let heading = (state.bearing + 540).truncatingRemainder(dividingBy: 360) - 180
+            if heading.rounded() != bearing { bearing = heading.rounded() }
+        }
         .ornamentOptions(OrnamentOptions(
             scaleBar: ScaleBarViewOptions(visibility: .hidden),
-            compass: CompassViewOptions(position: .topTrailing, margins: CGPoint(x: 16, y: 112), visibility: .adaptive),
+            // Streetnav draws its own, like the one in Maps.
+            compass: CompassViewOptions(visibility: .hidden),
             // Mapbox's logo and credits must stay visible: just above the panel, under the 2D/3D button, or above the ride
             // controls while riding.
             logo: LogoViewOptions(position: .bottomLeading, margins: CGPoint(x: 22, y: logoLift)),
@@ -190,6 +209,21 @@ struct StreetnavExplorationMap: View {
     }
 
     /// Location and map type, stacked in one capsule like the Maps app.
+    /// Turns the map back to north where it is, as the compass in Maps does.
+    private func pointNorth() {
+        guard let state = camera.state else { return }
+        withViewportAnimation(.default(maxDuration: 0.5)) {
+            // Same padding, so that the map turns about the same point instead of sliding.
+            let padding = state.padding
+            viewport = Viewport.camera(center: state.center, zoom: state.zoom, bearing: 0, pitch: state.pitch)
+                .padding(EdgeInsets(top: padding.top, leading: padding.left, bottom: padding.bottom, trailing: padding.right))
+        }
+    }
+
+    final class CameraBox {
+        var state: CameraState?
+    }
+
     private var showsButtons: Bool { mode.isNavigationLike == false && mode != .arrived && panelOverlap < 380 }
 
     private var threeDButton: some View {
@@ -381,5 +415,39 @@ enum StreetnavSunlight {
         let hourAngle = siderealTime - rightAscension
         let latitude = coordinate.latitude * radians
         return asin(sin(latitude) * sin(declination) + cos(latitude) * cos(declination) * cos(hourAngle)) / radians
+    }
+}
+
+/// The compass of Maps: a glass button with a large N, a ring of ticks and a red mark that points north.
+private struct StreetnavCompass: View {
+    let bearing: Double
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                ZStack {
+                    ForEach(0..<24, id: \.self) { tick in
+                        Capsule()
+                            .fill(Color.primary.opacity(tick % 6 == 0 ? 0.9 : 0.55))
+                            .frame(width: 1.5, height: tick % 6 == 0 ? 4.5 : 3)
+                            .offset(y: -18)
+                            .rotationEffect(.degrees(Double(tick) * 15))
+                    }
+                    Image(systemName: "triangle.fill")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(.red)
+                        .offset(y: -18)
+                }
+                .rotationEffect(.degrees(-bearing))
+                Text(verbatim: "N")
+                    .font(.system(size: 19, weight: .medium, design: .rounded))
+                    .foregroundStyle(.primary)
+            }
+            .frame(width: 48, height: 48)
+            .streetnavGlass(in: Circle(), interactive: true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Orienter la carte vers le nord")
     }
 }
