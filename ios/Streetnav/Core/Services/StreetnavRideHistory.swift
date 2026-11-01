@@ -78,7 +78,7 @@ final class StreetnavRideHistory: ObservableObject {
             if tracks != nil, let etag = UserDefaults.standard.string(forKey: etagKey) {
                 request.setValue(etag, forHTTPHeaderField: "If-None-Match")
             }
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await StreetnavServerAccess.session.data(for: request)
             let http = response as? HTTPURLResponse
             if http?.statusCode == 200 {
                 try data.write(to: tracksFile, options: .atomic)
@@ -88,7 +88,7 @@ final class StreetnavRideHistory: ObservableObject {
 
             var statsRequest = URLRequest(url: baseURL.appending(path: "stats"), timeoutInterval: 30)
             statsRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            let (statsData, statsResponse) = try await URLSession.shared.data(for: statsRequest)
+            let (statsData, statsResponse) = try await StreetnavServerAccess.session.data(for: statsRequest)
             if (statsResponse as? HTTPURLResponse)?.statusCode == 200,
                let decoded = try? JSONDecoder().decode(Stats.self, from: statsData) {
                 try? statsData.write(to: statsFile, options: .atomic)

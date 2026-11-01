@@ -93,7 +93,7 @@ struct StreetnavServerClient {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await StreetnavServerAccess.session.data(for: request)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(code) else { throw StreetnavServerError.http(code, String(decoding: data, as: UTF8.self)) }
         return data
