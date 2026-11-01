@@ -1,4 +1,4 @@
-import MapKit
+import MapboxMaps
 import SwiftUI
 
 @MainActor
@@ -7,7 +7,7 @@ struct StreetnavRecommendedView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentedSheet: StreetnavSheet?
     @State private var showsEndConfirmation = false
-    @State private var camera = StreetnavExplorationMap.camera(for: .home, route: nil, position: StreetnavMockData.parisCenter)
+    @State private var viewport = StreetnavExplorationMap.viewport(for: .home, route: nil, position: StreetnavMockData.parisCenter)
     @State private var panelDetent = StreetnavExplorePanel.summary
     private let embedded: Bool
 
@@ -30,11 +30,11 @@ struct StreetnavRecommendedView: View {
                 route: model.flowState == .home || model.flowState == .planner ? nil : model.route,
                 mode: model.flowState,
                 position: position,
-                routeLineWidth: model.tuning.routeLineWidth,
-                camera: $camera,
+                routeProgress: model.flowState.isNavigationLike ? model.rideProgress.routeProgress : 0,
+                bottomInset: mapBottomInset,
+                viewport: $viewport,
                 recenter: recenter
             )
-            .safeAreaPadding(.bottom, mapBottomInset)
 
             switch model.flowState {
             case .navigating, .approachingNewStreet, .completedNewStreet, .rerouting, .weakGPS, .paused:
@@ -58,8 +58,8 @@ struct StreetnavRecommendedView: View {
         }
         .onChange(of: model.route.id) {
             guard model.flowState.isRouteStep else { return }
-            withAnimation(.smooth(duration: 0.6)) {
-                camera = StreetnavExplorationMap.camera(for: model.flowState, route: model.route, position: position)
+            withViewportAnimation(.easeInOut(duration: 0.6)) {
+                viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, position: position)
             }
         }
         .alert("Terminer la sortie ?", isPresented: $showsEndConfirmation) {
@@ -105,21 +105,21 @@ struct StreetnavRecommendedView: View {
         if newState == .routePreview, presentedSheet == .planner { presentedSheet = nil }
         let preferred = StreetnavExplorePanel.preferredDetent(for: newState)
         if preferred != StreetnavExplorePanel.preferredDetent(for: oldState) { panelDetent = preferred }
-        withAnimation(.smooth(duration: 0.6)) {
-            camera = StreetnavExplorationMap.camera(for: newState, route: model.route, position: position)
+        withViewportAnimation(.easeInOut(duration: 0.8)) {
+            viewport = StreetnavExplorationMap.viewport(for: newState, route: model.route, position: position)
         }
     }
 
     private func recenter() {
-        withAnimation(.smooth(duration: 0.5)) {
-            camera = StreetnavExplorationMap.camera(for: model.flowState, route: model.route, position: position)
+        withViewportAnimation(.easeInOut(duration: 0.5)) {
+            viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, position: position)
         }
     }
 
     private func focus(on coordinates: [CLLocationCoordinate2D]) {
         if panelDetent == .large { panelDetent = StreetnavExplorePanel.preferredDetent(for: model.flowState) }
-        withAnimation(.smooth(duration: 0.6)) {
-            camera = .rect(StreetnavExplorationMap.rect(around: coordinates, margin: 0.8))
+        withViewportAnimation(.easeInOut(duration: 0.6)) {
+            viewport = StreetnavExplorationMap.focus(on: coordinates)
         }
     }
 

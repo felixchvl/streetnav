@@ -140,12 +140,14 @@ struct StreetnavExplorePanel: View {
                 Button {
                     presentedSheet = .integrations
                 } label: {
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 38))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .streetnavGlass(in: Circle(), interactive: true)
                 }
-                .accessibilityLabel("Profil et sources de données")
+                .buttonStyle(.plain)
+                .accessibilityLabel("Réglages")
             }
         }
         .animation(.snappy, value: searchFocused)

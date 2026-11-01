@@ -1,64 +1,138 @@
-import MapKit
+import CoreLocation
+@_spi(Experimental) import MapboxMaps
 import SwiftUI
 
-/// Native MapKit map of the exploration state: streets already ridden, streets left to discover and the planned
-/// route, on a muted base map without points of interest so that the lines carry the information.
+/// Mapbox map of the exploration state: streets already ridden, streets left to discover and the planned route.
+///
+/// The base map is Mapbox Standard in its monochrome theme, without points of interest, in day or night light with the
+/// system appearance, so that the streets carry the information. Every line is a style layer drawn by the GPU:
+/// colours, widths and dots are computed per street by the engine, lines glow at night (emissive), stay visible
+/// behind 3D buildings (occlusion opacity), and the route is trimmed as it is ridden.
 struct StreetnavExplorationMap: View {
     let segments: [ExplorationStreetSegment]
     let route: StreetnavRoute?
     let mode: PrototypeFlowState
     let position: CLLocationCoordinate2D
-    var routeLineWidth: Double = 8
-    @Binding var camera: MapCameraPosition
+    var routeProgress: Double = 0
+    var bottomInset: CGFloat = 0
+    @Binding var viewport: Viewport
     var recenter: () -> Void = {}
 
     @State private var look: Look = .standard
-    @Namespace private var mapScope
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Map(position: $camera, scope: mapScope) {
-            ForEach(segments) { segment in
-                MapPolyline(coordinates: segment.coordinates)
-                    .stroke(segment.status.mapColor, style: segment.status.mapStroke)
-            }
-
-            if let route {
-                MapPolyline(coordinates: route.coordinates)
-                    .stroke(Color(uiColor: .systemBackground).opacity(0.9), style: StrokeStyle(lineWidth: routeLineWidth + 4, lineCap: .round, lineJoin: .round))
-                MapPolyline(coordinates: route.coordinates)
-                    .stroke(Color.streetnavRoute, style: StrokeStyle(lineWidth: routeLineWidth, lineCap: .round, lineJoin: .round))
-            }
-
-            Annotation("Ma position", coordinate: position, anchor: .center) {
-                StreetnavPositionPuck(showsHeading: mode.isNavigationLike)
-            }
-            .annotationTitles(.hidden)
+        MapReader { proxy in
+            map
+                // Place names in French, like the rest of the app.
+                .onStyleLoaded { _ in try? proxy.map?.localizeLabels(into: Locale(identifier: "fr")) }
         }
-        .mapStyle(mapStyle)
-        .mapControls {}
+        .ignoresSafeArea()
         .overlay(alignment: .topTrailing) {
             // During the ride the manoeuvre card owns the top of the screen.
             if mode.isNavigationLike == false {
-                VStack(spacing: 10) {
-                    controls
-                    MapCompass(scope: mapScope)
-                }
-                .padding(.trailing, 16)
-                .padding(.top, 8)
-                .transition(.opacity)
+                controls
+                    .padding(.trailing, 16)
+                    .padding(.top, 8)
+                    .transition(.opacity)
             }
         }
-        .mapScope(mapScope)
         .accessibilityLabel("Carte des rues parcourues et des rues à découvrir")
     }
 
+    private var map: Map {
+        Map(viewport: $viewport) {
+            Self.streetsSource(segments)
+            streetLayer("rues-parcourues", status: .traveled)
+                .lineColor(neutral)
+                .lineOpacity(colorScheme == .dark ? 0.55 : 0.5)
+                .lineWidth(Self.zoomed(1, 3, 7))
+            streetLayer("rues-incertaines", status: .uncertain)
+                .lineColor(neutral)
+                .lineOpacity(0.35)
+                .lineWidth(Self.zoomed(1, 2.5, 6))
+                .lineDashArray([2, 2])
+            streetLayer("rues-a-decouvrir", status: .untraveled)
+                .lineColor(accent)
+                .lineWidth(Self.zoomed(2, 4, 9))
+                .lineDashArray([0, 2])
+            streetLayer("rues-decouvertes", status: .completedDuringRide)
+                .lineColor(accent)
+                .lineWidth(Self.zoomed(2, 4, 9))
+
+            if let route {
+                Self.routeSource(route)
+                // A soft halo under the route, as in Maps during navigation.
+                LineLayer(id: "itineraire-halo", source: "itineraire")
+                    .slot(.middle)
+                    .lineCap(.round).lineJoin(.round)
+                    .lineColor(accent)
+                    .lineOpacity(0.28)
+                    .lineBlur(Self.zoomed(4, 8, 14))
+                    .lineWidth(Self.zoomed(10, 20, 36))
+                    .lineEmissiveStrength(1)
+                    .lineOcclusionOpacity(0.2)
+                LineLayer(id: "itineraire", source: "itineraire")
+                    .slot(.middle)
+                    .lineCap(.round).lineJoin(.round)
+                    .lineColor(accent)
+                    .lineBorderColor(colorScheme == .dark ? UIColor(white: 0, alpha: 0.45) : UIColor(white: 1, alpha: 0.9))
+                    .lineBorderWidth(colorScheme == .dark ? 1 : 2)
+                    .lineWidth(Self.zoomed(5, 9, 16))
+                    .lineEmissiveStrength(1)
+                    .lineOcclusionOpacity(0.5)
+                    // The part already ridden fades out, as in Maps.
+                    .lineTrimOffset(start: 0, end: max(0, min(1, routeProgress)))
+                    .lineTrimColor(UIColor(white: 0.55, alpha: 0.5))
+            }
+
+            MapViewAnnotation(coordinate: position) {
+                StreetnavPositionPuck(showsHeading: mode.isNavigationLike)
+            }
+            .allowOverlap(true)
+        }
+        .mapStyle(mapStyle)
+        .ornamentOptions(OrnamentOptions(
+            scaleBar: ScaleBarViewOptions(visibility: .hidden),
+            compass: CompassViewOptions(position: .topTrailing, margins: CGPoint(x: 16, y: 112), visibility: .adaptive),
+            // Mapbox's logo and credits must stay visible: above the ride controls while navigating.
+            logo: LogoViewOptions(position: .bottomLeading, margins: CGPoint(x: 12, y: mode.isNavigationLike ? 300 : 8)),
+            attributionButton: AttributionButtonOptions(position: .bottomLeading, margins: CGPoint(x: 96, y: mode.isNavigationLike ? 298 : 6))
+        ))
+        .additionalSafeAreaInsets(.bottom, bottomInset)
+    }
+
+    private var accent: UIColor {
+        colorScheme == .dark ? UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1) : UIColor(red: 0, green: 0.48, blue: 1, alpha: 1)
+    }
+
+    private var neutral: UIColor {
+        colorScheme == .dark ? UIColor(white: 0.62, alpha: 1) : UIColor(white: 0.45, alpha: 1)
+    }
+
     private var mapStyle: MapStyle {
+        let light: StandardLightPreset = colorScheme == .dark ? .night : .day
         switch look {
         case .standard:
-            .standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll)
+            // Monochrome: greys and white only, so that the streets are the only colour on the map.
+            return .standard(theme: .monochrome, lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false,
+                             showPlaceLabels: true, showRoadLabels: true, showPedestrianRoads: true, show3dObjects: true)
         case .satellite:
-            .hybrid(elevation: .flat, pointsOfInterest: .excludingAll)
+            return .standardSatellite(lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false)
         }
+    }
+
+    private func streetLayer(_ id: String, status: StreetExplorationStatus) -> LineLayer {
+        LineLayer(id: id, source: "rues")
+            .filter(Exp(.eq) {
+                Exp(.get) { "status" }
+                status.rawValue
+            })
+            .slot(.middle)
+            .lineCap(.round)
+            .lineJoin(.round)
+            .lineEmissiveStrength(1)
+            .lineOcclusionOpacity(0.35)
     }
 
     /// Location and map type, stacked in one capsule like the Maps app.
@@ -104,50 +178,76 @@ struct StreetnavExplorationMap: View {
 
 extension StreetnavExplorationMap {
     /// Where the camera goes for each step of the flow.
-    static func camera(for mode: PrototypeFlowState, route: StreetnavRoute?, position: CLLocationCoordinate2D) -> MapCameraPosition {
+    static func viewport(for mode: PrototypeFlowState, route: StreetnavRoute?, position: CLLocationCoordinate2D) -> Viewport {
         switch mode {
         case .routePreview, .readiness:
-            if let route { return .rect(rect(around: route.coordinates)) }
-            return .camera(MapCamera(centerCoordinate: position, distance: 4200))
+            if let route { return focus(on: route.coordinates, padding: 40) }
+            return .camera(center: position, zoom: 14.6)
         case _ where mode.isNavigationLike:
-            // Seen from above: with the camera tilted, MapKit lets buildings hide the route.
-            return .camera(MapCamera(centerCoordinate: position, distance: 900, heading: 28))
+            // Tilted like Maps: the route stays visible through the buildings (occlusion opacity).
+            return .camera(center: position, zoom: 17, bearing: 28, pitch: 55)
         default:
-            return .camera(MapCamera(centerCoordinate: position, distance: 4200))
+            return .camera(center: position, zoom: 14.6, bearing: 0, pitch: 0)
         }
     }
 
-    static func rect(around coordinates: [CLLocationCoordinate2D], margin: Double = 0.18) -> MKMapRect {
-        let rect = coordinates
-            .map(MKMapPoint.init)
-            .reduce(MKMapRect.null) { $0.union(MKMapRect(origin: $1, size: MKMapSize(width: 0, height: 0))) }
-        let padding = max(rect.width, rect.height, 400) * margin
-        return rect.insetBy(dx: -padding, dy: -padding)
+    static func focus(on coordinates: [CLLocationCoordinate2D], padding: CGFloat = 60) -> Viewport {
+        .overview(geometry: LineString(coordinates), geometryPadding: EdgeInsets(top: padding, leading: padding, bottom: padding, trailing: padding))
+    }
+
+    static func streetsSource(_ segments: [ExplorationStreetSegment]) -> GeoJSONSource {
+        var source = GeoJSONSource(id: "rues")
+        source.data = .featureCollection(FeatureCollection(features: segments.map { segment in
+            var feature = Feature(geometry: LineString(segment.coordinates))
+            feature.properties = ["status": .string(segment.status.rawValue), "name": .string(segment.name)]
+            return feature
+        }))
+        return source
+    }
+
+    static func routeSource(_ route: StreetnavRoute) -> GeoJSONSource {
+        var source = GeoJSONSource(id: "itineraire")
+        source.data = .geometry(.lineString(LineString(route.coordinates)))
+        // Needed for the trim of the part already ridden.
+        source.lineMetrics = true
+        return source
+    }
+
+    /// A width that grows with the zoom level (values at zoom 12, 16 and 19), the way Maps draws its roads.
+    static func zoomed(_ atZoom12: Double, _ atZoom16: Double, _ atZoom19: Double) -> Exp {
+        Exp(.interpolate) {
+            Exp(.exponential) { 1.5 }
+            Exp(.zoom)
+            12
+            atZoom12
+            16
+            atZoom16
+            19
+            atZoom19
+        }
     }
 }
 
 extension Color {
-    static let streetnavRoute = Color(red: 0.0, green: 0.74, blue: 0.56)
+    static let streetnavRoute = Color.blue
 }
 
 extension StreetExplorationStatus {
+    /// Same code as the map layers, for the legend and the street lists: one accent, the rest neutral.
     var mapColor: Color {
         switch self {
-        case .traveled: .blue.opacity(0.55)
-        case .untraveled: .red
-        case .planned: .streetnavRoute
-        case .completedDuringRide: .green
-        case .uncertain: .gray.opacity(0.7)
+        case .traveled: .gray
+        case .untraveled, .planned, .completedDuringRide: .blue
+        case .uncertain: .gray.opacity(0.5)
         }
     }
 
     var mapStroke: StrokeStyle {
         switch self {
-        case .traveled: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
-        case .untraveled: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round, dash: [1, 8])
-        case .planned: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round)
-        case .completedDuringRide: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round)
-        case .uncertain: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round, dash: [4, 6])
+        case .traveled: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+        case .untraveled: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round, dash: [0.1, 7])
+        case .planned, .completedDuringRide: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
+        case .uncertain: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round, dash: [4, 4])
         }
     }
 }
