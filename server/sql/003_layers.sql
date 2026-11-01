@@ -40,6 +40,7 @@ ALTER TABLE activity_source ADD COLUMN IF NOT EXISTS hr_t             integer[];
 ALTER TABLE activity_source ADD COLUMN IF NOT EXISTS hr_bpm           smallint[];
 ALTER TABLE activity_source ADD COLUMN IF NOT EXISTS raw_file_ids     bigint[];
 ALTER TABLE activity_source ADD COLUMN IF NOT EXISTS parsed_at        timestamptz;
+CREATE INDEX IF NOT EXISTS activity_source_track ON activity_source USING gist (track);
 
 -- Gold: which version gave each field ("source:external_id"), and what the automatic crop removed.
 ALTER TABLE activity ADD COLUMN IF NOT EXISTS provenance jsonb;

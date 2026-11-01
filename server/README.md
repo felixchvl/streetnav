@@ -130,6 +130,16 @@ Strava crop and 548 had an idle start or end cut (21 h in all); total distance 1
 HealthFit file names (ids are now NFC), and some Apple Health workouts hold their route twice (silver
 keeps one sample per instant).
 
+## QGIS
+
+The `qgis` login role (created by hand for the `paris_rues` database on the same server, password kept out of
+this repo) reads Streetnav too, from the home network only and over TLS: `sql/004_qgis.sql` grants it `SELECT`
+on `activity`, `activity_heart_rate` and `activity_source`, and `pg_hba.conf` holds
+`hostssl streetnav qgis 192.168.1.0/24 scram-sha-256` (added by hand, like the `paris_rues` line). In QGIS: a
+PostgreSQL connection to `192.168.1.62:5432`, database `streetnav`, SSL mode `require`. Useful layers:
+`activity` (track, one line per activity; filter `sport = 'cycling'`) and `activity_source` (one track per
+version, to compare them). Tracks are `LineStringZM` in EPSG:4326, both with a spatial index.
+
 ## Remote access (not enabled yet)
 
 The iPhone reaches the API from anywhere through the home Caddy, without a VPN:
