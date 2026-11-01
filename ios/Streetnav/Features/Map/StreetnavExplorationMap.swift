@@ -36,21 +36,21 @@ struct StreetnavExplorationMap: View {
         }
         .ignoresSafeArea()
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { sunLight = StreetnavSunlight.preset(at: $0) }
-        // As in Maps: map buttons on the right and « 3D » on the left, just above the panel, gone once it is open.
+        // As in Maps, measured on its iOS 27 screens: map buttons 22 points from the edges, 16 above the panel on the right
+        // and 21 on the left; they go once the panel is open.
         .overlay(alignment: .bottomTrailing) {
             if showsButtons {
                 controls
-                    .padding(.trailing, 16)
-                    .padding(.bottom, panelOverlap + 12)
+                    .padding(.trailing, 22)
+                    .padding(.bottom, panelOverlap + 14)
                     .transition(.opacity)
             }
         }
         .overlay(alignment: .bottomLeading) {
             if showsButtons, mode.isRouteStep == false {
                 threeDButton
-                    .padding(.leading, 16)
-                    // Above Mapbox's logo, which sits on the panel.
-                    .padding(.bottom, panelOverlap + 40)
+                    .padding(.leading, 22)
+                    .padding(.bottom, panelOverlap + 19)
                     .transition(.opacity)
             }
         }
@@ -108,19 +108,22 @@ struct StreetnavExplorationMap: View {
         .ornamentOptions(OrnamentOptions(
             scaleBar: ScaleBarViewOptions(visibility: .hidden),
             compass: CompassViewOptions(position: .topTrailing, margins: CGPoint(x: 16, y: 112), visibility: .adaptive),
-            // Mapbox's logo and credits must stay visible: just above the panel or the ride controls.
-            logo: LogoViewOptions(position: .bottomLeading, margins: CGPoint(x: 12, y: logoLift)),
-            attributionButton: AttributionButtonOptions(position: .bottomLeading, margins: CGPoint(x: 96, y: logoLift - 2))
+            // Mapbox's logo and credits must stay visible. At the top left, where Maps has its weather badge, so that the
+            // bottom of the screen is laid out like Maps; above the ride controls while riding.
+            logo: LogoViewOptions(position: logoAtTop ? .topLeading : .bottomLeading,
+                                  margins: CGPoint(x: logoAtTop ? 22 : 12, y: logoAtTop ? 6 : logoLift)),
+            attributionButton: AttributionButtonOptions(position: logoAtTop ? .topLeading : .bottomLeading,
+                                                        margins: CGPoint(x: logoAtTop ? 106 : 96, y: logoAtTop ? -12 : logoLift - 2))
         ))
     }
+
+    private var logoAtTop: Bool { mode.isNavigationLike == false && mode != .arrived }
 
     private var logoLift: CGFloat {
         switch mode {
         case .paused: 296
         case .arrived: 438
-        case _ where mode.isNavigationLike: 236
-        // Behind the panel when it is fully open, where the map is hidden anyway.
-        default: min(panelOverlap, 600) + 8
+        default: 236
         }
     }
 
@@ -195,9 +198,9 @@ struct StreetnavExplorationMap: View {
             isThreeD.wrappedValue.toggle()
         } label: {
             Text(isThreeD.wrappedValue ? "2D" : "3D")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 19, weight: .semibold))
                 .foregroundStyle(.primary)
-                .frame(width: 52, height: 52)
+                .frame(width: 48, height: 48)
                 .streetnavGlass(in: Circle(), interactive: true)
         }
         .buttonStyle(.plain)
@@ -214,22 +217,19 @@ struct StreetnavExplorationMap: View {
                 }
             } label: {
                 Image(systemName: look == .standard ? "map.fill" : "globe.europe.africa.fill")
-                    .frame(width: 52, height: 50)
+                    .frame(width: 48, height: 52)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("Type de carte")
 
-            Divider()
-                .frame(width: 26)
-
             Button(action: recenter) {
                 Image(systemName: "location")
-                    .frame(width: 52, height: 50)
+                    .frame(width: 48, height: 52)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("Recentrer sur ma position")
         }
-        .font(.system(size: 17, weight: .medium))
+        .font(.system(size: 20, weight: .medium))
         .foregroundStyle(.primary)
         .streetnavGlass(in: Capsule(), interactive: true)
     }

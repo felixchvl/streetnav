@@ -19,36 +19,40 @@ struct StreetnavGuidanceView: View {
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
-                    VStack(alignment: .trailing, spacing: 14) {
+                    // Measured on Maps (iOS 27): card 8 points from the sides, round buttons 16 from the edge, 11 below it.
+                    VStack(alignment: .trailing, spacing: 11) {
                         maneuverCard
                         roundButton(showsOverview ? "location.north.line.fill" : "point.topleft.down.to.point.bottomright.curvepath",
                                     label: showsOverview ? "Suivre ma position" : "Voir tout l'itinéraire") {
                             showsOverview.toggle()
                         }
-                        .padding(.trailing, 6)
+                        .padding(.trailing, 8)
                     }
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 2)
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
             .overlay(alignment: .bottom) {
-                VStack(spacing: 12) {
+                // Down to the bottom edge, as in Maps: 8 points from the sides and 11 from the bottom of the screen.
+                VStack(spacing: 9) {
                     if guidance.hasArrived {
                         arrivalCard
                     } else {
                         if let street = currentStreet {
                             Text(street)
                                 .font(.headline)
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 10)
+                                .padding(.horizontal, 13)
+                                .padding(.vertical, 6)
                                 .streetnavGlass(in: Capsule())
                                 .transition(.opacity)
                         }
                         tripCard
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.bottom, 4)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 11)
+                .ignoresSafeArea(edges: .bottom)
             }
             .animation(.snappy, value: guidance.hasArrived)
             .animation(.snappy, value: showsEnd)
@@ -64,14 +68,14 @@ struct StreetnavGuidanceView: View {
     private var maneuverCard: some View {
         HStack(alignment: .center, spacing: 18) {
             Image(systemName: Self.symbol(for: guidance.instruction?.primaryInstruction))
-                .font(.system(size: 52, weight: .bold))
-                .frame(width: 70)
+                .font(.system(size: 48, weight: .bold))
+                .frame(width: 60)
             VStack(alignment: .leading, spacing: 2) {
                 Text(stepDistance)
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.system(size: 31, weight: .bold))
                     .monospacedDigit()
                 Text(guidance.instruction?.primaryInstruction.text ?? "Calcul de l'itinéraire…")
-                    .font(.system(size: 30, weight: .regular))
+                    .font(.system(size: 28, weight: .regular))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)
@@ -80,16 +84,16 @@ struct StreetnavGuidanceView: View {
         }
         .foregroundStyle(.primary)
         .padding(.horizontal, 22)
-        .padding(.vertical, 24)
-        .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 40, style: .continuous))
-        .streetnavGlass(in: RoundedRectangle(cornerRadius: 40, style: .continuous))
+        .padding(.vertical, 26)
+        .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 44, style: .continuous))
+        .streetnavGlass(in: RoundedRectangle(cornerRadius: 44, style: .continuous))
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .combine)
     }
 
     /// Arrival, time and distance left; pulled up (or tapped), it offers to end the route, as in Maps.
     private var tripCard: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 0) {
             Capsule()
                 .fill(Color.secondary.opacity(0.5))
                 .frame(width: 36, height: 5)
@@ -98,6 +102,8 @@ struct StreetnavGuidanceView: View {
                 tripValue(remainingTime.value, remainingTime.unit)
                 tripValue(remainingDistance.value, remainingDistance.unit)
             }
+            .padding(.horizontal, 10)
+            .padding(.top, 22)
             if showsEnd {
                 Button(role: .destructive) {
                     showsEnd = false
@@ -111,13 +117,16 @@ struct StreetnavGuidanceView: View {
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .tint(.red)
+                .padding(.top, 20)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .padding(.top, 10)
+        .padding(.top, 7)
         .padding(.horizontal, 20)
-        .padding(.bottom, showsEnd ? 20 : 18)
-        .streetnavGlass(in: RoundedRectangle(cornerRadius: 40, style: .continuous))
+        // Clear of the home indicator, which the card covers.
+        .padding(.bottom, 26)
+        .frame(maxWidth: .infinity)
+        .streetnavGlass(in: RoundedRectangle(cornerRadius: 48, style: .continuous))
         .contentShape(Rectangle())
         .onTapGesture { showsEnd.toggle() }
         .gesture(DragGesture(minimumDistance: 12).onEnded { drag in
@@ -129,10 +138,10 @@ struct StreetnavGuidanceView: View {
     private func tripValue(_ value: String, _ label: String) -> some View {
         VStack(spacing: 0) {
             Text(value)
-                .font(.system(size: 34, weight: .semibold))
+                .font(.system(size: 27, weight: .semibold))
                 .monospacedDigit()
             Text(label)
-                .font(.title3)
+                .font(.system(size: 17))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -160,8 +169,10 @@ struct StreetnavGuidanceView: View {
             .buttonBorderShape(.capsule)
             .controlSize(.large)
         }
-        .padding(22)
-        .streetnavGlass(in: RoundedRectangle(cornerRadius: 40, style: .continuous))
+        .padding(.top, 22)
+        .padding(.horizontal, 22)
+        .padding(.bottom, 26)
+        .streetnavGlass(in: RoundedRectangle(cornerRadius: 48, style: .continuous))
     }
 
     private func roundButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
@@ -257,12 +268,13 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         view.showsTrafficOnRouteLine = false
         view.showsAlternatives = false
         // Clear of the manoeuvre card at the top and the trip card at the bottom.
-        view.viewportPadding = UIEdgeInsets(top: 230, left: 40, bottom: 190, right: 40)
+        view.viewportPadding = UIEdgeInsets(top: 230, left: 40, bottom: 170, right: 40)
         view.mapView.ornaments.options.scaleBar.visibility = .hidden
         view.mapView.ornaments.options.compass.visibility = .hidden
-        view.mapView.ornaments.options.logo.margins = CGPoint(x: 16, y: 190)
+        // Above the street being ridden.
+        view.mapView.ornaments.options.logo.margins = CGPoint(x: 16, y: 142)
         view.mapView.ornaments.options.attributionButton.position = .bottomLeading
-        view.mapView.ornaments.options.attributionButton.margins = CGPoint(x: 100, y: 188)
+        view.mapView.ornaments.options.attributionButton.margins = CGPoint(x: 100, y: 140)
         view.update(navigationCameraState: .following)
         show(guidance.routes, in: view, context: context)
         return view

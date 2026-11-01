@@ -9,6 +9,9 @@ struct StreetnavPlace: Identifiable, Equatable {
     let address: String
     let coordinate: CLLocationCoordinate2D
     let symbol: String
+    /// From Apple, when it knows the place: Maps' « Appeler » and « Site web » buttons.
+    var phone: String? = nil
+    var website: URL? = nil
 
     static func == (lhs: StreetnavPlace, rhs: StreetnavPlace) -> Bool { lhs.id == rhs.id }
 }
@@ -237,7 +240,8 @@ final class StreetnavPlaceSearch: NSObject, ObservableObject {
         let address = [item.placemark.subThoroughfare, item.placemark.thoroughfare, item.placemark.locality]
             .compactMap { $0 }.joined(separator: " ")
         return StreetnavPlace(name: item.name ?? fallbackName, address: address.isEmpty ? fallbackAddress : address,
-                              coordinate: coordinate ?? item.placemark.coordinate, symbol: symbol(for: item.pointOfInterestCategory))
+                              coordinate: coordinate ?? item.placemark.coordinate, symbol: symbol(for: item.pointOfInterestCategory),
+                              phone: item.phoneNumber, website: item.url)
     }
 
     // MARK: Route
