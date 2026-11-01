@@ -138,6 +138,7 @@ final class StreetnavPrototypeViewModel: ObservableObject {
     @Published var bike: BikeStatus
     @Published var gpsQuality: GPSQuality
     @Published var streets: [ExplorationStreetSegment]
+    @Published var recentRides: [RecentRide] = StreetnavMockData.recentRides
     @Published var isPlanningRoute = false
     @Published var routeErrorMessage: String?
     @Published var selectedDuration = 45
@@ -325,7 +326,7 @@ final class StreetnavPrototypeViewModel: ObservableObject {
             bike = StreetnavMockData.lowBatteryBike
         case .veryLongStreetName:
             rideProgress.currentInstructionIndex = 0
-            route = StreetnavRoute(name: route.name, durationMinutes: route.durationMinutes, distanceKilometers: route.distanceKilometers, newRoadKilometers: route.newRoadKilometers, traveledRoadKilometers: route.traveledRoadKilometers, estimatedProgressGain: route.estimatedProgressGain, elevationGainMeters: route.elevationGainMeters, arrivalText: route.arrivalText, confidence: route.confidence, surface: route.surface, isLoop: route.isLoop, returnsHome: route.returnsHome, coordinates: route.coordinates, instructions: [.init(distanceText: "Dans 80 m", maneuver: "Serre a gauche", streetName: "Avenue de la Republique et du General-Leclerc", symbolName: "arrow.turn.up.left", spokenLabel: "Dans 80 metres, serre a gauche")], alternatives: route.alternatives)
+            route = StreetnavRoute(name: route.name, durationMinutes: route.durationMinutes, distanceKilometers: route.distanceKilometers, newRoadKilometers: route.newRoadKilometers, traveledRoadKilometers: route.traveledRoadKilometers, estimatedProgressGain: route.estimatedProgressGain, elevationGainMeters: route.elevationGainMeters, arrivalText: route.arrivalText, confidence: route.confidence, surface: route.surface, isLoop: route.isLoop, returnsHome: route.returnsHome, coordinates: route.coordinates, instructions: [.init(distanceText: "Dans 80 m", maneuver: "Serre à gauche", streetName: "Avenue de la Republique et du General-Leclerc", symbolName: "arrow.turn.up.left", spokenLabel: "Dans 80 mètres, serre à gauche")], alternatives: route.alternatives)
         case .largeType, .smallPhone, .largePhone, .lightMode, .darkMode, .reducedMotion:
             break
         case .activeRide:

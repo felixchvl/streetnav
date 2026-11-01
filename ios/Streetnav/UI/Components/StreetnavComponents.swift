@@ -7,23 +7,83 @@ extension View {
     }
 }
 
-/// Activity-ring style progress, the way Fitness draws it.
+/// Activity-ring style progress, the way Fitness draws it, in the accent colour on a grey track.
 struct StreetnavProgressRing: View {
     let progress: Double
     var lineWidth: CGFloat = 8
-    var colors: [Color] = [.green, .mint]
 
     var body: some View {
         ZStack {
             Circle()
-                .stroke(colors[0].opacity(0.18), lineWidth: lineWidth)
+                .stroke(Color(.tertiarySystemFill), lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: max(0.001, min(1, progress)))
-                .stroke(AngularGradient(colors: colors + [colors[0]], center: .center), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(.tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         }
         .padding(lineWidth / 2)
         .accessibilityHidden(true)
+    }
+}
+
+/// A figure the way Fitness shows it: the label on top, the value large and rounded, the unit smaller.
+struct StreetnavStat: View {
+    let label: String
+    let value: String
+    var unit: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(.system(.title, design: .rounded, weight: .semibold))
+                if let unit {
+                    Text(unit)
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A Settings-style row: grey symbol, title, optional detail under it and optional value on the right.
+struct StreetnavSettingsRow: View {
+    let symbol: String
+    let title: String
+    var detail: String? = nil
+    var value: String? = nil
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                if let detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 8)
+            if let value {
+                Text(value)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

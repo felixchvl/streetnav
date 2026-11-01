@@ -15,7 +15,7 @@ enum StreetnavMockData {
     static let noWandrerIntegration = IntegrationStatus(
         stravaSync: .connected,
         lastStravaSyncText: "il y a 6 min",
-        importedRideCount: 184,
+        importedRideCount: 2_589,
         wandrerConnected: false,
         wandrerFreshnessText: "aucun import local",
         missingNearbyStreets: 0,
@@ -25,12 +25,17 @@ enum StreetnavMockData {
     static let integrations = IntegrationStatus(
         stravaSync: .connected,
         lastStravaSyncText: "il y a 6 min",
-        importedRideCount: 184,
+        importedRideCount: 2_589,
         wandrerConnected: true,
         wandrerFreshnessText: "mis à jour il y a 2 jours",
         missingNearbyStreets: 38,
         isOffline: false
     )
+
+    static let recentRides = [
+        RecentRide(name: "Boucle Canal – Nation", detail: "Hier · 8,7 km · 3,4 km nouveaux"),
+        RecentRide(name: "Trajet domicile – travail", detail: "Jeudi · 6,2 km"),
+    ]
 
     static let watch = WatchStatus(
         state: .ready,
@@ -87,7 +92,7 @@ enum StreetnavMockData {
     ]
 
     static let route = StreetnavRoute(
-        name: "Boucle Canal - Nation",
+        name: "Boucle Canal – Nation",
         durationMinutes: 42,
         distanceKilometers: 8.4,
         newRoadKilometers: 3.1,
@@ -101,14 +106,14 @@ enum StreetnavMockData {
         returnsHome: true,
         coordinates: [c(48.8637, 2.3708), c(48.8658, 2.3740), c(48.8643, 2.3806), c(48.8598, 2.3845), c(48.8549, 2.3902), c(48.8482, 2.3959), c(48.8506, 2.3826), c(48.8557, 2.3698), c(48.8637, 2.3708)],
         instructions: [
-            .init(distanceText: "Dans 120 m", maneuver: "Tourne a droite", streetName: "Rue du Chemin-Vert", symbolName: "arrow.turn.up.right", spokenLabel: "Dans 120 metres, tourne a droite rue du Chemin-Vert"),
+            .init(distanceText: "Dans 120 m", maneuver: "Tourne à droite", streetName: "Rue du Chemin-Vert", symbolName: "arrow.turn.up.right", spokenLabel: "Dans 120 mètres, tourne à droite rue du Chemin-Vert"),
             .init(distanceText: "Dans 420 m", maneuver: "Continue", streetName: "Avenue Parmentier", symbolName: "arrow.up", spokenLabel: "Continue sur Avenue Parmentier"),
-            .init(distanceText: "Dans 1,1 km", maneuver: "Prends la piste", streetName: "Boulevard Voltaire", symbolName: "bicycle", spokenLabel: "Prends la piste cyclable boulevard Voltaire")
+            .init(distanceText: "Dans 1,1 km", maneuver: "Prends la piste cyclable", streetName: "Boulevard Voltaire", symbolName: "bicycle", spokenLabel: "Prends la piste cyclable boulevard Voltaire")
         ],
         alternatives: [
-            .init(title: "Maximum de nouvelles rues", subtitle: "+3,1 km découverts", durationMinutes: 42, newRoadKilometers: 3.1, routeCoordinates: [c(48.8637, 2.3708), c(48.8658, 2.3740), c(48.8643, 2.3806), c(48.8549, 2.3902), c(48.8482, 2.3959)]),
+            .init(title: "Maximum de rues nouvelles", subtitle: "3,1 km nouveaux", durationMinutes: 42, newRoadKilometers: 3.1, routeCoordinates: [c(48.8637, 2.3708), c(48.8658, 2.3740), c(48.8643, 2.3806), c(48.8549, 2.3902), c(48.8482, 2.3959)]),
             .init(title: "Plus fluide", subtitle: "moins de carrefours difficiles", durationMinutes: 39, newRoadKilometers: 2.4, routeCoordinates: [c(48.8637, 2.3708), c(48.8611, 2.3715), c(48.8581, 2.3766), c(48.8532, 2.3860)]),
-            .init(title: "Plus cyclable", subtitle: "82 % de pistes ou de rues calmes", durationMinutes: 45, newRoadKilometers: 2.8, routeCoordinates: [c(48.8637, 2.3708), c(48.8682, 2.3676), c(48.8708, 2.3758), c(48.8599, 2.3855)])
+            .init(title: "Plus cyclable", subtitle: "82 % de pistes", durationMinutes: 45, newRoadKilometers: 2.8, routeCoordinates: [c(48.8637, 2.3708), c(48.8682, 2.3676), c(48.8708, 2.3758), c(48.8599, 2.3855)])
         ]
     )
 

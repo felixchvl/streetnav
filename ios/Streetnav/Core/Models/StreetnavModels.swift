@@ -172,6 +172,13 @@ enum DeviceConnectionState: String, CaseIterable, Identifiable {
     }
 }
 
+/// A ride listed under « Dernières sorties ».
+struct RecentRide: Identifiable, Hashable {
+    let id = UUID()
+    let name: String
+    let detail: String
+}
+
 struct IntegrationStatus: Hashable {
     var stravaSync: SyncState
     var lastStravaSyncText: String

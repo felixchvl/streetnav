@@ -14,9 +14,9 @@ enum StreetnavSheet: Identifiable {
     var id: Self { self }
 }
 
-/// The card at the bottom of the map screen, laid out like the one in Maps: search and profile on top, then the
+/// The card at the bottom of the map screen, laid out like the one in Maps: search and settings on top, then the
 /// neighbourhood's progress, the route found or the last check before leaving. Shown as a sheet with detents over the
-/// map, or inline when the screen is embedded in a development tool.
+/// map, or inline when the screen is embedded in a development tool. Follows the « Streetnav — Design » Figma file.
 struct StreetnavExplorePanel: View {
     @ObservedObject var model: StreetnavPrototypeViewModel
     @Binding var presentedSheet: StreetnavSheet?
@@ -29,9 +29,9 @@ struct StreetnavExplorePanel: View {
     @Environment(\.openURL) private var openURL
 
     static let collapsed = PresentationDetent.height(92)
-    static let summary = PresentationDetent.height(276)
-    static let route = PresentationDetent.height(346)
-    static let readiness = PresentationDetent.height(396)
+    static let summary = PresentationDetent.height(292)
+    static let route = PresentationDetent.height(452)
+    static let readiness = PresentationDetent.height(386)
 
     static func detents(for state: PrototypeFlowState) -> Set<PresentationDetent> {
         [collapsed, preferredDetent(for: state), .large]
@@ -55,22 +55,22 @@ struct StreetnavExplorePanel: View {
                     content
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                // Fully open, the panel turns into a grouped list, like a sheet in Maps: grey ground, white groups.
+                .background(Color(.systemGroupedBackground).opacity(detent == .large ? 1 : 0).ignoresSafeArea())
+                .animation(.easeInOut(duration: 0.2), value: detent)
             }
         }
         .sheet(item: $presentedSheet, onDismiss: sheetDismissed) { sheet in
             switch sheet {
             case .planner:
                 StreetnavPlannerSheet(model: model)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                    .presentationDetents([.large])
             case .integrations:
                 StreetnavIntegrationSheet(model: model)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                    .presentationDetents([.large])
             case .routeDetails:
                 StreetnavRouteDetailsSheet(model: model)
                     .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
             #if DEBUG
             case .gallery:
                 StreetnavPrototypeGallery()
@@ -82,8 +82,10 @@ struct StreetnavExplorePanel: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            searchRow
+        VStack(alignment: .leading, spacing: 16) {
+            if model.flowState.isRouteStep == false || isSearching {
+                searchRow
+            }
 
             if isSearching {
                 searchResults
@@ -98,7 +100,7 @@ struct StreetnavExplorePanel: View {
                 }
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 16)
         .padding(.top, embedded ? 16 : 20)
         .padding(.bottom, 24)
     }
@@ -108,8 +110,8 @@ struct StreetnavExplorePanel: View {
     private var isSearching: Bool { embedded == false && (searchFocused || query.isEmpty == false) }
 
     private var searchRow: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 8) {
+        HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
                 TextField("Rechercher une rue", text: $query)
@@ -124,6 +126,10 @@ struct StreetnavExplorePanel: View {
                             .foregroundStyle(.tertiary)
                     }
                     .accessibilityLabel("Effacer la recherche")
+                } else {
+                    Image(systemName: "mic.fill")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
             }
             .padding(.horizontal, 12)
@@ -160,13 +166,16 @@ struct StreetnavExplorePanel: View {
         let matches = model.streets
             .filter { query.isEmpty || $0.name.localizedStandardContains(query) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        return VStack(alignment: .leading, spacing: 10) {
+        return Group {
             if matches.isEmpty {
                 ContentUnavailableView.search(text: query)
             } else {
-                Text(query.isEmpty ? "Rues autour de toi" : "Résultats")
-                    .font(.headline)
-                streetList(matches)
+                section("Rues") {
+                    ForEach(Array(matches.enumerated()), id: \.element.id) { index, street in
+                        if index > 0 { separator }
+                        streetRow(street, detail: "\(street.status.label.capitalizedFirst) · \(kilometers(street.lengthMeters)) km")
+                    }
+                }
             }
         }
     }
@@ -179,7 +188,7 @@ struct StreetnavExplorePanel: View {
 
         if model.gpsQuality == .denied {
             message(
-                symbol: "location.slash.fill",
+                symbol: "location.slash",
                 title: "Position désactivée",
                 text: "Streetnav a besoin de ta position pour montrer les rues proches et préparer une boucle fiable.",
                 action: "Ouvrir Réglages"
@@ -190,8 +199,8 @@ struct StreetnavExplorePanel: View {
             message(
                 symbol: "map",
                 title: "Aucune rue importée",
-                text: "Importe tes sorties pour distinguer les rues déjà parcourues de celles qu'il te reste à découvrir.",
-                action: "Importer"
+                text: "Tes sorties n'ont pas encore été comparées aux rues du quartier.",
+                action: "Réglages"
             ) {
                 presentedSheet = .integrations
             }
@@ -200,23 +209,16 @@ struct StreetnavExplorePanel: View {
 
             if model.area.missingStreetCount == 0 {
                 message(
-                    symbol: "checkmark.seal.fill",
+                    symbol: "checkmark.seal",
                     title: "Quartier terminé",
-                    text: "Tu as parcouru toutes les rues ici. Déplace la carte vers Bastille, Nation ou le Père-Lachaise pour continuer.",
+                    text: "Tu as parcouru toutes les rues ici. Déplace la carte vers un autre quartier pour continuer.",
                     action: nil
                 ) {}
             } else {
-                Button {
+                primaryButton("Explorer", symbol: "bicycle") {
                     model.openPlanner()
                     presentedSheet = .planner
-                } label: {
-                    Label("Explorer", systemImage: "bicycle")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
             }
 
             if embedded == false {
@@ -232,20 +234,33 @@ struct StreetnavExplorePanel: View {
         let untraveled = model.streets
             .filter { $0.status == .untraveled }
             .sorted { $0.lengthMeters > $1.lengthMeters }
-        return VStack(alignment: .leading, spacing: 20) {
+        return VStack(alignment: .leading, spacing: 16) {
             if untraveled.isEmpty == false {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Rues à découvrir près de toi")
-                        .font(.headline)
-                    streetList(untraveled)
+                section("À découvrir près de toi") {
+                    ForEach(Array(untraveled.enumerated()), id: \.element.id) { index, street in
+                        if index > 0 { separator }
+                        streetRow(street, detail: "\(kilometers(street.lengthMeters)) km jamais parcourus")
+                    }
                 }
-                .padding(.top, 8)
             }
 
-            legend
+            if model.recentRides.isEmpty == false {
+                section("Dernières sorties") {
+                    ForEach(Array(model.recentRides.enumerated()), id: \.element.id) { index, ride in
+                        if index > 0 { separator }
+                        row(symbol: "figure.outdoor.cycle", title: ride.name, detail: ride.detail, chevron: true)
+                    }
+                }
+            }
 
             #if DEBUG
-            developerSection
+            section("Développement") {
+                Button { presentedSheet = .gallery } label: { row(symbol: "square.grid.2x2", title: "Galerie des directions", chevron: true) }
+                    .buttonStyle(.plain)
+                separator
+                Button { presentedSheet = .tuning } label: { row(symbol: "slider.horizontal.3", title: "Laboratoire de réglages", chevron: true) }
+                    .buttonStyle(.plain)
+            }
             #endif
         }
     }
@@ -253,114 +268,73 @@ struct StreetnavExplorePanel: View {
     @ViewBuilder
     private var notices: some View {
         if model.integrations.isOffline {
-            notice("Hors ligne, carte enregistrée sur l'iPhone", symbol: "wifi.slash")
+            Label("Hors ligne, carte enregistrée sur l'iPhone", systemImage: "wifi.slash")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
         if model.gpsQuality == .approximate || model.gpsQuality == .weak {
-            notice(model.gpsQuality == .weak ? "Signal GPS faible" : "Position approximative", symbol: "location.slash")
+            Label(model.gpsQuality == .weak ? "Signal GPS faible" : "Position approximative", systemImage: "location.slash")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 
     private var areaSummary: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 14) {
-                StreetnavProgressRing(progress: model.area.completion, lineWidth: 8)
-                    .frame(width: 60, height: 60)
-                    .overlay {
-                        Text(model.area.completion.formatted(.percent.precision(.fractionLength(0))))
-                            .font(.system(.footnote, design: .rounded, weight: .bold))
-                            .monospacedDigit()
-                    }
-                VStack(alignment: .leading, spacing: 3) {
+                StreetnavProgressRing(progress: model.area.completion, lineWidth: 7)
+                    .frame(width: 52, height: 52)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(model.area.name)
                         .font(.title2.weight(.bold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    Text(model.integrations.wandrerFreshnessText.prefix(1).uppercased() + model.integrations.wandrerFreshnessText.dropFirst())
+                    Text("\(model.area.completion.formatted(.percent.precision(.fractionLength(0)))) des rues parcourues")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
             }
             .accessibilityElement(children: .combine)
 
-            HStack(spacing: 0) {
-                stat(kilometers(model.area.remainingKilometers), unit: "km", label: "à découvrir")
-                Divider().frame(height: 34)
-                    .padding(.trailing, 16)
-                stat("\(model.area.missingStreetCount)", unit: nil, label: model.area.missingStreetCount > 1 ? "rues restantes" : "rue restante")
+            HStack(alignment: .top, spacing: 12) {
+                stat("À découvrir", value: kilometers(model.area.remainingKilometers), unit: "km")
+                stat("Rues restantes", value: "\(model.area.missingStreetCount)", unit: nil)
+                stat("Sorties", value: model.integrations.importedRideCount.formatted(), unit: nil)
             }
         }
     }
-
-    private var legend: some View {
-        HStack(spacing: 18) {
-            legendItem("Parcourues", status: .traveled)
-            legendItem("À découvrir", status: .untraveled)
-            legendItem("Itinéraire", status: .planned)
-        }
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-
-    #if DEBUG
-    private var developerSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Développement")
-                .font(.headline)
-            card {
-                Button { presentedSheet = .gallery } label: { row("Galerie des directions", symbol: "square.grid.2x2") }
-                Divider().padding(.leading, 52)
-                Button { presentedSheet = .tuning } label: { row("Laboratoire de réglages", symbol: "slider.horizontal.3") }
-            }
-        }
-        .padding(.top, 8)
-    }
-    #endif
 
     // MARK: Route
 
     private var routeContent: some View {
         let route = model.route
-        return VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(route.name)
-                        .font(.title2.weight(.bold))
-                    Text(route.isLoop ? "Boucle, retour vers \(route.arrivalText)" : "Arrivée vers \(route.arrivalText)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                closeButton("Fermer l'itinéraire") { model.flowState = .home }
+        return VStack(alignment: .leading, spacing: 16) {
+            header(route.name, subtitle: "\(route.isLoop ? "Boucle" : "Aller simple") · retour vers \(route.arrivalText)", close: "Fermer l'itinéraire") {
+                model.flowState = .home
             }
 
-            HStack(spacing: 0) {
-                stat("\(route.durationMinutes)", unit: "min", label: "durée")
-                stat(kilometers(route.distanceKilometers), unit: "km", label: "distance")
-                stat(kilometers(route.newRoadKilometers), unit: "km", label: "rues nouvelles", tint: .red)
+            HStack(alignment: .top, spacing: 12) {
+                stat("Durée", value: "\(route.durationMinutes)", unit: "min")
+                stat("Distance", value: kilometers(route.distanceKilometers), unit: "km")
+                stat("Nouvelles", value: kilometers(route.newRoadKilometers), unit: "km")
             }
 
-            HStack(spacing: 8) {
-                ForEach(route.alternatives) { alternative in
-                    alternativeCard(alternative)
+            group {
+                ForEach(Array(route.alternatives.enumerated()), id: \.element.id) { index, alternative in
+                    if index > 0 { separator(leading: 16) }
+                    alternativeRow(alternative)
                 }
             }
 
             HStack(spacing: 12) {
-                Menu {
-                    Button { presentedSheet = .planner } label: { Label("Modifier les réglages", systemImage: "slider.horizontal.3") }
-                    Button { presentedSheet = .routeDetails } label: { Label("Détail du parcours", systemImage: "list.bullet") }
-                } label: {
-                    Image(systemName: "ellipsis")
+                Button { presentedSheet = .routeDetails } label: {
+                    Label("Détails", systemImage: "list.bullet")
                         .font(.headline)
-                        .frame(width: 22, height: 22)
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .buttonBorderShape(.circle)
+                .buttonBorderShape(.capsule)
                 .controlSize(.large)
-                .accessibilityLabel("Plus d'options")
 
                 Button { model.prepareRide() } label: {
                     Text("Démarrer")
@@ -371,173 +345,167 @@ struct StreetnavExplorePanel: View {
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
             }
-
-            Text("\(route.elevationGainMeters) m de dénivelé, \(route.surface.cycleway.formatted(.percent.precision(.fractionLength(0)))) de pistes cyclables, \(route.confidence.label).")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .opacity(detent == .large ? 1 : 0)
         }
         .sensoryFeedback(.selection, trigger: model.selectedAlternativeID)
     }
 
-    /// One route option, three side by side so that the start button stays in view.
-    private func alternativeCard(_ alternative: RouteAlternative) -> some View {
+    private func alternativeRow(_ alternative: RouteAlternative) -> some View {
         let isSelected = model.selectedAlternativeID == alternative.id
         return Button {
             withAnimation(.snappy) { model.selectAlternative(alternative) }
         } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(alternative.title)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2, reservesSpace: true)
-                    .multilineTextAlignment(.leading)
-                HStack(spacing: 4) {
-                    Text("\(alternative.durationMinutes) min")
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(alternative.title)
+                        .foregroundStyle(.primary)
+                    Text("\(alternative.durationMinutes) min · \(alternative.subtitle)")
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
-                    Text("+\(kilometers(alternative.newRoadKilometers)) km")
-                        .foregroundStyle(.red)
                 }
-                .font(.caption.weight(.medium))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.tint)
+                }
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                isSelected ? Color.accentColor.opacity(0.12) : Color(.tertiarySystemFill).opacity(0.7),
-                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 1.5)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 16)
+            .frame(minHeight: 60)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(alternative.title), \(alternative.durationMinutes) minutes, \(kilometers(alternative.newRoadKilometers)) kilomètres de rues nouvelles")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: Readiness
 
     private var readinessContent: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Prêt à partir")
-                        .font(.title2.weight(.bold))
-                    Text("\(model.route.name), \(model.route.durationMinutes) min")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                closeButton("Revenir à l'itinéraire") { model.flowState = .routePreview }
+        VStack(alignment: .leading, spacing: 16) {
+            header("Prêt à partir", subtitle: "\(model.route.name) · \(model.route.durationMinutes) min", close: "Revenir à l'itinéraire") {
+                model.flowState = .routePreview
             }
 
-            card {
-                checkRow(
-                    symbol: "applewatch",
-                    title: model.watch.name,
-                    subtitle: model.watch.workoutReady ? "Entraînement vélo prêt" : "Tu peux partir sans montre",
-                    state: model.watch.state
-                )
-                Divider().padding(.leading, 60)
-                checkRow(
-                    symbol: "bicycle",
-                    title: model.bike.name,
-                    subtitle: model.bike.state == .ready ? "Détecté, déverrouillage manuel" : "Facultatif pour cette sortie",
-                    state: model.bike.state,
-                    trailing: model.bike.batteryPercent > 0 ? model.bike.batteryPercent.formatted(.percent) : nil
-                )
-                Divider().padding(.leading, 60)
-                checkRow(
-                    symbol: "arrow.triangle.2.circlepath",
-                    title: "Strava",
-                    subtitle: "Synchronisation après la sortie",
-                    state: model.integrations.stravaSync == .connected ? .ready : .actionRequired
-                )
+            group {
+                row(symbol: "applewatch", title: model.watch.name,
+                    detail: model.watch.workoutReady ? "Entraînement vélo prêt" : "Tu peux partir sans montre")
+                separator
+                row(symbol: "bicycle", title: model.bike.name,
+                    detail: model.bike.state == .ready ? "Détecté · déverrouillage manuel" : "Facultatif pour cette sortie",
+                    value: model.bike.batteryPercent > 0 ? model.bike.batteryPercent.formatted(.percent) : nil)
+                separator
+                row(symbol: "server.rack", title: "Serveur Streetnav", detail: "Envoi automatique après la sortie")
             }
 
-            Button { model.startNavigation() } label: {
-                Label("Lancer la navigation", systemImage: "location.north.line.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
+            primaryButton("Lancer la navigation", symbol: "location.north.line.fill") { model.startNavigation() }
         }
     }
 
     // MARK: Building blocks
 
-    private func streetList(_ streets: [ExplorationStreetSegment]) -> some View {
-        card {
-            ForEach(Array(streets.enumerated()), id: \.element.id) { index, street in
-                if index > 0 { Divider().padding(.leading, 60) }
-                Button {
-                    searchFocused = false
-                    focus(street.coordinates)
-                } label: {
-                    HStack(spacing: 12) {
-                        StreetnavLegendLine(status: street.status)
-                            .frame(width: 22, height: 6)
-                            .frame(width: 32, height: 32)
-                            .background(street.status.mapColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(street.name)
-                                .foregroundStyle(.primary)
-                            Text(street.status.label.prefix(1).uppercased() + street.status.label.dropFirst())
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text("\(kilometers(Double(street.lengthMeters) / 1000)) km")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 54)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+    private func header(_ title: String, subtitle: String, close: String, action: @escaping () -> Void) -> some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.title2.weight(.bold))
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
+            Spacer()
+            Button(action: action) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 36, height: 36)
+                    .streetnavGlass(in: Circle(), interactive: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(close)
         }
     }
 
-    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+                .padding(.leading, 4)
+            group(content: content)
+        }
+    }
+
+    private func group<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(spacing: 0) {
             content()
         }
-        .background(Color(.tertiarySystemFill).opacity(0.7), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 
-    private func stat(_ value: String, unit: String?, label: String, tint: Color = .primary) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(.system(.title2, design: .rounded, weight: .semibold))
-                    .foregroundStyle(tint)
-                if let unit {
-                    Text(unit)
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(tint == .primary ? Color.secondary : tint)
+    private var separator: some View { separator(leading: 56) }
+
+    private func separator(leading: CGFloat) -> some View {
+        Rectangle()
+            .fill(Color(.separator))
+            .frame(height: 1 / 3)
+            .padding(.leading, leading)
+    }
+
+    private func streetRow(_ street: ExplorationStreetSegment, detail: String) -> some View {
+        Button {
+            searchFocused = false
+            focus(street.coordinates)
+        } label: {
+            row(symbol: "road.lanes", title: street.name, detail: detail, chevron: true)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// A row like the ones in Settings: grey symbol, title and optional detail, optional value and chevron.
+    private func row(symbol: String, title: String, detail: String? = nil, value: String? = nil, chevron: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .foregroundStyle(.primary)
+                if let detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .monospacedDigit()
-            Text(label)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            if let value {
+                Text(value)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            if chevron {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .frame(minHeight: detail == nil ? 52 : 64)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    private func stat(_ label: String, value: String, unit: String?) -> some View {
+        StreetnavStat(label: label, value: value, unit: unit)
+    }
+
+    private func primaryButton(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
     }
 
     private func message(symbol: String, title: String, text: String, action: String?, perform: @escaping () -> Void) -> some View {
@@ -553,7 +521,7 @@ struct StreetnavExplorePanel: View {
             } icon: {
                 Image(systemName: symbol)
                     .font(.title2)
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(.secondary)
             }
             if let action {
                 Button(action: perform) {
@@ -568,79 +536,12 @@ struct StreetnavExplorePanel: View {
         }
     }
 
-    private func notice(_ text: String, symbol: String) -> some View {
-        Label(text, systemImage: symbol)
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(.secondary)
-            .labelStyle(StreetnavTintedIconLabelStyle(tint: .orange))
-    }
-
-    private func checkRow(symbol: String, title: String, subtitle: String, state: DeviceConnectionState, trailing: String? = nil) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(state.tint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                Text(subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if let trailing {
-                Text(trailing)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            Image(systemName: state.symbolName)
-                .foregroundStyle(state.tint)
-        }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 58)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func row(_ title: String, symbol: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .frame(width: 32)
-                .foregroundStyle(.tint)
-            Text(title)
-                .foregroundStyle(.primary)
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 50)
-        .contentShape(Rectangle())
-    }
-
-    private func closeButton(_ label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "xmark")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
-                .background(Color(.tertiarySystemFill), in: Circle())
-        }
-        .accessibilityLabel(label)
-    }
-
-    private func legendItem(_ title: String, status: StreetExplorationStatus) -> some View {
-        HStack(spacing: 6) {
-            StreetnavLegendLine(status: status)
-                .frame(width: 20, height: 6)
-            Text(title)
-        }
-    }
-
     private func kilometers(_ value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(1)))
+    }
+
+    private func kilometers(_ meters: Int) -> String {
+        kilometers(Double(meters) / 1000)
     }
 
     private func sheetDismissed() {
@@ -648,45 +549,11 @@ struct StreetnavExplorePanel: View {
     }
 }
 
-/// A short sample of the line a street status is drawn with on the map.
-struct StreetnavLegendLine: View {
-    let status: StreetExplorationStatus
-
-    var body: some View {
-        Canvas { context, size in
-            var path = Path()
-            path.move(to: CGPoint(x: 3, y: size.height / 2))
-            path.addLine(to: CGPoint(x: size.width - 3, y: size.height / 2))
-            var stroke = status.mapStroke
-            stroke.lineWidth = min(stroke.lineWidth, 4)
-            context.stroke(path, with: .color(status.mapColor), style: stroke)
-        }
-        .accessibilityHidden(true)
-    }
-}
-
-private struct StreetnavTintedIconLabelStyle: LabelStyle {
-    let tint: Color
-
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 6) {
-            configuration.icon.foregroundStyle(tint)
-            configuration.title
-        }
-    }
-}
-
-private extension DeviceConnectionState {
-    var tint: Color {
-        switch self {
-        case .ready: .green
-        case .connecting: .orange
-        case .unavailable: .gray
-        case .actionRequired: .red
-        }
-    }
-}
-
 extension PrototypeFlowState {
     var isRouteStep: Bool { self == .routePreview || self == .readiness }
+}
+
+extension String {
+    /// « à découvrir » → « À découvrir ».
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }

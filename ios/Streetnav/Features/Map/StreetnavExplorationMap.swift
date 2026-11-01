@@ -67,7 +67,7 @@ struct StreetnavExplorationMap: View {
                     .slot(.middle)
                     .lineCap(.round).lineJoin(.round)
                     .lineColor(accent)
-                    .lineOpacity(0.28)
+                    .lineOpacity(0.18)
                     .lineBlur(Self.zoomed(4, 8, 14))
                     .lineWidth(Self.zoomed(10, 20, 36))
                     .lineEmissiveStrength(1)
@@ -77,8 +77,8 @@ struct StreetnavExplorationMap: View {
                     .lineCap(.round).lineJoin(.round)
                     .lineColor(accent)
                     .lineBorderColor(colorScheme == .dark ? UIColor(white: 0, alpha: 0.45) : UIColor(white: 1, alpha: 0.9))
-                    .lineBorderWidth(colorScheme == .dark ? 1 : 2)
-                    .lineWidth(Self.zoomed(5, 9, 16))
+                    .lineBorderWidth(1.5)
+                    .lineWidth(Self.zoomed(7, 11, 18))
                     .lineEmissiveStrength(1)
                     .lineOcclusionOpacity(0.5)
                     // The part already ridden fades out, as in Maps.
@@ -96,8 +96,8 @@ struct StreetnavExplorationMap: View {
             scaleBar: ScaleBarViewOptions(visibility: .hidden),
             compass: CompassViewOptions(position: .topTrailing, margins: CGPoint(x: 16, y: 112), visibility: .adaptive),
             // Mapbox's logo and credits must stay visible: above the ride controls while navigating.
-            logo: LogoViewOptions(position: .bottomLeading, margins: CGPoint(x: 12, y: mode.isNavigationLike ? 300 : 8)),
-            attributionButton: AttributionButtonOptions(position: .bottomLeading, margins: CGPoint(x: 96, y: mode.isNavigationLike ? 298 : 6))
+            logo: LogoViewOptions(position: .bottomLeading, margins: CGPoint(x: 12, y: mode == .paused ? 296 : mode.isNavigationLike ? 236 : 8)),
+            attributionButton: AttributionButtonOptions(position: .bottomLeading, margins: CGPoint(x: 96, y: mode == .paused ? 294 : mode.isNavigationLike ? 234 : 6))
         ))
         .additionalSafeAreaInsets(.bottom, bottomInset)
     }
@@ -180,7 +180,7 @@ extension StreetnavExplorationMap {
     /// Where the camera goes for each step of the flow.
     static func viewport(for mode: PrototypeFlowState, route: StreetnavRoute?, position: CLLocationCoordinate2D) -> Viewport {
         switch mode {
-        case .routePreview, .readiness:
+        case .routePreview, .readiness, .arrived:
             if let route { return focus(on: route.coordinates, padding: 40) }
             return .camera(center: position, zoom: 14.6)
         case _ where mode.isNavigationLike:
