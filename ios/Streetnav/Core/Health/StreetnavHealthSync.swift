@@ -198,14 +198,10 @@ enum StreetnavWorkoutKind {
 final class StreetnavHealthSync: ObservableObject {
     static let shared = StreetnavHealthSync()
 
-    static let distanceTypes: [HKQuantityType] = {
-        var ids: [HKQuantityTypeIdentifier] = [.distanceCycling, .distanceWalkingRunning, .distanceSwimming,
-                                               .distanceDownhillSnowSports, .distanceWheelchair]
-        if #available(iOS 18.0, *) {
-            ids += [.distanceRowing, .distanceCrossCountrySkiing, .distancePaddleSports, .distanceSkatingSports]
-        }
-        return ids.map { HKQuantityType($0) }
-    }()
+    static let distanceTypes: [HKQuantityType] = ([
+        .distanceCycling, .distanceWalkingRunning, .distanceSwimming, .distanceDownhillSnowSports, .distanceWheelchair,
+        .distanceRowing, .distanceCrossCountrySkiing, .distancePaddleSports, .distanceSkatingSports,
+    ] as [HKQuantityTypeIdentifier]).map { HKQuantityType($0) }
 
     static var readTypes: Set<HKObjectType> {
         Set([HKObjectType.workoutType(), HKSeriesType.workoutRoute(), HKQuantityType(.heartRate),
