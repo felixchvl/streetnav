@@ -9,7 +9,7 @@ struct StreetnavRecommendedView: View {
     @State private var presentedSheet: StreetnavSheet?
     @State private var showsEndConfirmation = false
     /// Paris until the first position comes in (or if it is refused), rather than the whole globe.
-    @State private var viewport = Viewport.camera(center: StreetnavMockData.parisCenter, zoom: 12.5).padding(.bottom, 100)
+    @State private var viewport = Viewport.camera(center: StreetnavMockData.parisCenter, zoom: 12.5).padding(.bottom, 292)
     @State private var panelDetent = StreetnavExplorePanel.preferredDetent(for: .home)
     @State private var isThreeD = true
     /// Top of the panel and bottom of the safe area, in screen points, followed while the panel is dragged.
@@ -123,7 +123,7 @@ struct StreetnavRecommendedView: View {
         switch model.flowState {
         case .routePreview: return 452
         case .readiness: return 386
-        case .home: return places.place == nil ? 100 : 250
+        case .home: return places.place == nil ? 292 : 250
         default: return 292
         }
     }

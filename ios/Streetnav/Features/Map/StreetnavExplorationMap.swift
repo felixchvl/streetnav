@@ -50,7 +50,8 @@ struct StreetnavExplorationMap: View {
             if showsButtons, mode.isRouteStep == false {
                 threeDButton
                     .padding(.leading, 22)
-                    .padding(.bottom, panelOverlap + 19)
+                    // Above Mapbox's logo, which sits on the panel where Maps has its Look Around button.
+                    .padding(.bottom, panelOverlap + 46)
                     .transition(.opacity)
             }
         }
@@ -108,22 +109,20 @@ struct StreetnavExplorationMap: View {
         .ornamentOptions(OrnamentOptions(
             scaleBar: ScaleBarViewOptions(visibility: .hidden),
             compass: CompassViewOptions(position: .topTrailing, margins: CGPoint(x: 16, y: 112), visibility: .adaptive),
-            // Mapbox's logo and credits must stay visible. At the top left, where Maps has its weather badge, so that the
-            // bottom of the screen is laid out like Maps; above the ride controls while riding.
-            logo: LogoViewOptions(position: logoAtTop ? .topLeading : .bottomLeading,
-                                  margins: CGPoint(x: logoAtTop ? 22 : 12, y: logoAtTop ? 6 : logoLift)),
-            attributionButton: AttributionButtonOptions(position: logoAtTop ? .topLeading : .bottomLeading,
-                                                        margins: CGPoint(x: logoAtTop ? 106 : 96, y: logoAtTop ? -12 : logoLift - 2))
+            // Mapbox's logo and credits must stay visible: just above the panel, under the 2D/3D button, or above the ride
+            // controls while riding.
+            logo: LogoViewOptions(position: .bottomLeading, margins: CGPoint(x: 22, y: logoLift)),
+            attributionButton: AttributionButtonOptions(position: .bottomLeading, margins: CGPoint(x: 106, y: logoLift - 2))
         ))
     }
-
-    private var logoAtTop: Bool { mode.isNavigationLike == false && mode != .arrived }
 
     private var logoLift: CGFloat {
         switch mode {
         case .paused: 296
         case .arrived: 438
-        default: 236
+        case _ where mode.isNavigationLike: 236
+        // Behind the panel once it is fully open, where the map is hidden anyway.
+        default: min(panelOverlap, 600) + 12
         }
     }
 
@@ -197,8 +196,9 @@ struct StreetnavExplorationMap: View {
         Button {
             isThreeD.wrappedValue.toggle()
         } label: {
+            // SF Pro Rounded, as in Maps.
             Text(isThreeD.wrappedValue ? "2D" : "3D")
-                .font(.system(size: 19, weight: .semibold))
+                .font(.system(size: 17, weight: .medium, design: .rounded))
                 .foregroundStyle(.primary)
                 .frame(width: 48, height: 48)
                 .streetnavGlass(in: Circle(), interactive: true)

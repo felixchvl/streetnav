@@ -10,6 +10,12 @@
       "value": {
         "solid": "srgb:0.07451,0.16078,0.29412,1.00000"
       }
+    },
+    {
+      "appearance": "tinted",
+      "value": {
+        "solid": "extended-gray:0.00000,1.00000"
+      }
     }
   ],
   "groups": [
@@ -38,6 +44,12 @@
               "appearance": "dark",
               "value": {
                 "solid": "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "extended-gray:1.00000,1.00000"
               }
             }
           ]

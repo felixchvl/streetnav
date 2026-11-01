@@ -55,9 +55,9 @@ struct StreetnavExplorePanel: View {
         }
     }
 
-    /// Where the panel opens: just the search bar at home, as in Maps; the step's card otherwise.
+    /// Where the panel opens: half open, as in Maps.
     static func preferredDetent(for state: PrototypeFlowState) -> PresentationDetent {
-        state == .home ? collapsed : middleDetent(for: state)
+        middleDetent(for: state)
     }
 
     var body: some View {

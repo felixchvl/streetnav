@@ -7,7 +7,7 @@ let arguments = CommandLine.arguments
 let symbol = arguments.count > 1 ? arguments[1] : "bicycle"
 let output = arguments.count > 2 ? arguments[2] : "ios/Streetnav/AppIcon.icon/Assets/Glyph.png"
 let canvas = 1024.0
-let longestSide = 680.0
+let longestSide = 740.0
 
 guard let base = NSImage(systemSymbolName: symbol, accessibilityDescription: nil),
       let image = base.withSymbolConfiguration(.init(pointSize: 400, weight: .semibold).applying(.init(paletteColors: [.white]))) else {
