@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS activity (
     -- positioned points only: x = longitude, y = latitude, z = altitude (m), m = Unix time (s)
     track            geometry(LineStringZM, 4326),
     start_point      geometry(Point, 4326),
-    primary_source   text NOT NULL,              -- source whose metrics and track are kept
+    primary_source   text NOT NULL,              -- source of the measures (gold.py)
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now()
 );
@@ -40,8 +40,8 @@ CREATE TABLE IF NOT EXISTS activity_source (
 );
 CREATE INDEX IF NOT EXISTS activity_source_activity ON activity_source (activity_id);
 
--- Heart-rate stream of the primary source (Unix seconds, bpm), kept apart from the track because
--- many samples have no position.
+-- Heart-rate stream of the version giving the measures (Unix seconds, bpm), kept apart from the track
+-- because many samples have no position.
 CREATE TABLE IF NOT EXISTS activity_heart_rate (
     activity_id bigint PRIMARY KEY REFERENCES activity (id) ON DELETE CASCADE,
     t           integer[] NOT NULL,

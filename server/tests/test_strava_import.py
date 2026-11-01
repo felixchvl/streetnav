@@ -1,5 +1,6 @@
 """Strava archive import, without a database: python -m unittest discover -s tests (from server/)."""
 import csv
+import json
 import os
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from streetnav_server import activity_files, strava_import as si
+from streetnav_server.bronze import RawPart, sha256
 
 T0 = datetime(2026, 10, 28, 9, 2, 20, tzinfo=timezone.utc)
 HEADER = ["Activity ID", "Activity Date", "Activity Name", "Activity Type", "Activity Description", "Elapsed Time",
@@ -48,8 +50,18 @@ class ArchiveTest(unittest.TestCase):
         self.dir.cleanup()
 
     def copy(self, row, web=None):
+        """Reads a version from the parts bronze would keep, as the import and a rebuild do."""
         report, notes = Counter(), []
-        return si.to_copy(row, self.archive, web, report, notes), report, notes
+        with open(os.path.join(self.archive, "activities.csv"), "rb") as f:
+            parts = si.version_parts(row, self.archive, f.read(), web)
+        copy = si.parse(row.text("Activity ID"), {p: RawPart(p, name, data, sha256(data)) for p, name, data in parts})
+        if web:
+            si.check(row, copy, web, report, notes)
+        return copy, report, notes
+
+    @staticmethod
+    def web(rows, gear, streams):
+        return rows, gear, [("streams-1.json", json.dumps(streams).encode(), streams)]
 
     def test_sport_types(self):
         self.assertEqual(si.sport_type_of("E-Bike Ride"), "EBikeRide")
@@ -86,16 +98,17 @@ class ArchiveTest(unittest.TestCase):
         stream = {"time": [s - 10 for s, *_ in cropped], "latlng": [[lat, lon] for _, lat, lon, _ in cropped]}
         web_row = {"id": 1, "name": "Commute", "sport_type": "EBikeRide", "commute": True, "elapsed_time_raw": 30,
                    "bike_id": 7}
-        copy, report, notes = self.copy(self.rows[0], ({"1": web_row}, {"7": "Véligo 2"}, {"1": stream}))
+        copy, report, notes = self.copy(self.rows[0], self.web({"1": web_row}, {"7": "Véligo 2"}, {"1": stream}))
         self.assertEqual(report, Counter({"check: track matches website": 1}))
         self.assertEqual(len(copy.points), 4)
 
         moved = {"time": [0, 30], "latlng": [[48.86, 2.35], [48.87, 2.35]]}
         web_row = dict(web_row, commute=False)
-        copy, report, notes = self.copy(self.rows[0], ({"1": web_row}, {"7": "Véligo 2"}, {"1": moved}))
+        copy, report, notes = self.copy(self.rows[0], self.web({"1": web_row}, {"7": "Véligo 2"}, {"1": moved}))
         self.assertEqual(report, Counter({"check: track differs, website trace kept": 1, "check: commute differs": 1}))
         self.assertEqual([p[:2] for p in copy.points], [(2.35, 48.86), (2.35, 48.87)])
         self.assertEqual(copy.heart_rate[0][1], 110)  # the website trace had none: the archive's is kept
+        self.assertEqual(copy.raw["track_from"], "website")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,8 @@
-"""Activity registry: merges copies of the same activity coming from several services."""
+"""Activity registry: attaches the versions (copies) of an activity coming from several services to one activity.
+
+Bronze (bronze.py) keeps each version's files, silver (activity_source) each version's values, gold (gold.py) the
+activity computed from its versions.
+"""
 from __future__ import annotations
 
 import json
@@ -8,13 +12,13 @@ from datetime import datetime
 
 import psycopg
 
+from . import bronze
+
 SAME_ACTIVITY_SECONDS = 90
 # Otherwise a copy joins the activity it overlaps the most, if that overlap covers at least this
 # share of the shorter of the two (a ride cropped at the start no longer starts at the same time).
 SAME_ACTIVITY_OVERLAP = 0.5
-# Higher wins: its metrics and track replace those of a lower-priority source. Strava comes first
-# because that is where rides were edited by hand (cropped, commute flag, bike, sport type).
-SOURCE_PRIORITY = {"strava": 5, "healthkit": 4, "file": 3, "rwgps": 2, "wandrer": 0}
+MATCH_LOCK = 0x5374_6E76  # PostgreSQL advisory lock serializing the attachment of versions
 METRICS = ("ended_at", "sport", "indoor", "distance_m", "duration_s", "moving_s", "calories",
            "avg_hr", "max_hr", "elevation_gain_m", "name", "description", "sport_type", "commute", "gear")
 
@@ -58,9 +62,16 @@ def track_wkt(points) -> str | None:
         f"{lon} {lat} {alt if alt is not None else 0} {t}" for lon, lat, alt, t in pts) + ")"
 
 
-def upsert(conn: psycopg.Connection, copy: ActivityCopy) -> tuple[int, str]:
-    """Stores a copy; returns (activity id, 'created' | 'merged' | 'updated')."""
+def upsert(conn: psycopg.Connection, copy: ActivityCopy, raw_file_ids: list[int] | None,
+           rebuild: bool = True) -> tuple[int, str]:
+    """Stores a version in silver, attaching it to its activity, then recomputes that activity (gold) unless
+    `rebuild` is False. `raw_file_ids` are the bronze files it was read from (None: not read from bronze, so it does
+    not count for gold yet). Returns (activity id, 'created' | 'merged' | 'updated')."""
+    from . import gold
     with conn.cursor() as cur:
+        # One writer at a time decides which activity a version belongs to: the app, the timer and an import
+        # running together cannot create the same activity twice.
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (MATCH_LOCK,))
         cur.execute("SELECT activity_id FROM activity_source WHERE source = %s AND external_id = %s",
                     (copy.source, copy.external_id))
         row = cur.fetchone()
@@ -83,84 +94,67 @@ def upsert(conn: psycopg.Connection, copy: ActivityCopy) -> tuple[int, str]:
                        ORDER BY least(ended_at, %(e)s) - greatest(started_at, %(t)s) DESC LIMIT 1""",
                     {"t": copy.started_at, "e": copy.ended_at, "share": SAME_ACTIVITY_OVERLAP})
                 row = cur.fetchone()
-            activity_id, outcome = (row[0], "merged") if row else (None, "created")
-
-        values = {k: getattr(copy, k) for k in METRICS}
-        wkt = track_wkt(copy.points)
-        start = copy.points[0] if wkt else None
-        if activity_id is None:
-            cur.execute(
-                f"""INSERT INTO activity (started_at, {', '.join(METRICS)}, track, start_point, primary_source)
-                    VALUES (%(started_at)s, {', '.join('%(' + k + ')s' for k in METRICS)},
-                            ST_GeomFromEWKT(%(track)s), ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326), %(source)s)
-                    RETURNING id""",
-                {**values, "started_at": copy.started_at, "track": wkt, "source": copy.source,
-                 "lon": start[0] if start else None, "lat": start[1] if start else None})
-            activity_id = cur.fetchone()[0]
-            take_over = True
-        else:
-            cur.execute("SELECT primary_source FROM activity WHERE id = %s", (activity_id,))
-            current = cur.fetchone()[0]
-            take_over = SOURCE_PRIORITY[copy.source] >= SOURCE_PRIORITY[current]
-            if take_over:
-                # The higher-priority copy replaces metrics (keeping existing ones it lacks) and the track.
-                sets = ", ".join(f"{k} = COALESCE(%({k})s, {k})" for k in METRICS)
-                cur.execute(
-                    f"""UPDATE activity SET {sets}, started_at = %(started_at)s, primary_source = %(source)s, updated_at = now(),
-                            track = COALESCE(ST_GeomFromEWKT(%(track)s), track),
-                            start_point = COALESCE(ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326), start_point)
-                        WHERE id = %(id)s""",
-                    {**values, "source": copy.source, "track": wkt, "id": activity_id, "started_at": copy.started_at,
-                     "lon": start[0] if start else None, "lat": start[1] if start else None})
+            if row:
+                activity_id, outcome = row[0], "merged"
             else:
-                # A lower-priority copy only fills what is missing.
-                sets = ", ".join(f"{k} = COALESCE({k}, %({k})s)" for k in METRICS)
-                cur.execute(
-                    f"""UPDATE activity SET {sets}, updated_at = now(),
-                            track = COALESCE(track, ST_GeomFromEWKT(%(track)s)),
-                            start_point = COALESCE(start_point, ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326))
-                        WHERE id = %(id)s""",
-                    {**values, "track": wkt, "id": activity_id,
-                     "lon": start[0] if start else None, "lat": start[1] if start else None})
-
-        if copy.heart_rate:
-            cur.execute("SELECT 1 FROM activity_heart_rate WHERE activity_id = %s", (activity_id,))
-            if take_over or cur.fetchone() is None:
-                cur.execute(
-                    """INSERT INTO activity_heart_rate (activity_id, t, bpm) VALUES (%s, %s, %s)
-                       ON CONFLICT (activity_id) DO UPDATE SET t = EXCLUDED.t, bpm = EXCLUDED.bpm""",
-                    (activity_id, [t for t, _ in copy.heart_rate], [b for _, b in copy.heart_rate]))
+                # Gold fills the rest from the version below.
+                cur.execute("""INSERT INTO activity (started_at, ended_at, sport, primary_source)
+                               VALUES (%s, %s, %s, %s) RETURNING id""",
+                            (copy.started_at, copy.ended_at, copy.sport, copy.source))
+                activity_id, outcome = cur.fetchone()[0], "created"
 
         cur.execute(
-            """INSERT INTO activity_source (source, external_id, activity_id, started_at, device, raw)
-               VALUES (%s, %s, %s, %s, %s, %s)
-               ON CONFLICT (source, external_id) DO UPDATE
-               SET activity_id = EXCLUDED.activity_id, started_at = EXCLUDED.started_at,
-                   device = EXCLUDED.device, raw = EXCLUDED.raw, fetched_at = now()""",
-            (copy.source, copy.external_id, activity_id, copy.started_at, copy.device,
-             json.dumps(copy.raw) if copy.raw is not None else None))
+            f"""INSERT INTO activity_source (source, external_id, activity_id, started_at, device, raw, {', '.join(METRICS)},
+                                             track, hr_t, hr_bpm, raw_file_ids, parsed_at, fetched_at)
+                VALUES (%(source)s, %(external_id)s, %(activity_id)s, %(started_at)s, %(device)s, %(raw)s,
+                        {', '.join('%(' + k + ')s' for k in METRICS)}, ST_GeomFromEWKT(%(track)s), %(hr_t)s,
+                        %(hr_bpm)s, %(raw_file_ids)s, CASE WHEN %(parsed)s THEN now() END, now())
+                ON CONFLICT (source, external_id) DO UPDATE
+                SET activity_id = EXCLUDED.activity_id, started_at = EXCLUDED.started_at, device = EXCLUDED.device,
+                    raw = EXCLUDED.raw, {', '.join(f'{k} = EXCLUDED.{k}' for k in METRICS)}, track = EXCLUDED.track,
+                    hr_t = EXCLUDED.hr_t, hr_bpm = EXCLUDED.hr_bpm, raw_file_ids = EXCLUDED.raw_file_ids,
+                    parsed_at = EXCLUDED.parsed_at, fetched_at = now()""",
+            {**{k: getattr(copy, k) for k in METRICS}, "source": copy.source, "external_id": copy.external_id,
+             "activity_id": activity_id, "started_at": copy.started_at, "device": copy.device,
+             "raw": json.dumps(copy.raw) if copy.raw is not None else None, "track": track_wkt(copy.points),
+             "hr_t": [t for t, _ in copy.heart_rate] or None, "hr_bpm": [b for _, b in copy.heart_rate] or None,
+             "raw_file_ids": raw_file_ids, "parsed": raw_file_ids is not None})
+    if rebuild:
+        gold.rebuild_activity(conn, activity_id)
     return activity_id, outcome
 
 
-def remove(conn: psycopg.Connection, source: str, external_id: str) -> tuple[int | None, str]:
-    """Forgets a copy deleted where it came from; returns (activity id, 'deleted' | 'detached' | 'unknown').
+def ingest(conn: psycopg.Connection, source: str, external_id: str, parts: list[tuple[str, str, bytes]],
+           batch: str | None) -> tuple[int, str, ActivityCopy]:
+    """Keeps a version's files in bronze, reads the version back from its current bronze files (the same way a
+    rebuild would), then stores it like upsert. `parts` are (part, name at the source, bytes)."""
+    from .sources import parse
+    for part, name, data in parts:
+        bronze.store(conn, source, external_id, part, name, data, batch)
+    rows = bronze.current(conn, source, external_id)
+    copy = parse(source, external_id, bronze.load(rows, {bronze.sha256(data): data for _, _, data in parts}))
+    activity_id, outcome = upsert(conn, copy, [r["id"] for r in rows])
+    return activity_id, outcome, copy
 
-    An activity left without any copy is deleted. Otherwise it keeps its metrics and track, since the registry does
-    not keep each copy's own values, and the best remaining source becomes primary: its next sync rewrites them."""
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM activity_source WHERE source = %s AND external_id = %s RETURNING activity_id",
-                    (source, external_id))
-        row = cur.fetchone()
-        if row is None:
-            return None, "unknown"
-        activity_id = row[0]
-        cur.execute("SELECT source FROM activity_source WHERE activity_id = %s", (activity_id,))
-        remaining = [r[0] for r in cur.fetchall()]
-        if not remaining:
-            cur.execute("DELETE FROM activity WHERE id = %s", (activity_id,))
-            return activity_id, "deleted"
-        cur.execute("UPDATE activity SET primary_source = %s, updated_at = now() WHERE id = %s AND primary_source = %s",
-                    (max(remaining, key=SOURCE_PRIORITY.__getitem__), activity_id, source))
+
+def remove(conn: psycopg.Connection, source: str, external_id: str, batch: str | None = "api") -> tuple[int | None, str]:
+    """Forgets a version deleted where it came from; returns (activity id, 'deleted' | 'detached' | 'unknown').
+
+    Bronze keeps its files and records the deletion. An activity left without any version is deleted; otherwise it is
+    recomputed from the versions left."""
+    from . import gold
+    conn.execute("SELECT pg_advisory_xact_lock(%s)", (MATCH_LOCK,))
+    row = conn.execute("DELETE FROM activity_source WHERE source = %s AND external_id = %s RETURNING activity_id",
+                       (source, external_id)).fetchone()
+    if row is None and not bronze.current(conn, source, external_id):
+        return None, "unknown"
+    bronze.record_deletion(conn, source, external_id, batch)
+    if row is None:
+        return None, "unknown"
+    activity_id = row[0]
+    if gold.rebuild_activity(conn, activity_id) == "empty":
+        conn.execute("DELETE FROM activity WHERE id = %s", (activity_id,))
+        return activity_id, "deleted"
     return activity_id, "detached"
 
 

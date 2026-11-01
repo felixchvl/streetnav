@@ -1,6 +1,7 @@
 """Streetnav HTTP API: read the activity registry, and let the iPhone app push (and delete) Apple Health workouts.
 
-Every endpoint except /health needs `Authorization: Bearer <STREETNAV_API_TOKEN>`.
+Every endpoint except /health needs `Authorization: Bearer <STREETNAV_API_TOKEN>`. A pushed workout is kept in bronze
+exactly as received (the request body), then read back into silver and gold.
 """
 from __future__ import annotations
 
@@ -8,10 +9,11 @@ import hmac
 import os
 from datetime import datetime
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 
-from .registry import ActivityCopy, connect, remove, upsert
+from .registry import connect, ingest, remove
+from .sources import WorkoutIn
 
 app = FastAPI(title="Streetnav", version="1")
 
@@ -20,30 +22,6 @@ def require_token(authorization: str = Header(default="")) -> None:
     expected = "Bearer " + os.environ["STREETNAV_API_TOKEN"]
     if not hmac.compare_digest(authorization.encode(), expected.encode()):
         raise HTTPException(status_code=401, detail="invalid token")
-
-
-class WorkoutIn(BaseModel):
-    """An Apple Health workout sent by the iPhone app (or any other source)."""
-    source: str = "healthkit"
-    external_id: str = Field(description="HKWorkout UUID for Apple Health")
-    started_at: datetime
-    ended_at: datetime | None = None
-    sport: str
-    indoor: bool | None = None
-    distance_m: float | None = None
-    duration_s: float | None = None
-    moving_s: float | None = None
-    calories: float | None = None
-    avg_hr: float | None = None
-    max_hr: float | None = None
-    elevation_gain_m: float | None = None
-    points: list[tuple[float, float, float | None, int]] = Field(
-        default_factory=list, description="[longitude, latitude, altitude m, unix seconds]")
-    heart_rate: list[tuple[int, int]] = Field(default_factory=list, description="[unix seconds, bpm]")
-    device: str | None = None
-    name: str | None = None
-    sport_type: str | None = Field(default=None, description="Strava's name, e.g. Ride, Walk, WeightTraining")
-    raw: dict | None = Field(default=None, description="kept as is, e.g. the workout's source app and metadata")
 
 
 @app.get("/health")
@@ -58,8 +36,11 @@ def status() -> dict:
     with connect() as conn:
         total = conn.execute("SELECT count(*), min(started_at), max(started_at) FROM activity").fetchone()
         by_source = conn.execute("SELECT source, count(*) FROM activity_source GROUP BY source").fetchall()
+        not_in_bronze = conn.execute(
+            "SELECT source, count(*) FROM activity_source WHERE parsed_at IS NULL GROUP BY source").fetchall()
         runs = conn.execute("SELECT source, finished_at, created, merged, updated, errors, message FROM sync_run").fetchall()
     return {"activities": total[0], "first": total[1], "last": total[2], "copies_by_source": dict(by_source),
+            "copies_not_in_bronze": dict(not_in_bronze),
             "last_runs": [dict(zip(("source", "finished_at", "created", "merged", "updated", "errors", "message"), r))
                           for r in runs]}
 
@@ -91,7 +72,7 @@ def get_activity(activity_id: int) -> dict:
         row = conn.execute(
             """SELECT id, started_at, ended_at, sport, sport_type, name, description, commute, gear, indoor,
                       distance_m, duration_s, moving_s, calories, avg_hr,
-                      max_hr, elevation_gain_m, primary_source, ST_AsGeoJSON(track)::json
+                      max_hr, elevation_gain_m, primary_source, provenance, ST_AsGeoJSON(track)::json
                FROM activity WHERE id = %s""", (activity_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="unknown activity")
@@ -100,7 +81,7 @@ def get_activity(activity_id: int) -> dict:
             (activity_id,)).fetchall()
     keys = ("id", "started_at", "ended_at", "sport", "sport_type", "name", "description", "commute", "gear", "indoor",
             "distance_m", "duration_s", "moving_s", "calories",
-            "avg_hr", "max_hr", "elevation_gain_m", "primary_source", "track")
+            "avg_hr", "max_hr", "elevation_gain_m", "primary_source", "provenance", "track")
     return {**dict(zip(keys, row)),
             "sources": [dict(zip(("source", "external_id", "device", "fetched_at"), s)) for s in sources]}
 
@@ -121,16 +102,18 @@ def reconcile(missing_in: str = "rwgps", since: datetime | None = None, with_tra
     return [dict(zip(("id", "started_at", "sport", "distance_m", "sources"), r)) for r in rows]
 
 
-@app.post("/activities", dependencies=[Depends(require_token)])
-def push_activity(workout: WorkoutIn) -> dict:
-    copy = ActivityCopy(**workout.model_dump(exclude={"points", "heart_rate", "raw"}),
-                        points=[tuple(p) for p in workout.points],
-                        heart_rate=[tuple(h) for h in workout.heart_rate],
-                        raw={**(workout.raw or {}), "received_at": datetime.now().isoformat()})
+def _ingest_payload(workout: WorkoutIn, body: bytes) -> dict:
     with connect() as conn:
-        activity_id, outcome = upsert(conn, copy)
+        activity_id, outcome, _ = ingest(conn, workout.source, workout.external_id,
+                                         [("payload", f"{workout.external_id}.json", body)], "api")
         conn.commit()
     return {"id": activity_id, "outcome": outcome}
+
+
+@app.post("/activities", dependencies=[Depends(require_token)])
+async def push_activity(workout: WorkoutIn, request: Request) -> dict:
+    # The body as sent goes to bronze; FastAPI has already read and validated it.
+    return await run_in_threadpool(_ingest_payload, workout, await request.body())
 
 
 @app.delete("/copies/{source}/{external_id}", dependencies=[Depends(require_token)])

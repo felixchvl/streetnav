@@ -4,8 +4,9 @@ Made for the FIT files HealthFit exports from Apple Health (every Apple Watch wo
 to Health), named "YYYY-MM-DD-HHMMSS-<workout type>-<app or device>.fit": the workout type becomes the name and the
 app or device the copy's device. A copy's id is its path relative to the folder. FIT files carry a session summary
 (sport, durations, distance, calories, heart rate, ascent); for GPX and TCX they are computed from the samples.
+Each file is first kept as is in bronze; a file already there with the same content is not stored again.
 
-  python -m streetnav_server.file_import DIR [--dry-run | --check-only]
+  python -m streetnav_server.file_import DIR [--batch NAME] [--dry-run | --check-only]
 """
 from __future__ import annotations
 
@@ -14,11 +15,14 @@ import math
 import os
 import re
 import sys
+import unicodedata
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-from .activity_files import read_file, utc_seconds
-from .registry import ActivityCopy, connect, record_run, upsert
+from . import bronze
+from .activity_files import read_bytes, utc_seconds
+from .bronze import RawPart
+from .registry import ActivityCopy, connect, ingest, record_run
 
 EXTENSIONS = (".fit", ".gpx", ".tcx", ".fit.gz", ".gpx.gz", ".tcx.gz")
 HEALTHFIT_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{6}-(?P<type>.+)-(?P<device>[^-]+)$")
@@ -50,19 +54,20 @@ def metres(a: tuple, b: tuple) -> float:
     return 6_371_000 * math.hypot((lon2 - lon1) * math.cos((lat1 + lat2) / 2), lat2 - lat1)
 
 
-def to_copy(root: str, path: str) -> ActivityCopy:
-    rel = os.path.relpath(path, root)
-    samples, session = read_file(path)
+def parse(external_id: str, parts: dict[str, RawPart]) -> ActivityCopy:
+    """A file version from its bronze file; its id is the file's path relative to the imported folder."""
+    rel, file = external_id, parts["file"]
+    samples, session = read_bytes(file.name, file.data)
     points = [(lon, lat, alt, t) for t, lon, lat, alt, _ in samples if lon is not None and lat is not None]
     heart_rate = [(t, int(bpm)) for t, *_, bpm in samples if bpm]
     bpm = [b for _, b in heart_rate]
 
-    stem = os.path.basename(path)
+    stem = os.path.basename(rel)
     for ext in EXTENSIONS:
         if stem.lower().endswith(ext):
             stem = stem[: -len(ext)]
             break
-    named = HEALTHFIT_NAME.match(stem)
+    named = HEALTHFIT_NAME.match(unicodedata.normalize("NFC", stem))  # macOS may hand names decomposed
 
     if session.get("start_time"):
         started = datetime.fromtimestamp(utc_seconds(session["start_time"]), timezone.utc)
@@ -107,8 +112,11 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="run against the database, then roll back")
     mode.add_argument("--check-only", action="store_true", help="read the files, no database")
+    parser.add_argument("--batch", help="name of this import in the bronze index (default: files-<folder name>)")
     args = parser.parse_args()
+    bronze.dry_run = args.dry_run  # a dry run writes no bronze file
     files = find_files(args.folder)
+    batch = args.batch or "files-" + os.path.basename(os.path.normpath(args.folder))
 
     report: Counter = Counter()
     created: list[str] = []
@@ -116,11 +124,15 @@ def main() -> None:
     try:
         for path in files:
             try:
-                copy = to_copy(args.folder, path)
-                report["with track" if len(copy.points) >= 2 else "without track"] += 1
+                rel = os.path.relpath(path, args.folder)
+                with open(path, "rb") as f:
+                    data = f.read()
                 if conn is None:
+                    copy = parse(rel, {"file": RawPart("file", rel, data, "")})
+                    report["with track" if len(copy.points) >= 2 else "without track"] += 1
                     continue
-                _, outcome = upsert(conn, copy)
+                _, outcome, copy = ingest(conn, "file", rel, [("file", rel, data)], batch)
+                report["with track" if len(copy.points) >= 2 else "without track"] += 1
                 report[outcome] += 1
                 if outcome == "created":
                     created.append(f"{copy.started_at:%Y-%m-%d %H:%M} {copy.sport_type} {copy.name!r} ({copy.device})")

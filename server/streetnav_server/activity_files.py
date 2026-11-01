@@ -89,14 +89,18 @@ def xml_samples(data: bytes) -> list[tuple]:
     return out
 
 
+def read_bytes(name: str, data: bytes) -> tuple[list[tuple], dict]:
+    """(samples, FIT session summary or {}) of a file's content, its name giving the format."""
+    if name.endswith(".gz"):
+        data, name = gzip.decompress(data), name[:-3]
+    if name.lower().endswith(".fit"):
+        return fit_read(data)
+    if name.lower().endswith((".gpx", ".tcx")):
+        return xml_samples(data), {}
+    return [], {}  # e.g. JSON strength sets: no track
+
+
 def read_file(path: str) -> tuple[list[tuple], dict]:
     """(samples, FIT session summary or {})."""
     with open(path, "rb") as f:
-        data = f.read()
-    if path.endswith(".gz"):
-        data, path = gzip.decompress(data), path[:-3]
-    if path.lower().endswith(".fit"):
-        return fit_read(data)
-    if path.lower().endswith((".gpx", ".tcx")):
-        return xml_samples(data), {}
-    return [], {}  # e.g. JSON strength sets: no track
+        return read_bytes(path, f.read())

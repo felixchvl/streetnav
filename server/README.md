@@ -4,32 +4,66 @@ Activity registry for Streetnav: one row per real-world activity, whatever the n
 holding a copy of it (Apple Health, Ride with GPS, Strava...). Runs in the `streetnav` LXC
 (Proxmox CT 141, Debian 13, 192.168.1.62).
 
+## Three layers
+
+Every activity exists in several versions (Apple Health, Strava, Ride with GPS, HealthFit files). Nothing
+received is lost, and the activity everyone reads is computed from all its versions:
+
+1. **Bronze** - each version exactly as received, in files under `/var/lib/streetnav/raw`
+   (`STREETNAV_RAW_DIR`): the JSON the iPhone app pushed, the trip JSON from Ride with GPS, each FIT
+   file, and for Strava `activities.csv`, the original file and the website trace. Files are named by
+   their sha256 and never rewritten; table `raw_file` lists them (source, external id, part, original
+   name, path, sha256, size, batch, received at). A deletion adds a row, files stay. An identical resend
+   adds nothing (JSON is compared with sorted keys: the app writes its keys in any order).
+2. **Silver** - `activity_source`: one row per version with its own metrics, track and heart rate, read
+   from its current bronze files (`parsed_at` NULL: loaded before bronze existed, not read from it yet).
+   A version is attached to an activity when it arrives (start within 90 s, or overlapping at least half
+   of it) and stays there: rebuilds do not regroup, so activity ids are stable.
+3. **Gold** - `activity` and `activity_heart_rate`, computed field by field (`streetnav_server/gold.py`):
+   - measures (time window, track, heart rate, distance, durations, calories, ascent) come from Apple
+     Health, the Watch's own recording: the app's copy, then the HealthFit file, then Strava, then Ride
+     with GPS;
+   - hand edits (name, description, commute flag, gear, sport type) come from Strava first;
+   - a ride cropped by hand on Strava (its window starts or ends more than 15 s away from Apple Health's,
+     and it has a track) takes all its measures from Strava;
+   - otherwise an outdoor ride's idle start and end are cut: what is both slow (under 6 km/h over 30 s)
+     and in one place (within 100 m of the first or last point), when it lasts more than 60 s. Distance
+     and ascent lose the cut part, heart rate is recomputed, calories are prorated by time;
+   - `provenance` names the version behind each field (`source:external_id`) and what was cropped;
+     `primary_source` is the source of the measures.
+
+   An activity with a version not read from bronze yet is left as it is.
+
+`python -m streetnav_server.layers status | rebuild-silver | rebuild-gold` rebuilds silver from bronze and
+gold from silver without importing anything again (`--dry-run` to see the counts first).
+
 ## Pieces
 
-- `sql/` - PostgreSQL 17 + PostGIS schema: `activity` (metrics, track as `LineStringZM`: lon, lat,
-  altitude, Unix time), `activity_source` (each service's copy), `activity_heart_rate`, `sync_run`.
-- `streetnav_server/registry.py` - merge rule: a copy starting within 90 s of an existing activity,
-  or overlapping at least half of it, is attached to it; the highest-priority source
-  (strava > healthkit > file > rwgps) provides the metrics, the hand edits (name, commute, gear,
-  sport type) and the track, lower ones only fill gaps. Strava comes first because that is where
-  rides were cropped and classified by hand.
+- `sql/` - PostgreSQL 17 + PostGIS schema: `activity` (track as `LineStringZM`: lon, lat, altitude,
+  Unix time), `activity_source`, `activity_heart_rate`, `raw_file`, `sync_run`.
+- `streetnav_server/registry.py` - attaches each arriving version to its activity (one writer at a time,
+  through a PostgreSQL advisory lock), `bronze.py`, `sources.py` (reads a version from its bronze files),
+  `gold.py`, `layers.py`.
 - `streetnav_server/api.py` - FastAPI on port 8080. All endpoints but `/health` need
   `Authorization: Bearer <STREETNAV_API_TOKEN>`:
   - `GET /status`, `GET /activities?since&until&sport&limit`, `GET /activities/{id}` (GeoJSON track),
   - `GET /reconcile?missing_in=rwgps&since` - activities with a track and no copy on that service,
-  - `POST /activities` - push a workout (the iOS app sends Apple Health workouts here),
+  - `POST /activities` - push a workout (the iOS app sends Apple Health workouts here); the request body
+    is kept in bronze as is,
   - `DELETE /copies/{source}/{external_id}` - forget a copy deleted at its source (a workout deleted in
-    Apple Health); an activity left without any copy is deleted.
+    Apple Health); its activity is recomputed from the others, or deleted if none is left.
 - `streetnav_server/rwgps_sync.py` - read-only Ride with GPS import, every 10 minutes (systemd timer).
+  `--full` also downloads again every trip not in bronze yet; a run started during another one exits.
 - `streetnav_server/strava_import.py` - one-off import of Strava's official account archive (the
   Strava API is subscriber-only), see below.
 - `streetnav_server/file_import.py` - import of a folder of FIT, GPX or TCX files, such as the FIT
   files HealthFit exports from Apple Health (source `file`, below Apple Health and Strava).
 - `streetnav_server/activity_files.py` - the file readers shared by both imports.
-- `tests/` - `python -m unittest discover -s tests`. The registry tests also need
-  `STREETNAV_TEST_DATABASE_URL`, a throwaway PostGIS database they empty; without it they are skipped.
+- `tests/` - `python -m unittest discover -s tests`. The database tests also need
+  `STREETNAV_TEST_DATABASE_URL`, a throwaway PostGIS database they empty, and the API tests httpx;
+  without them they are skipped.
 - `deploy/` - idempotent `install.sh`, systemd units, nightly `pg_dump` (03:30, 14 kept, in
-  `/var/backups/streetnav`).
+  `/var/backups/streetnav`). The dumps do not hold bronze: back up `/var/lib/streetnav/raw` apart.
 
 ## Deploy / update
 
@@ -42,8 +76,9 @@ while an import is in progress.
 
 1. Request the archive at `strava.com/athlete/download_my_account`, with Strava's display language
    set to English (the CSV headers and dates are parsed). The link arrives by e-mail.
-2. Copy only `activities.csv` and `activities/` to the container: the rest of the archive holds
-   logins, contacts and messages.
+2. Copy only `activities.csv` and `activities/` to the container (plus the website export's
+   `streams-*.json`, `activities.json` and `gear.json` if `--check-web` is used): the rest of the archive
+   holds logins, contacts and messages. Bronze keeps what is read, so the copies can be deleted afterwards.
 3. Run, as the `streetnav` user from `/opt/streetnav` with `/etc/streetnav/streetnav.env` loaded:
    `venv/bin/python -m streetnav_server.strava_import ARCHIVE_DIR --dry-run`, then without `--dry-run`.
    `--check-only` reads and checks the files without touching the database.
@@ -52,7 +87,8 @@ The CSV carries the hand edits (name, sport type, commute flag, gear, cropped el
 distance); the files are the original uploads, so each one is cut to the CSV's time window, which is
 what a Strava crop is. `--check-web DIR` compares the result with an export read from the website
 (`activities.json`, `gear.json`, `streams-*.json`): differences are listed, and a website trace
-replaces an archive track that does not match it. On the 2026-10-28 archive (2,380 activities,
+replaces an archive track that does not match it (bronze then keeps that streams file with the version).
+On the 2026-10-28 archive (2,380 activities,
 2,175 tracks), 154 of 157 website traces matched; the 3 others were alpine ski days. The archive
 names a trail run "Run": the sport type cannot be more precise than the CSV's display name.
 
@@ -61,16 +97,17 @@ names a trail run "Run": the sport type cannot be more precise than the CSV's di
 The iOS app reads Apple Health (read only) and sends each workout to `POST /activities` as source
 `healthkit`, with its route and heart rate: the whole history on the first sync, then every workout added
 or deleted, iOS waking the app in the background. Set the server address and the API token in the app,
-under Integrations → Apple Santé. Its copies attach to the activities already loaded from the HealthFit files
-and take over from them (Strava still comes first). Until remote access is enabled, the iPhone reaches the
-server on the home network only (`http://192.168.1.62:8080`).
+under Integrations → Apple Santé. Its copies attach to the activities already loaded and provide their
+measures. « Tout renvoyer » (Réglages › Apple Santé) sends the whole history again: identical workouts add
+nothing to bronze. Until remote access is enabled, the iPhone reaches the server on the home network only
+(`http://192.168.1.62:8080`).
 
 ## Apple Health files
 
 HealthFit exports every Apple Health workout as a FIT file to its iCloud Drive folder. Copy that
 folder to the container and run `venv/bin/python -m streetnav_server.file_import DIR --dry-run`, then
 without `--dry-run` (same user and environment as above). Each file is a copy; re-running only
-updates them.
+updates them, and only new or changed files reach bronze (`--batch NAME` names the import there).
 
 ## State on 2026-10-28
 
