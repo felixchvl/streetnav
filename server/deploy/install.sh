@@ -14,9 +14,12 @@ install -d -o postgres -g postgres -m 750 /var/backups/streetnav
 # Bronze: every version as received (STREETNAV_RAW_DIR, default /var/lib/streetnav/raw). Not in the pg_dump backups.
 install -d -o streetnav -g streetnav -m 750 /var/lib/streetnav /var/lib/streetnav/raw
 
-# PostgreSQL sized for a 2 GB container, local connections only
-cp "$SRC/deploy/postgresql-streetnav.conf" /etc/postgresql/17/main/conf.d/streetnav.conf
-systemctl restart postgresql
+# PostgreSQL sized for a 2 GB container, local connections only. Restarted only when this file
+# changed: a restart cuts every connection to the cluster, other databases' jobs included.
+if ! cmp -s "$SRC/deploy/postgresql-streetnav.conf" /etc/postgresql/17/main/conf.d/streetnav.conf; then
+  cp "$SRC/deploy/postgresql-streetnav.conf" /etc/postgresql/17/main/conf.d/streetnav.conf
+  systemctl restart postgresql
+fi
 
 # Secrets: generated once, never overwritten
 if [ ! -f "$ENV_FILE" ]; then
