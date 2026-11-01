@@ -130,9 +130,10 @@ struct StreetnavExplorePanel: View {
                 }
             }
         }
-        // Maps' margins: 14 points in the floating panel, 17 once it fills the screen.
-        .padding(.horizontal, detent == .large ? 17 : 14)
-        .padding(.top, embedded ? 16 : (detent == .large ? 16 : 13))
+        // Maps' margins. Collapsed, iOS draws the panel about 14 % smaller: these give Maps' 16 points around the field on
+        // screen and centre it in the bar. Fully open, 17 points.
+        .padding(.horizontal, detent == .large ? 17 : 18)
+        .padding(.top, embedded ? 16 : (detent == .large ? 16 : 16))
         .padding(.bottom, 24)
     }
 
@@ -145,13 +146,15 @@ struct StreetnavExplorePanel: View {
 
     private var isSearching: Bool { embedded == false && (searchFocused || query.isEmpty == false) }
     private var searchExpanded: Bool { isSearching && detent == .large }
+    private var collapsedBar: Bool { detent == StreetnavExplorePanel.collapsed && embedded == false }
 
     private var searchRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             HStack(spacing: 6) {
+                // Light symbols and placeholder, as in Maps.
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Streetnav", text: $query)
+                    .foregroundStyle(.primary)
+                TextField("Streetnav", text: $query, prompt: Text("Streetnav").foregroundStyle(.secondary))
                     .focused($searchFocused)
                     .submitLabel(.search)
                     .autocorrectionDisabled()
@@ -169,19 +172,20 @@ struct StreetnavExplorePanel: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Effacer la recherche")
                 } else {
-                    Image(systemName: "mic.fill")
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "mic")
+                        .foregroundStyle(.primary)
                         .accessibilityHidden(true)
                 }
             }
-            .font(.system(size: 17))
+            .font(.system(size: collapsedBar ? 20 : 17))
             .padding(.horizontal, 12)
             // The whole bar opens the search, as in Maps.
             .contentShape(Capsule())
             .onTapGesture { searchFocused = true }
-            // 38 points in the bar, 44 once the panel is open, as in Maps.
-            .frame(height: searchExpanded ? 44 : 38)
+            // 44 points, which iOS shows as Maps' 38 in the collapsed bar.
+            .frame(height: 44)
             .background(Color(.tertiarySystemFill), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
 
             Button {
                 if searchExpanded {
@@ -194,9 +198,9 @@ struct StreetnavExplorePanel: View {
             } label: {
                 // A plain round fill in the bar, like the account button in Maps; glass once the panel is open.
                 Image(systemName: searchExpanded ? "xmark" : "gearshape")
-                    .font(.system(size: searchExpanded ? 19 : 18, weight: .medium))
+                    .font(.system(size: searchExpanded ? 19 : 21, weight: .medium))
                     .foregroundStyle(.primary)
-                    .frame(width: searchExpanded ? 44 : 38, height: searchExpanded ? 44 : 38)
+                    .frame(width: 44, height: 44)
                     .background(Circle().fill(Color(.tertiarySystemFill)).opacity(searchExpanded ? 0 : 1))
                     .streetnavGlass(in: Circle(), interactive: true)
             }
