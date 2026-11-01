@@ -481,8 +481,8 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/mapbox/mapbox-maps-ios.git";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 11.26.0;
+				kind = exactVersion;
+				version = 11.27.3;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
