@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS street (
     length_m double precision NOT NULL
 );
 CREATE INDEX IF NOT EXISTS street_geom ON street USING gist (geom);
+-- The street a bike path runs alongside (streets.SIDE_M): that path is neither drawn nor counted, riding it rides the
+-- street. NULL for every other way.
+ALTER TABLE street ADD COLUMN IF NOT EXISTS alongside bigint;
 
 -- Short pieces of the bike rides' tracks, so that the spatial index finds the few near a point.
 CREATE TABLE IF NOT EXISTS ride_piece (

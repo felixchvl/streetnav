@@ -169,5 +169,7 @@ the two colours of the app's map (1.5 MB gzipped, ETag on the last street run). 
 builds them (`sql/005_streets.sql`): OpenStreetMap's bike-usable ways in Paris and the inner suburbs, fetched
 once from Overpass (`python -m streetnav_server.streets fetch`, 85,795 streets, 8,967 km); a point of a street
 counts as ridden when a ride passes within 12 m, sampled every 10 m, and a ridden stretch shorter than 5
-samples is only a ride crossing the street. `compute` redoes everything (18 s); `streetnav-streets.timer` runs
+samples is only a ride crossing the street. A bike path running alongside a street (within 20 m all along: 9,371
+of the 9,838 bike paths) belongs to that street, as on the map: it is neither drawn nor counted, and riding it rides
+the street. `compute` redoes everything (18 s); `streetnav-streets.timer` runs
 `refresh` every 15 minutes, only around the rides added or changed since the last run.
