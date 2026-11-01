@@ -16,6 +16,8 @@ struct StreetnavExplorationMap: View {
     /// A place found by the search bar, and the bike route to it.
     var place: StreetnavPlace?
     var placeRoute: [CLLocationCoordinate2D]?
+    /// Every bike ride kept on the server (GeoJSON): where the rider has already been.
+    var rides: String?
     var routeProgress: Double = 0
     /// How far the panel rises above the bottom of the safe area, live while it is dragged: Mapbox's logo sits on it.
     var panelOverlap: CGFloat = 0
@@ -72,6 +74,18 @@ struct StreetnavExplorationMap: View {
 
     private var map: Map {
         Map(viewport: $viewport) {
+            if let rides {
+                Self.ridesSource(rides)
+                // Where the rider has already been: the accent, quiet, under the streets still to discover.
+                LineLayer(id: "sorties", source: "sorties")
+                    .slot(.middle)
+                    .lineCap(.round).lineJoin(.round)
+                    .lineColor(accent)
+                    .lineOpacity(colorScheme == .dark ? 0.55 : 0.45)
+                    .lineWidth(Self.zoomed(1.2, 3, 6))
+                    .lineEmissiveStrength(1)
+                    .lineOcclusionOpacity(0.3)
+            }
             Self.streetsSource(segments)
             streetLayer("rues-parcourues", status: .traveled)
                 .lineColor(neutral)
@@ -305,6 +319,14 @@ extension StreetnavExplorationMap {
     static func focus(on coordinates: [CLLocationCoordinate2D], padding: CGFloat = 60, bottomInset: CGFloat = 0) -> Viewport {
         Viewport.overview(geometry: LineString(coordinates), geometryPadding: EdgeInsets(top: padding, leading: padding, bottom: padding, trailing: padding))
             .padding(.bottom, bottomInset)
+    }
+
+    static func ridesSource(_ geojson: String) -> GeoJSONSource {
+        var source = GeoJSONSource(id: "sorties")
+        source.data = .string(geojson)
+        // Lighter tiles: the tracks are already simplified to about 5 metres on the server.
+        source.tolerance = 0.5
+        return source
     }
 
     static func streetsSource(_ segments: [ExplorationStreetSegment]) -> GeoJSONSource {

@@ -22,6 +22,7 @@ struct StreetnavExplorePanel: View {
     @ObservedObject var model: StreetnavPrototypeViewModel
     @ObservedObject var places: StreetnavPlaceSearch
     @ObservedObject private var guidance = StreetnavGuidance.shared
+    @ObservedObject private var history = StreetnavRideHistory.shared
     @Binding var presentedSheet: StreetnavSheet?
     @Binding var detent: PresentationDetent
     var embedded = false
@@ -420,33 +421,127 @@ struct StreetnavExplorePanel: View {
             ) {
                 if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
             }
-        } else if model.integrations.wandrerConnected == false {
+        } else if let stats = history.stats {
+            ridesSummary(stats)
+            primaryButton("Explorer", symbol: "bicycle") {
+                model.openPlanner()
+                presentedSheet = .planner
+            }
+            // Goes on under the button, cut by the panel half open, as the Recents are in Maps.
+            ridesDetails(stats)
+        } else {
             message(
-                symbol: "map",
-                title: "Aucune rue importée",
-                text: "Tes sorties n'ont pas encore été comparées aux rues du quartier.",
+                symbol: "server.rack",
+                title: "Aucune sortie",
+                text: "Relie Streetnav à ton serveur dans Réglages pour voir tes sorties sur la carte.",
                 action: "Réglages"
             ) {
                 presentedSheet = .integrations
             }
-        } else {
-            areaSummary
+        }
+    }
 
-            if model.area.missingStreetCount == 0 {
-                message(
-                    symbol: "checkmark.seal",
-                    title: "Quartier terminé",
-                    text: "Tu as parcouru toutes les rues ici. Déplace la carte vers un autre quartier pour continuer.",
-                    action: nil
-                ) {}
-            } else {
-                primaryButton("Explorer", symbol: "bicycle") {
-                    model.openPlanner()
-                    presentedSheet = .planner
+    // MARK: Rides
+
+    /// This year, this month and the last 30 days, from the server.
+    private func ridesSummary(_ stats: StreetnavRideHistory.Stats) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                Image(systemName: "figure.outdoor.cycle")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(Circle().fill(Color.accentColor))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Tes sorties")
+                        .font(.title2.weight(.bold))
+                    Text(lastRideText(stats))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+
+            HStack(alignment: .top, spacing: 12) {
+                stat("Cette année", value: distance(stats.thisYear.km), unit: "km")
+                stat("Ce mois-ci", value: distance(stats.thisMonth.km), unit: "km")
+                stat("30 jours", value: "\(stats.last30Days.rides)", unit: stats.last30Days.rides > 1 ? "sorties" : "sortie")
+            }
+        }
+    }
+
+    private func ridesDetails(_ stats: StreetnavRideHistory.Stats) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            section("Depuis le début") {
+                row(symbol: "figure.outdoor.cycle", title: "Sorties", value: stats.total.rides.formatted())
+                separator
+                row(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: "Distance",
+                    value: "\(distance(stats.total.km)) km")
+                separator
+                row(symbol: "clock", title: "Temps en selle", value: "\(distance(stats.total.hours)) h")
+                separator
+                row(symbol: "mountain.2", title: "Dénivelé", value: "\(stats.total.climbM.formatted()) m")
+            }
+
+            if let longest = stats.longest {
+                section("Record") {
+                    row(symbol: "trophy", title: "Plus longue sortie", detail: Self.day(longest.day), value: "\(distance(longest.km)) km")
                 }
             }
 
+            section("Par année") {
+                let years = stats.byYear.filter { $0.km >= 1 }.reversed()
+                let best = years.map(\.km).max() ?? 1
+                ForEach(Array(years.enumerated()), id: \.element.id) { index, year in
+                    if index > 0 { separator(leading: 16) }
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(String(year.year))
+                                .font(.headline)
+                            Spacer()
+                            Text("\(distance(year.km)) km · \(year.rides) sorties")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        GeometryReader { geometry in
+                            Capsule()
+                                .fill(Color.accentColor)
+                                .frame(width: max(4, geometry.size.width * year.km / best))
+                        }
+                        .frame(height: 6)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+            }
+
+            if history.isOffline {
+                Label("Serveur injoignable : chiffres de la dernière connexion.", systemImage: "wifi.slash")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
+            }
         }
+        .padding(.top, 8)
+    }
+
+    private func lastRideText(_ stats: StreetnavRideHistory.Stats) -> String {
+        guard let date = stats.lastRideDate else { return "\(stats.total.rides) sorties" }
+        return "Dernière le \(date.formatted(.dateTime.day().month(.wide).locale(Self.french)))"
+    }
+
+    private static func day(_ iso: String) -> String {
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyy-MM-dd"
+        guard let date = parser.date(from: iso) else { return iso }
+        return date.formatted(.dateTime.day().month(.wide).year().locale(french))
+    }
+
+    private static let french = Locale(identifier: "fr_FR")
+
+    /// Kilometres as Maps shows them: a decimal under 100, none above.
+    private func distance(_ km: Double) -> String {
+        km.formatted(.number.precision(.fractionLength(km < 100 ? 1 : 0)).locale(Self.french))
     }
 
     @ViewBuilder
@@ -460,31 +555,6 @@ struct StreetnavExplorePanel: View {
             Label(model.gpsQuality == .weak ? "Signal GPS faible" : "Position approximative", systemImage: "location.slash")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-        }
-    }
-
-    private var areaSummary: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 14) {
-                StreetnavProgressRing(progress: model.area.completion, lineWidth: 7)
-                    .frame(width: 52, height: 52)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.area.name)
-                        .font(.title2.weight(.bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Text("\(model.area.completion.formatted(.percent.precision(.fractionLength(0)))) des rues parcourues")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .accessibilityElement(children: .combine)
-
-            HStack(alignment: .top, spacing: 12) {
-                stat("À découvrir", value: kilometers(model.area.remainingKilometers), unit: "km")
-                stat("Rues restantes", value: "\(model.area.missingStreetCount)", unit: nil)
-                stat("Sorties", value: model.integrations.importedRideCount.formatted(), unit: nil)
-            }
         }
     }
 

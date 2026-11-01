@@ -5,6 +5,7 @@ import SwiftUI
 struct StreetnavRecommendedView: View {
     @StateObject private var model: StreetnavPrototypeViewModel
     @StateObject private var places = StreetnavPlaceSearch()
+    @ObservedObject private var history = StreetnavRideHistory.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentedSheet: StreetnavSheet?
     @State private var showsEndConfirmation = false
@@ -30,12 +31,13 @@ struct StreetnavRecommendedView: View {
     var body: some View {
         ZStack {
             StreetnavExplorationMap(
-                // Which streets were ridden is not computed from the real rides yet: no made-up streets meanwhile.
+                // Which streets were ridden is not computed yet: the rides' tracks show where the rider has been.
                 segments: [],
                 route: model.flowState == .home || model.flowState == .planner ? nil : model.route,
                 mode: model.flowState,
                 place: model.flowState == .home ? places.place : nil,
                 placeRoute: model.flowState == .home ? places.route?.coordinates : nil,
+                rides: history.tracks,
                 routeProgress: model.flowState.isNavigationLike ? model.rideProgress.routeProgress : 0,
                 panelOverlap: panelTop.map { max(0, safeAreaBottom - $0) } ?? cameraInset,
                 viewport: $viewport,
@@ -56,6 +58,11 @@ struct StreetnavRecommendedView: View {
         .task {
             recenter()
             await model.load()
+        }
+        // The tracks and statistics from the server, whenever the app comes back to the front.
+        .task { await history.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            Task { await history.refresh() }
         }
         .sheet(isPresented: panelIsPresented) {
             StreetnavExplorePanel(model: model, places: places, presentedSheet: $presentedSheet, detent: $panelDetent, focus: focus(on:))
