@@ -24,6 +24,7 @@ final class StreetnavVanMoofAccount: ObservableObject {
 
     private static let api = "https://api.vanmoof-api.com/v8"
     private static let bikeAPI = "https://bikeapi.production.vanmoof.cloud"
+    private static let registryAPI = "https://vehicleregistry.production.vanmoof.cloud"
     private static let bikeKey = "streetnav.vanmoof.bike"
 
     private init() {
@@ -40,7 +41,8 @@ final class StreetnavVanMoofAccount: ObservableObject {
             var request = try Self.request("\(Self.api)/authenticate", method: "POST")
             request.setValue("Basic " + Data("\(email):\(password)".utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
             let tokens: Tokens = try await Self.send(request)
-            Keychain.write(.refreshToken, Data(tokens.refreshToken.utf8))
+            guard let refreshToken = tokens.refreshToken, refreshToken.isEmpty == false else { throw Failure.unreadable }
+            Keychain.write(.refreshToken, Data(refreshToken.utf8))
             isSignedIn = true
             try await renew(authToken: tokens.token)
         } catch {
@@ -77,8 +79,19 @@ final class StreetnavVanMoofAccount: ObservableObject {
         var bikesRequest = try Self.request("\(Self.api)/getCustomerData?includeBikeDetails", method: "GET")
         bikesRequest.setValue("Bearer \(auth)", forHTTPHeaderField: "Authorization")
         let customer: Customer = try await Self.send(bikesRequest)
+        var bikes = customer.data.bikes ?? []
+        // Bikes made since VanMoof's takeover, the S6 among them, are only listed by the vehicle registry.
+        if let rider = customer.data.uuid.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(["-"])) {
+            var registryRequest = URLRequest(url: URL(string: "\(Self.registryAPI)/external/riders/\(rider)/vehicles")!)
+            registryRequest.setValue("Bearer \(app.token)", forHTTPHeaderField: "Authorization")
+            if let registry: Registry = try? await Self.send(registryRequest) {
+                bikes += registry.vehicleAccess
+                    .filter { vehicle in bikes.contains { $0.frameNumber == vehicle.vehicleID } == false }
+                    .map { Customer.RemoteBike(name: $0.name, frameNumber: $0.vehicleID, bleProfile: $0.bleProfile) }
+            }
+        }
         // The S6 is the bike with the 2025 Bluetooth profile; otherwise take the first one.
-        guard let found = customer.data.bikes.first(where: { $0.bleProfile == "ELECTRIFIED_2025" }) ?? customer.data.bikes.first else {
+        guard let found = bikes.first(where: { $0.bleProfile == "ELECTRIFIED_2025" }) ?? bikes.first else {
             throw Failure.noBike
         }
 
@@ -98,6 +111,7 @@ final class StreetnavVanMoofAccount: ObservableObject {
         certificateExpiry = Self.expiry(of: certificate)
         bike = Bike(name: found.name ?? "VanMoof", frameNumber: found.frameNumber)
         UserDefaults.standard.set(try? JSONEncoder().encode(bike), forKey: Self.bikeKey)
+        lastError = nil
     }
 
     private func refreshedAuthToken() async throws -> String {
@@ -106,8 +120,8 @@ final class StreetnavVanMoofAccount: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(["refreshToken": refresh])
         let tokens: Tokens = try await Self.send(request)
-        // The server may hand out a new refresh token.
-        if tokens.refreshToken.isEmpty == false { Keychain.write(.refreshToken, Data(tokens.refreshToken.utf8)) }
+        // The server may hand out a new refresh token; otherwise the old one stays valid.
+        if let rotated = tokens.refreshToken, rotated.isEmpty == false { Keychain.write(.refreshToken, Data(rotated.utf8)) }
         return tokens.token
     }
 
@@ -132,18 +146,25 @@ final class StreetnavVanMoofAccount: ObservableObject {
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw status == 401 || status == 403 ? Failure.refused : Failure.http(status) }
-        return try JSONDecoder().decode(T.self, from: data)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw Failure.unreadable
+        }
     }
 
     private struct Tokens: Decodable {
         let token: String
-        let refreshToken: String
+        let refreshToken: String?
     }
 
     private struct Token: Decodable { let token: String }
 
     private struct Customer: Decodable {
-        struct Content: Decodable { let bikes: [RemoteBike] }
+        struct Content: Decodable {
+            let uuid: String
+            let bikes: [RemoteBike]?
+        }
         struct RemoteBike: Decodable {
             let name: String?
             let frameNumber: String
@@ -152,10 +173,25 @@ final class StreetnavVanMoofAccount: ObservableObject {
         let data: Content
     }
 
+    private struct Registry: Decodable {
+        struct Vehicle: Decodable {
+            let vehicleID: String
+            let name: String?
+            let bleProfile: String?
+
+            enum CodingKeys: String, CodingKey {
+                case vehicleID = "vehicle_id", name, bleProfile = "ble_profile"
+            }
+        }
+        let vehicleAccess: [Vehicle]
+
+        enum CodingKeys: String, CodingKey { case vehicleAccess = "vehicle_access" }
+    }
+
     private struct CertificateResponse: Decodable { let certificate: String }
 
     enum Failure: LocalizedError {
-        case missingAPIKey, notSignedIn, refused, noBike, badCertificate, http(Int)
+        case missingAPIKey, notSignedIn, refused, noBike, badCertificate, unreadable, http(Int)
 
         var errorDescription: String? {
             switch self {
@@ -164,6 +200,7 @@ final class StreetnavVanMoofAccount: ObservableObject {
             case .refused: "VanMoof a refusé l'identifiant ou le mot de passe."
             case .noBike: "Aucun vélo sur ce compte VanMoof."
             case .badCertificate: "VanMoof a renvoyé un certificat illisible."
+            case .unreadable: "VanMoof a répondu dans un format inattendu."
             case .http(let code): "VanMoof a répondu \(code)."
             }
         }
