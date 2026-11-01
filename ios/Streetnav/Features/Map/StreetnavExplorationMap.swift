@@ -16,8 +16,10 @@ struct StreetnavExplorationMap: View {
     /// A place found by the search bar, and the bike route to it.
     var place: StreetnavPlace?
     var placeRoute: [CLLocationCoordinate2D]?
-    /// Every bike ride kept on the server (GeoJSON): where the rider has already been.
+    /// Every bike ride kept on the server (GeoJSON): where the rider has already been, until the streets are known.
     var rides: String?
+    /// The streets around Paris, ridden (`r` = 1) or not (`r` = 0), GeoJSON.
+    var streets: String?
     var routeProgress: Double = 0
     /// How far the panel rises above the bottom of the safe area, live while it is dragged: Mapbox's logo sits on it.
     var panelOverlap: CGFloat = 0
@@ -74,7 +76,28 @@ struct StreetnavExplorationMap: View {
 
     private var map: Map {
         Map(viewport: $viewport) {
-            if let rides {
+            if let streets {
+                Self.streetsLayerSource(streets)
+                // Every street not ridden yet, quiet; those already ridden in the accent, as Wandrer colours them.
+                LineLayer(id: "rues-jamais", source: "rues-osm")
+                    .filter(Exp(.eq) { Exp(.get) { "r" }; 0 })
+                    .slot(.middle)
+                    .lineCap(.round).lineJoin(.round)
+                    .lineColor(colorScheme == .dark ? UIColor(white: 1, alpha: 1) : UIColor(white: 0.25, alpha: 1))
+                    .lineOpacity(colorScheme == .dark ? 0.32 : 0.35)
+                    .lineWidth(Self.zoomed(0.8, 2, 5))
+                    .lineEmissiveStrength(1)
+                    .lineOcclusionOpacity(0.2)
+                LineLayer(id: "rues-faites", source: "rues-osm")
+                    .filter(Exp(.eq) { Exp(.get) { "r" }; 1 })
+                    .slot(.middle)
+                    .lineCap(.round).lineJoin(.round)
+                    .lineColor(accent)
+                    .lineOpacity(0.9)
+                    .lineWidth(Self.zoomed(1.2, 3, 6))
+                    .lineEmissiveStrength(1)
+                    .lineOcclusionOpacity(0.35)
+            } else if let rides {
                 Self.ridesSource(rides)
                 // Where the rider has already been: the accent, quiet, under the streets still to discover.
                 LineLayer(id: "sorties", source: "sorties")
@@ -319,6 +342,15 @@ extension StreetnavExplorationMap {
     static func focus(on coordinates: [CLLocationCoordinate2D], padding: CGFloat = 60, bottomInset: CGFloat = 0) -> Viewport {
         Viewport.overview(geometry: LineString(coordinates), geometryPadding: EdgeInsets(top: padding, leading: padding, bottom: padding, trailing: padding))
             .padding(.bottom, bottomInset)
+    }
+
+    static func streetsLayerSource(_ geojson: String) -> GeoJSONSource {
+        var source = GeoJSONSource(id: "rues-osm")
+        source.data = .string(geojson)
+        // 88,000 street parts: tiles cut up to zoom 14 only, then scaled, to keep the memory down.
+        source.maxzoom = 14
+        source.tolerance = 0.5
+        return source
     }
 
     static func ridesSource(_ geojson: String) -> GeoJSONSource {

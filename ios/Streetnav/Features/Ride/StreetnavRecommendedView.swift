@@ -38,6 +38,7 @@ struct StreetnavRecommendedView: View {
                 place: model.flowState == .home ? places.place : nil,
                 placeRoute: model.flowState == .home ? places.route?.coordinates : nil,
                 rides: history.tracks,
+                streets: history.streets,
                 routeProgress: model.flowState.isNavigationLike ? model.rideProgress.routeProgress : 0,
                 panelOverlap: panelTop.map { max(0, safeAreaBottom - $0) } ?? cameraInset,
                 viewport: $viewport,

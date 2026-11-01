@@ -11,6 +11,8 @@ final class StreetnavRideHistory: ObservableObject {
 
     /// GeoJSON FeatureCollection, one LineString per ride, as text for Mapbox (decoded once, not at every redraw).
     @Published private(set) var tracks: String?
+    /// Streets around Paris cut into ridden (`r` = 1) and not ridden (`r` = 0) parts, GeoJSON (GET /streets).
+    @Published private(set) var streets: String?
     @Published private(set) var stats: Stats?
     @Published private(set) var isOffline = false
 
@@ -37,14 +39,22 @@ final class StreetnavRideHistory: ObservableObject {
         let thisYear: Totals
         let thisMonth: Totals
         let last30Days: Totals
+        struct Streets: Codable, Equatable {
+            let riddenKm: Double
+            let totalKm: Double
+            var share: Double { totalKm > 0 ? riddenKm / totalKm : 0 }
+
+            enum CodingKeys: String, CodingKey { case riddenKm = "ridden_km", totalKm = "total_km" }
+        }
         let longest: Longest?
         let lastRide: String?
         let byYear: [Year]
+        let streets: Streets?
 
         enum CodingKeys: String, CodingKey {
             case total, longest
             case thisYear = "this_year", thisMonth = "this_month", last30Days = "last_30_days", lastRide = "last_ride"
-            case byYear = "by_year"
+            case byYear = "by_year", streets
         }
 
         var lastRideDate: Date? {
@@ -61,11 +71,13 @@ final class StreetnavRideHistory: ObservableObject {
         return url
     }()
     private var tracksFile: URL { folder.appending(path: "tracks.geojson") }
+    private var streetsFile: URL { folder.appending(path: "streets.geojson") }
     private var statsFile: URL { folder.appending(path: "stats.json") }
     private var etagKey: String { "streetnav.tracks.etag" }
 
     private init() {
         tracks = try? String(contentsOf: tracksFile, encoding: .utf8)
+        streets = try? String(contentsOf: streetsFile, encoding: .utf8)
         stats = (try? Data(contentsOf: statsFile)).flatMap { try? JSONDecoder().decode(Stats.self, from: $0) }
     }
 
@@ -86,6 +98,10 @@ final class StreetnavRideHistory: ObservableObject {
                 tracks = String(decoding: data, as: UTF8.self)
             }
 
+            if let fresh = try await download("streets", token: token, baseURL: baseURL, cached: streets != nil, to: streetsFile) {
+                streets = fresh
+            }
+
             var statsRequest = URLRequest(url: baseURL.appending(path: "stats"), timeoutInterval: 30)
             statsRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             let (statsData, statsResponse) = try await StreetnavServerAccess.session.data(for: statsRequest)
@@ -98,5 +114,18 @@ final class StreetnavRideHistory: ObservableObject {
         } catch {
             isOffline = true
         }
+    }
+
+    /// GET path with its last ETag; the new body (also written to `file`), or nil when it has not changed.
+    private func download(_ path: String, token: String, baseURL: URL, cached: Bool, to file: URL) async throws -> String? {
+        let etagKey = "streetnav.\(path).etag"
+        var request = URLRequest(url: baseURL.appending(path: path), timeoutInterval: 60)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if cached, let etag = UserDefaults.standard.string(forKey: etagKey) { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        let (data, response) = try await StreetnavServerAccess.session.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+        try data.write(to: file, options: .atomic)
+        UserDefaults.standard.set(http.value(forHTTPHeaderField: "ETag"), forKey: etagKey)
+        return String(decoding: data, as: UTF8.self)
     }
 }

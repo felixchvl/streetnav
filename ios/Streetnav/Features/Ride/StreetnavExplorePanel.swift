@@ -465,7 +465,11 @@ struct StreetnavExplorePanel: View {
             HStack(alignment: .top, spacing: 12) {
                 stat("Cette année", value: distance(stats.thisYear.km), unit: "km")
                 stat("Ce mois-ci", value: distance(stats.thisMonth.km), unit: "km")
-                stat("30 jours", value: "\(stats.last30Days.rides)", unit: stats.last30Days.rides > 1 ? "sorties" : "sortie")
+                if let streets = stats.streets, streets.totalKm > 0 {
+                    stat("Rues", value: (streets.share * 100).formatted(.number.precision(.fractionLength(0))), unit: "%")
+                } else {
+                    stat("30 jours", value: "\(stats.last30Days.rides)", unit: stats.last30Days.rides > 1 ? "sorties" : "sortie")
+                }
             }
         }
     }
@@ -481,6 +485,15 @@ struct StreetnavExplorePanel: View {
                 row(symbol: "clock", title: "Temps en selle", value: "\(distance(stats.total.hours)) h")
                 separator
                 row(symbol: "mountain.2", title: "Dénivelé", value: "\(stats.total.climbM.formatted()) m")
+            }
+
+            if let streets = stats.streets, streets.totalKm > 0 {
+                section("Rues de Paris et de la petite couronne") {
+                    row(symbol: "road.lanes", title: "Parcourues", detail: "\((streets.share * 100).formatted(.number.precision(.fractionLength(1)).locale(Self.french))) % des rues",
+                        value: "\(distance(streets.riddenKm)) km")
+                    separator
+                    row(symbol: "map", title: "À découvrir", value: "\(distance(streets.totalKm - streets.riddenKm)) km")
+                }
             }
 
             if let longest = stats.longest {
