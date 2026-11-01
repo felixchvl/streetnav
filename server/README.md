@@ -140,17 +140,26 @@ PostgreSQL connection to `192.168.1.62:5432`, database `streetnav`, SSL mode `re
 `activity` (track, one line per activity; filter `sport = 'cycling'`) and `activity_source` (one track per
 version, to compare them). Tracks are `LineStringZM` in EPSG:4326, both with a spatial index.
 
-## Remote access (not enabled yet)
+## Remote access
 
-The iPhone reaches the API from anywhere through the home Caddy, without a VPN:
+Enabled on 2026-11-01: the iPhone reaches the API from anywhere at `https://streetnav.felixchevalier.fr`,
+through the home Caddy, without a VPN:
 
 1. `deploy/make-client-cert.sh ~/.config/streetnav/pki iphone` creates a private CA and the
    iPhone's certificate (`iphone.p12`). The folder holds private keys: never commit it.
-2. Copy `ca.pem` to `/etc/caddy/streetnav-client-ca.pem` on the Caddy container, add
-   `deploy/caddy-streetnav.caddy` to its sites and reload Caddy.
-3. Add a DNS A record `streetnav.felixchevalier.fr` pointing to the home public IP.
-4. The app imports `iphone.p12` into its own keychain (a profile installed in iOS Settings is not
-   readable by apps) and answers Caddy's client-certificate challenge with it, then sends the
-   bearer token as usual.
+2. `ca.pem` is at `/etc/caddy/streetnav-client-ca.pem` on the Caddy container (LXC 110) and
+   `deploy/caddy-streetnav.caddy` is its `sites/public/30-streetnav.caddy`; Let's Encrypt issues the
+   server certificate (TLS-ALPN challenge).
+3. A DNS A record `streetnav.felixchevalier.fr` points to the home public IP.
+4. In the app, Réglages › Serveur Streetnav › « Hors de chez toi » imports `iphone.p12` into the app's own
+   keychain (a profile installed in iOS Settings is not readable by apps), then « Utiliser l'adresse
+   publique ». Every request answers Caddy's client-certificate challenge with it, then sends the bearer
+   token as usual.
 
-Without the certificate the TLS handshake fails, so nothing reaches FastAPI.
+Without the certificate the TLS handshake fails, so nothing reaches FastAPI. The public address also works
+from the home network.
+
+## Map data
+
+`GET /tracks` returns every bike ride's track as GeoJSON, simplified to about 5 metres (2,273 rides:
+2.2 MB, 0.5 MB gzipped), with an ETag; `GET /stats` the riding statistics. The app caches both.
