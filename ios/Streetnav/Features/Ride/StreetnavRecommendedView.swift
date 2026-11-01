@@ -9,8 +9,9 @@ struct StreetnavRecommendedView: View {
     @State private var presentedSheet: StreetnavSheet?
     @State private var showsEndConfirmation = false
     /// Paris until the first position comes in (or if it is refused), rather than the whole globe.
-    @State private var viewport = Viewport.camera(center: StreetnavMockData.parisCenter, zoom: 12.5).padding(.bottom, 292)
-    @State private var panelDetent = StreetnavExplorePanel.summary
+    @State private var viewport = Viewport.camera(center: StreetnavMockData.parisCenter, zoom: 12.5).padding(.bottom, 100)
+    @State private var panelDetent = StreetnavExplorePanel.preferredDetent(for: .home)
+    @State private var isThreeD = true
     /// Top of the panel and bottom of the safe area, in screen points, followed while the panel is dragged.
     @State private var panelTop: CGFloat?
     @State private var safeAreaBottom: CGFloat = 0
@@ -38,6 +39,7 @@ struct StreetnavRecommendedView: View {
                 routeProgress: model.flowState.isNavigationLike ? model.rideProgress.routeProgress : 0,
                 panelOverlap: panelTop.map { max(0, safeAreaBottom - $0) } ?? cameraInset,
                 viewport: $viewport,
+                isThreeD: $isThreeD,
                 recenter: recenter
             )
 
@@ -66,6 +68,7 @@ struct StreetnavRecommendedView: View {
         .onChange(of: model.flowState) { oldState, newState in
             flowChanged(from: oldState, to: newState)
         }
+        .onChange(of: isThreeD) { recenter() }
         .onChange(of: places.place) { _, place in
             guard let place else { return recenter() }
             withViewportAnimation(.default(maxDuration: 0.8)) {
@@ -81,7 +84,7 @@ struct StreetnavRecommendedView: View {
         .onChange(of: model.route.id) {
             guard model.flowState.isRouteStep else { return }
             withViewportAnimation(.easeInOut(duration: 0.6)) {
-                viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset)
+                viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? 50 : 0)
             }
         }
         .alert("Terminer la sortie ?", isPresented: $showsEndConfirmation) {
@@ -120,6 +123,7 @@ struct StreetnavRecommendedView: View {
         switch model.flowState {
         case .routePreview: return 452
         case .readiness: return 386
+        case .home: return 100
         default: return 292
         }
     }
@@ -130,13 +134,13 @@ struct StreetnavRecommendedView: View {
         if preferred != StreetnavExplorePanel.preferredDetent(for: oldState) { panelDetent = preferred }
         // The default animation is the one that keeps up with a moving position.
         withViewportAnimation(.default(maxDuration: 0.8)) {
-            viewport = StreetnavExplorationMap.viewport(for: newState, route: model.route, bottomInset: cameraInset)
+            viewport = StreetnavExplorationMap.viewport(for: newState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? 50 : 0)
         }
     }
 
     private func recenter() {
         withViewportAnimation(.default(maxDuration: 0.5)) {
-            viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset)
+            viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? 50 : 0)
         }
     }
 

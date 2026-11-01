@@ -38,16 +38,21 @@ struct StreetnavExplorePanel: View {
     static let readiness = PresentationDetent.height(386)
 
     static func detents(for state: PrototypeFlowState) -> Set<PresentationDetent> {
-        [collapsed, preferredDetent(for: state), .large]
+        [collapsed, middleDetent(for: state), .large]
     }
 
     /// Tall enough for the step's main button, no more, so that the map keeps most of the screen.
-    static func preferredDetent(for state: PrototypeFlowState) -> PresentationDetent {
+    static func middleDetent(for state: PrototypeFlowState) -> PresentationDetent {
         switch state {
         case .routePreview: route
         case .readiness: readiness
         default: summary
         }
+    }
+
+    /// Where the panel opens: just the search bar at home, as in Maps; the step's card otherwise.
+    static func preferredDetent(for state: PrototypeFlowState) -> PresentationDetent {
+        state == .home ? collapsed : middleDetent(for: state)
     }
 
     var body: some View {
@@ -130,7 +135,7 @@ struct StreetnavExplorePanel: View {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Rechercher un lieu", text: $query)
+                TextField("Streetnav", text: $query)
                     .focused($searchFocused)
                     .submitLabel(.search)
                     .autocorrectionDisabled()

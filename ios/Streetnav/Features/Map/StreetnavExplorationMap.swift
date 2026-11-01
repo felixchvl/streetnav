@@ -20,6 +20,8 @@ struct StreetnavExplorationMap: View {
     /// How far the panel rises above the bottom of the safe area, live while it is dragged: Mapbox's logo sits on it.
     var panelOverlap: CGFloat = 0
     @Binding var viewport: Viewport
+    /// Tilted city or map seen from above, switched by the « 3D » button as in Maps.
+    var isThreeD: Binding<Bool> = .constant(true)
     var recenter: () -> Void = {}
 
     @State private var look: Look = .standard
@@ -34,15 +36,25 @@ struct StreetnavExplorationMap: View {
         }
         .ignoresSafeArea()
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { sunLight = StreetnavSunlight.preset(at: $0) }
-        .overlay(alignment: .topTrailing) {
-            // During the ride the manoeuvre card owns the top of the screen.
-            if mode.isNavigationLike == false {
+        // As in Maps: map buttons on the right and « 3D » on the left, just above the panel, gone once it is open.
+        .overlay(alignment: .bottomTrailing) {
+            if showsButtons {
                 controls
                     .padding(.trailing, 16)
-                    .padding(.top, 8)
+                    .padding(.bottom, panelOverlap + 12)
                     .transition(.opacity)
             }
         }
+        .overlay(alignment: .bottomLeading) {
+            if showsButtons, mode.isRouteStep == false {
+                threeDButton
+                    .padding(.leading, 16)
+                    // Above Mapbox's logo, which sits on the panel.
+                    .padding(.bottom, panelOverlap + 40)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showsButtons)
         .accessibilityLabel("Carte des rues parcourues et des rues à découvrir")
     }
 
@@ -176,6 +188,22 @@ struct StreetnavExplorationMap: View {
     }
 
     /// Location and map type, stacked in one capsule like the Maps app.
+    private var showsButtons: Bool { mode.isNavigationLike == false && mode != .arrived && panelOverlap < 380 }
+
+    private var threeDButton: some View {
+        Button {
+            isThreeD.wrappedValue.toggle()
+        } label: {
+            Text(isThreeD.wrappedValue ? "2D" : "3D")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 52, height: 52)
+                .streetnavGlass(in: Circle(), interactive: true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isThreeD.wrappedValue ? "Vue de dessus" : "Vue en 3D")
+    }
+
     private var controls: some View {
         VStack(spacing: 0) {
             Menu {
@@ -185,8 +213,8 @@ struct StreetnavExplorationMap: View {
                     }
                 }
             } label: {
-                Image(systemName: look == .standard ? "map" : "globe.europe.africa")
-                    .frame(width: 44, height: 44)
+                Image(systemName: look == .standard ? "map.fill" : "globe.europe.africa.fill")
+                    .frame(width: 52, height: 50)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("Type de carte")
@@ -196,7 +224,7 @@ struct StreetnavExplorationMap: View {
 
             Button(action: recenter) {
                 Image(systemName: "location")
-                    .frame(width: 44, height: 44)
+                    .frame(width: 52, height: 50)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("Recentrer sur ma position")
@@ -218,11 +246,11 @@ struct StreetnavExplorationMap: View {
 
 extension StreetnavExplorationMap {
     /// Where the camera goes for each step of the flow, keeping `bottomInset` points clear for the panel or the cards.
-    static func viewport(for mode: PrototypeFlowState, route: StreetnavRoute?, bottomInset: CGFloat) -> Viewport {
+    static func viewport(for mode: PrototypeFlowState, route: StreetnavRoute?, bottomInset: CGFloat, pitch: CGFloat = 50) -> Viewport {
         switch mode {
         case .routePreview, .readiness, .arrived:
             if let route { return focus(on: route.coordinates, padding: 40, bottomInset: bottomInset) }
-            return Viewport.followPuck(zoom: 16.6, pitch: 50).padding(.bottom, bottomInset)
+            return Viewport.followPuck(zoom: 16.6, pitch: pitch).padding(.bottom, bottomInset)
         case _ where mode.isNavigationLike:
             // Tilted like Maps, turning with the ride: the route stays visible through the buildings (occlusion opacity).
             return Viewport.followPuck(zoom: 17, bearing: .course, pitch: 55).padding(.bottom, bottomInset)
@@ -236,7 +264,7 @@ extension StreetnavExplorationMap {
             }
             #endif
             // Close enough to read the streets around, tilted enough to see the buildings and their light, north up.
-            return Viewport.followPuck(zoom: 16.6, pitch: 50).padding(.bottom, bottomInset)
+            return Viewport.followPuck(zoom: 16.6, pitch: pitch).padding(.bottom, bottomInset)
         }
     }
 

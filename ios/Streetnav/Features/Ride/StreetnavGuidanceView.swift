@@ -4,31 +4,54 @@ import MapboxDirections
 import MapboxNavigationCore
 import SwiftUI
 
-/// The ride to a place: Mapbox's navigation map (position snapped to the street, camera that anticipates the turns,
-/// route that fades behind the rider, arrows at the turns) under Streetnav's own glass cards, like Maps.
+/// The ride to a place, laid out like Maps: Mapbox's navigation map (position snapped to the street, camera that
+/// anticipates the turns, route that fades behind the rider, arrows at the turns) under a dark manoeuvre card, the
+/// street being ridden and a card with the arrival, which slides up to end the route.
 struct StreetnavGuidanceView: View {
     @ObservedObject private var guidance = StreetnavGuidance.shared
     @Environment(\.colorScheme) private var colorScheme
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
+    @State private var showsOverview = false
+    @State private var showsEnd = false
 
     var body: some View {
-        StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight)
+        StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview)
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
-                    maneuverCard
-                        .padding(.horizontal, 12)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                    VStack(alignment: .trailing, spacing: 14) {
+                        maneuverCard
+                        roundButton(showsOverview ? "location.north.line.fill" : "point.topleft.down.to.point.bottomright.curvepath",
+                                    label: showsOverview ? "Suivre ma position" : "Voir tout l'itinéraire") {
+                            showsOverview.toggle()
+                        }
+                        .padding(.trailing, 6)
+                    }
+                    .padding(.horizontal, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
             .overlay(alignment: .bottom) {
-                Group {
-                    if guidance.hasArrived { arrivalCard } else { rideCard }
+                VStack(spacing: 12) {
+                    if guidance.hasArrived {
+                        arrivalCard
+                    } else {
+                        if let street = currentStreet {
+                            Text(street)
+                                .font(.headline)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 10)
+                                .streetnavGlass(in: Capsule())
+                                .transition(.opacity)
+                        }
+                        tripCard
+                    }
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 4)
             }
             .animation(.snappy, value: guidance.hasArrived)
+            .animation(.snappy, value: showsEnd)
             .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { sunLight = StreetnavSunlight.preset(at: $0) }
             // The screen stays on during the ride, as in Maps.
             .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
@@ -37,66 +60,94 @@ struct StreetnavGuidanceView: View {
 
     // MARK: Cards
 
+    /// Dark in light and dark mode alike, like the one in Maps.
     private var maneuverCard: some View {
-        HStack(spacing: 14) {
+        HStack(alignment: .center, spacing: 18) {
             Image(systemName: Self.symbol(for: guidance.instruction?.primaryInstruction))
-                .font(.system(size: 34, weight: .semibold))
-                .frame(width: 52)
+                .font(.system(size: 52, weight: .bold))
+                .frame(width: 70)
             VStack(alignment: .leading, spacing: 2) {
                 Text(stepDistance)
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .font(.system(size: 34, weight: .bold))
                     .monospacedDigit()
                 Text(guidance.instruction?.primaryInstruction.text ?? "Calcul de l'itinéraire…")
-                    .font(.title3.weight(.semibold))
+                    .font(.system(size: 30, weight: .regular))
+                    .foregroundStyle(.secondary)
                     .lineLimit(2)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.7)
             }
             Spacer(minLength: 0)
         }
         .foregroundStyle(.primary)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .streetnavGlass(in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .padding(.horizontal, 22)
+        .padding(.vertical, 24)
+        .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 40, style: .continuous))
+        .streetnavGlass(in: RoundedRectangle(cornerRadius: 40, style: .continuous))
+        .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .combine)
     }
 
-    private var rideCard: some View {
-        HStack(alignment: .center, spacing: 0) {
-            StreetnavStat(label: "Arrivée", value: arrivalTime, unit: nil)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            StreetnavStat(label: "Restant", value: remainingTime.value, unit: remainingTime.unit)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            StreetnavStat(label: "Distance", value: remainingDistance.value, unit: remainingDistance.unit)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button(role: .destructive) {
-                guidance.stop()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 48, height: 48)
+    /// Arrival, time and distance left; pulled up (or tapped), it offers to end the route, as in Maps.
+    private var tripCard: some View {
+        VStack(spacing: 16) {
+            Capsule()
+                .fill(Color.secondary.opacity(0.5))
+                .frame(width: 36, height: 5)
+            HStack(spacing: 0) {
+                tripValue(arrivalTime, "arrivée")
+                tripValue(remainingTime.value, remainingTime.unit)
+                tripValue(remainingDistance.value, remainingDistance.unit)
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.circle)
-            .tint(.red)
-            .accessibilityLabel("Terminer la navigation")
+            if showsEnd {
+                Button(role: .destructive) {
+                    showsEnd = false
+                    guidance.stop()
+                } label: {
+                    Text("Terminer l'itinéraire")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .tint(.red)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .padding(.top, 10)
         .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .streetnavGlass(in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .padding(.bottom, showsEnd ? 20 : 18)
+        .streetnavGlass(in: RoundedRectangle(cornerRadius: 40, style: .continuous))
+        .contentShape(Rectangle())
+        .onTapGesture { showsEnd.toggle() }
+        .gesture(DragGesture(minimumDistance: 12).onEnded { drag in
+            if drag.translation.height < -20 { showsEnd = true }
+            if drag.translation.height > 20 { showsEnd = false }
+        })
+    }
+
+    private func tripValue(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 0) {
+            Text(value)
+                .font(.system(size: 34, weight: .semibold))
+                .monospacedDigit()
+            Text(label)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var arrivalCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Arrivé")
-                        .font(.title2.weight(.bold))
-                    Text(guidance.destinationName)
-                        .foregroundStyle(.secondary)
-                }
-            } icon: {
+        VStack(spacing: 16) {
+            VStack(spacing: 4) {
                 Image(systemName: "flag.checkered")
-                    .font(.title2)
+                    .font(.system(size: 34, weight: .semibold))
+                Text("Arrivé")
+                    .font(.title.weight(.bold))
+                Text(guidance.destinationName)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
             }
             Button {
                 guidance.stop()
@@ -109,8 +160,27 @@ struct StreetnavGuidanceView: View {
             .buttonBorderShape(.capsule)
             .controlSize(.large)
         }
-        .padding(20)
-        .streetnavGlass(in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .padding(22)
+        .streetnavGlass(in: RoundedRectangle(cornerRadius: 40, style: .continuous))
+    }
+
+    private func roundButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 60, height: 60)
+                .streetnavGlass(in: Circle(), interactive: true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private var currentStreet: String? {
+        guard let names = guidance.progress?.currentLegProgress.currentStep.names, let name = names.first, name.isEmpty == false else {
+            return nil
+        }
+        return name
     }
 
     // MARK: Values
@@ -125,14 +195,14 @@ struct StreetnavGuidanceView: View {
         return Date.now.addingTimeInterval(seconds).formatted(date: .omitted, time: .shortened)
     }
 
-    private var remainingTime: (value: String, unit: String?) {
-        guard let seconds = guidance.progress?.durationRemaining else { return ("—", nil) }
+    private var remainingTime: (value: String, unit: String) {
+        guard let seconds = guidance.progress?.durationRemaining else { return ("—", "min") }
         let minutes = Int((seconds / 60).rounded())
-        return minutes < 60 ? ("\(minutes)", "min") : ("\(minutes / 60) h \(String(format: "%02d", minutes % 60))", nil)
+        return minutes < 60 ? ("\(minutes)", "min") : ("\(minutes / 60):\(String(format: "%02d", minutes % 60))", "h")
     }
 
-    private var remainingDistance: (value: String, unit: String?) {
-        guard let meters = guidance.progress?.distanceRemaining else { return ("—", nil) }
+    private var remainingDistance: (value: String, unit: String) {
+        guard let meters = guidance.progress?.distanceRemaining else { return ("—", "km") }
         if meters < 1000 { return ("\(Int((meters / 10).rounded()) * 10)", "m") }
         return ((meters / 1000).formatted(.number.precision(.fractionLength(1))), "km")
     }
@@ -161,11 +231,13 @@ struct StreetnavGuidanceView: View {
 private struct StreetnavGuidanceMap: UIViewRepresentable {
     @ObservedObject var guidance: StreetnavGuidance
     let light: StandardLightPreset
+    let showsOverview: Bool
 
     final class Coordinator {
         var shownRoute: String?
         var light: StandardLightPreset?
         var styleObserver: AnyCancelable?
+        var showsOverview = false
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -184,12 +256,13 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         view.traversedRouteColor = UIColor(white: 0.55, alpha: 0.5)
         view.showsTrafficOnRouteLine = false
         view.showsAlternatives = false
-        // Clear of the manoeuvre card at the top and the ride card at the bottom.
-        view.viewportPadding = UIEdgeInsets(top: 150, left: 40, bottom: 140, right: 40)
+        // Clear of the manoeuvre card at the top and the trip card at the bottom.
+        view.viewportPadding = UIEdgeInsets(top: 230, left: 40, bottom: 190, right: 40)
         view.mapView.ornaments.options.scaleBar.visibility = .hidden
         view.mapView.ornaments.options.compass.visibility = .hidden
-        view.mapView.ornaments.options.logo.margins = CGPoint(x: 16, y: 104)
-        view.mapView.ornaments.options.attributionButton.margins = CGPoint(x: 100, y: 102)
+        view.mapView.ornaments.options.logo.margins = CGPoint(x: 16, y: 190)
+        view.mapView.ornaments.options.attributionButton.position = .bottomLeading
+        view.mapView.ornaments.options.attributionButton.margins = CGPoint(x: 100, y: 188)
         view.update(navigationCameraState: .following)
         show(guidance.routes, in: view, context: context)
         return view
@@ -197,6 +270,10 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
 
     func updateUIView(_ view: NavigationMapView, context: Context) {
         show(guidance.routes, in: view, context: context)
+        if context.coordinator.showsOverview != showsOverview {
+            context.coordinator.showsOverview = showsOverview
+            view.update(navigationCameraState: showsOverview ? .overview : .following)
+        }
         if context.coordinator.light != light {
             view.mapView.mapboxMap.mapStyle = Self.style(light)
             context.coordinator.light = light
