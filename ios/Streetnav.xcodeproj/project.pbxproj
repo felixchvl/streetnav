@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		MBXBLD00000000000000003 /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = MBXDEP00000000000000002 /* MapboxMaps */; };
 		664D4F272C1C476500A68BB1 /* StreetnavApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F262C1C476500A68BB1 /* StreetnavApp.swift */; };
 		664D4F292C1C476500A68BB1 /* StreetnavLegacyDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F282C1C476500A68BB1 /* StreetnavLegacyDemoView.swift */; };
 		664D4F2B2C1C476600A68BB1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 664D4F2A2C1C476600A68BB1 /* Assets.xcassets */; };
@@ -24,6 +25,7 @@
 		STNB0110000000000000011 /* StreetnavPrototypePreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */; };
 		STNB0120000000000000012 /* StreetnavHealthSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0120000000000000012 /* StreetnavHealthSync.swift */; };
 		STNB0130000000000000013 /* StreetnavHealthSyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0130000000000000013 /* StreetnavHealthSyncView.swift */; };
+		STNB0180000000000000018 /* StreetnavMapBenchmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0180000000000000018 /* StreetnavMapBenchmark.swift */; };
 		STNB0170000000000000017 /* StreetnavExplorePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0170000000000000017 /* StreetnavExplorePanel.swift */; };
 		STNB0160000000000000016 /* StreetnavExplorationMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0160000000000000016 /* StreetnavExplorationMap.swift */; };
 		STNB0140000000000000014 /* StreetnavHealthSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0140000000000000014 /* StreetnavHealthSeeder.swift */; };
@@ -50,6 +52,7 @@ STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */ = {isa = PBXFil
 STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavPrototypePreviews.swift; sourceTree = "<group>"; };
 STNP0120000000000000012 /* StreetnavHealthSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSync.swift; sourceTree = "<group>"; };
 STNP0130000000000000013 /* StreetnavHealthSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSyncView.swift; sourceTree = "<group>"; };
+STNP0180000000000000018 /* StreetnavMapBenchmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavMapBenchmark.swift; sourceTree = "<group>"; };
 STNP0170000000000000017 /* StreetnavExplorePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavExplorePanel.swift; sourceTree = "<group>"; };
 STNP0160000000000000016 /* StreetnavExplorationMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavExplorationMap.swift; sourceTree = "<group>"; };
 STNP0140000000000000014 /* StreetnavHealthSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSeeder.swift; sourceTree = "<group>"; };
@@ -61,6 +64,7 @@ STNP0150000000000000015 /* Streetnav.entitlements */ = {isa = PBXFileReference; 
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				MBXBLD00000000000000003 /* MapboxMaps in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -128,7 +132,7 @@ STGRUI000000000000000004 /* UI */ = { isa = PBXGroup; children = ( STGRCOMP00000
 STGRCOMP000000000000000C /* Components */ = { isa = PBXGroup; children = ( STNP0050000000000000005 /* StreetnavComponents.swift */, ); path = Components; sourceTree = "<group>"; };
 STGRDEV00000000000000005 /* Development */ = { isa = PBXGroup; children = ( STGRLEGC000000000000000D /* Legacy */, STGRDEBG000000000000000E /* Debug */, STGRPREV000000000000000F /* Previews */, STGRVARI0000000000000010 /* Variations */, ); path = Development; sourceTree = "<group>"; };
 STGRLEGC000000000000000D /* Legacy */ = { isa = PBXGroup; children = ( 664D4F282C1C476500A68BB1 /* StreetnavLegacyDemoView.swift */, ); path = Legacy; sourceTree = "<group>"; };
-STGRDEBG000000000000000E /* Debug */ = { isa = PBXGroup; children = ( STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */, STNP0140000000000000014 /* StreetnavHealthSeeder.swift */, ); path = Debug; sourceTree = "<group>"; };
+STGRDEBG000000000000000E /* Debug */ = { isa = PBXGroup; children = ( STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */, STNP0140000000000000014 /* StreetnavHealthSeeder.swift */, STNP0180000000000000018 /* StreetnavMapBenchmark.swift */, ); path = Debug; sourceTree = "<group>"; };
 STGRPREV000000000000000F /* Previews */ = { isa = PBXGroup; children = ( STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */, ); path = Previews; sourceTree = "<group>"; };
 STGRVARI0000000000000010 /* Variations */ = { isa = PBXGroup; children = ( STNP0080000000000000008 /* StreetnavPrototypeGallery.swift */, ); path = Variations; sourceTree = "<group>"; };
 STGRHLTH0000000000000011 /* Health */ = { isa = PBXGroup; children = ( STNP0120000000000000012 /* StreetnavHealthSync.swift */, ); path = Health; sourceTree = "<group>"; };
@@ -149,6 +153,9 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 			dependencies = (
 			);
 			name = Streetnav;
+			packageProductDependencies = (
+				MBXDEP00000000000000002 /* MapboxMaps */,
+			);
 			productName = Streetnav;
 			productReference = 664D4F232C1C476500A68BB1 /* Streetnav.app */;
 			productType = "com.apple.product-type.application";
@@ -178,6 +185,7 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 			);
 			mainGroup = 664D4F1A2C1C476500A68BB1;
 			packageReferences = (
+				MBXPKG00000000000000001 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */,
 			);
 			productRefGroup = 664D4F242C1C476500A68BB1 /* Products */;
 			projectDirPath = "";
@@ -218,6 +226,7 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 				STNB0010000000000000001 /* StreetnavRootView.swift in Sources */,
 				STNB0120000000000000012 /* StreetnavHealthSync.swift in Sources */,
 				STNB0130000000000000013 /* StreetnavHealthSyncView.swift in Sources */,
+				STNB0180000000000000018 /* StreetnavMapBenchmark.swift in Sources */,
 				STNB0170000000000000017 /* StreetnavExplorePanel.swift in Sources */,
 				STNB0160000000000000016 /* StreetnavExplorationMap.swift in Sources */,
 				STNB0140000000000000014 /* StreetnavHealthSeeder.swift in Sources */,
@@ -438,6 +447,25 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		MBXPKG00000000000000001 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mapbox/mapbox-maps-ios.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.26.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		MBXDEP00000000000000002 /* MapboxMaps */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = MBXPKG00000000000000001 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */;
+			productName = MapboxMaps;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 664D4F1B2C1C476500A68BB1 /* Project object */;
 }
