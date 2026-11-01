@@ -1,3 +1,4 @@
-// Build settings of the Streetnav app. Secrets such as VANMOOF_API_KEY go in the git-ignored Secrets.xcconfig
-// next to this file (one line: VANMOOF_API_KEY = <key>); the app builds without it, only VanMoof sign-in fails.
+// Build settings of the Streetnav app. Secrets go in the git-ignored Secrets.xcconfig next to this file, one per
+// line: VANMOOF_API_KEY = <key>, GOOGLE_PLACES_API_KEY = <key>. The app builds without them: VanMoof sign-in then
+// fails and the search bar falls back to Apple's suggestions.
 #include? "Secrets.xcconfig"

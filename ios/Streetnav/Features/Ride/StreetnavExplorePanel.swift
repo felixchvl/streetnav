@@ -184,12 +184,15 @@ struct StreetnavExplorePanel: View {
 
     @ViewBuilder
     private var searchResults: some View {
-        if query.isEmpty == false && places.suggestions.isEmpty && places.isLooking == false {
+        if let problem = places.problem {
+            ContentUnavailableView("Recherche indisponible", systemImage: "exclamationmark.magnifyingglass",
+                                   description: Text(problem))
+        } else if query.isEmpty == false && places.suggestions.isEmpty && places.isLooking == false {
             ContentUnavailableView("Aucun résultat", systemImage: "magnifyingglass",
                                    description: Text("Rien ne correspond à « \(query) » autour de toi."))
         } else if places.suggestions.isEmpty == false {
             group {
-                ForEach(Array(places.suggestions.enumerated()), id: \.offset) { index, suggestion in
+                ForEach(Array(places.suggestions.enumerated()), id: \.element.id) { index, suggestion in
                     if index > 0 { separator }
                     Button {
                         choose(suggestion)
@@ -200,10 +203,17 @@ struct StreetnavExplorePanel: View {
                     .buttonStyle(.plain)
                 }
             }
+            if places.usesGoogle {
+                // Google asks for its name next to its suggestions.
+                Text("Suggestions de Google Maps")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
+            }
         }
     }
 
-    private func choose(_ suggestion: MKLocalSearchCompletion) {
+    private func choose(_ suggestion: StreetnavSuggestion) {
         query = ""
         searchFocused = false
         detent = StreetnavExplorePanel.summary
