@@ -2,7 +2,8 @@
 
 Made for the FIT files HealthFit exports from Apple Health (every Apple Watch workout, and those other apps wrote
 to Health), named "YYYY-MM-DD-HHMMSS-<workout type>-<app or device>.fit": the workout type becomes the name and the
-app or device the copy's device. A copy's id is its path relative to the folder. FIT files carry a session summary
+app or device the copy's device. A copy's id is its path relative to the folder, in Unicode NFC (macOS hands
+names decomposed, while tar and others may recompose them). FIT files carry a session summary
 (sport, durations, distance, calories, heart rate, ascent); for GPX and TCX they are computed from the samples.
 Each file is first kept as is in bronze; a file already there with the same content is not stored again.
 
@@ -67,7 +68,7 @@ def parse(external_id: str, parts: dict[str, RawPart]) -> ActivityCopy:
         if stem.lower().endswith(ext):
             stem = stem[: -len(ext)]
             break
-    named = HEALTHFIT_NAME.match(unicodedata.normalize("NFC", stem))  # macOS may hand names decomposed
+    named = HEALTHFIT_NAME.match(unicodedata.normalize("NFC", stem))
 
     if session.get("start_time"):
         started = datetime.fromtimestamp(utc_seconds(session["start_time"]), timezone.utc)
@@ -99,6 +100,10 @@ def parse(external_id: str, parts: dict[str, RawPart]) -> ActivityCopy:
              "sub_sport": str(session.get("sub_sport")) if session else None, "samples": len(samples)})
 
 
+def external_id(root: str, path: str) -> str:
+    return unicodedata.normalize("NFC", os.path.relpath(path, root))
+
+
 def find_files(root: str) -> list[str]:
     found = []
     for dirpath, _, names in os.walk(root):
@@ -124,7 +129,7 @@ def main() -> None:
     try:
         for path in files:
             try:
-                rel = os.path.relpath(path, args.folder)
+                rel = external_id(args.folder, path)
                 with open(path, "rb") as f:
                     data = f.read()
                 if conn is None:
