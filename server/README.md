@@ -118,6 +118,18 @@ Health files (191) or Ride with GPS (10, mostly old entries without GPS). All 2,
 activities match an activity. Six Strava activities were duplicates on Strava itself and share an
 activity with their twin.
 
+## State on 2026-11-01
+
+The three layers were deployed and bronze filled from every source: the Strava archive and website
+streams, HealthFit's 2,452 FIT files, every Ride with GPS trip downloaded again, and the iPhone app's
+« Tout renvoyer ». Bronze: 9,860 versions in 638 MB (Apple Health 2,524, Ride with GPS 2,504, files
+2,452, Strava 2,380); the database grew to 674 MB. Gold, rebuilt from them: the same 2,598 activities
+with the same ids. Of the 2,276 rides, 2,168 take their measures from Apple Health, 59 keep their
+Strava crop and 548 had an idle start or end cut (21 h in all); total distance 15,364 km before,
+15,347 km after. Two quirks were found on the way: macOS and tar disagree on the Unicode form of
+HealthFit file names (ids are now NFC), and some Apple Health workouts hold their route twice (silver
+keeps one sample per instant).
+
 ## Remote access (not enabled yet)
 
 The iPhone reaches the API from anywhere through the home Caddy, without a VPN:
