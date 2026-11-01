@@ -4,8 +4,8 @@ import SwiftUI
 
 /// Mapbox map of the exploration state: streets already ridden, streets left to discover and the planned route.
 ///
-/// The base map is Mapbox Standard in its monochrome theme, without points of interest, so that the streets carry the
-/// information. Its light follows the sun where the rider is (dawn, day, dusk, night), or night in dark mode. Every line is a style layer drawn by the GPU:
+/// The base map is Mapbox Standard in its default colours, without points of interest, seen in 3D like the city outside:
+/// its light follows the sun where the rider is (dawn, day, dusk, night), or night in dark mode. Every line is a style layer drawn by the GPU:
 /// colours, widths and dots are computed per street by the engine, lines glow at night (emissive), stay visible
 /// behind 3D buildings (occlusion opacity), and the route is trimmed as it is ridden. The blue dot is the real
 /// position from Core Location, asked for the first time the map shows it.
@@ -123,8 +123,7 @@ struct StreetnavExplorationMap: View {
 
     private var mapStyle: MapStyle {
         var light: StandardLightPreset = colorScheme == .dark ? .night : sunLight
-        // Monochrome: greys and white only, so that the streets are the only colour on the map.
-        var theme = StandardTheme.monochrome
+        var theme = StandardTheme.default
         #if DEBUG
         // Development: -mapLight dawn|day|dusk|night and -mapTheme default|faded|monochrome to compare looks.
         if let forced = UserDefaults.standard.string(forKey: "mapLight") { light = StandardLightPreset(rawValue: forced) }
@@ -199,20 +198,21 @@ extension StreetnavExplorationMap {
         switch mode {
         case .routePreview, .readiness, .arrived:
             if let route { return focus(on: route.coordinates, padding: 40, bottomInset: bottomInset) }
-            return Viewport.followPuck(zoom: 14.6).padding(.bottom, bottomInset)
+            return Viewport.followPuck(zoom: 15.6, pitch: 50).padding(.bottom, bottomInset)
         case _ where mode.isNavigationLike:
             // Tilted like Maps, turning with the ride: the route stays visible through the buildings (occlusion opacity).
             return Viewport.followPuck(zoom: 17, bearing: .course, pitch: 55).padding(.bottom, bottomInset)
         default:
             #if DEBUG
-            // Development: -mapPitch 60 -mapZoom 16 to look at the light on the buildings in 3D.
+            // Development: -mapPitch 60 -mapZoom 16.2 to try other angles.
             let defaults = UserDefaults.standard
             if defaults.object(forKey: "mapPitch") != nil {
                 return Viewport.followPuck(zoom: defaults.double(forKey: "mapZoom"), bearing: .constant(-25), pitch: defaults.double(forKey: "mapPitch"))
                     .padding(.bottom, bottomInset)
             }
             #endif
-            return Viewport.followPuck(zoom: 14.6).padding(.bottom, bottomInset)
+            // Tilted enough to see the buildings and their light, north still up.
+            return Viewport.followPuck(zoom: 15.6, pitch: 50).padding(.bottom, bottomInset)
         }
     }
 
