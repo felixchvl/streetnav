@@ -4,8 +4,8 @@ import SwiftUI
 
 /// Mapbox map of the exploration state: streets already ridden, streets left to discover and the planned route.
 ///
-/// The base map is Mapbox Standard in its monochrome theme, without points of interest, in day or night light with the
-/// system appearance, so that the streets carry the information. Every line is a style layer drawn by the GPU:
+/// The base map is Mapbox Standard in its monochrome theme, without points of interest, so that the streets carry the
+/// information. Its light follows the sun where the rider is (dawn, day, dusk, night), or night in dark mode. Every line is a style layer drawn by the GPU:
 /// colours, widths and dots are computed per street by the engine, lines glow at night (emissive), stay visible
 /// behind 3D buildings (occlusion opacity), and the route is trimmed as it is ridden. The blue dot is the real
 /// position from Core Location, asked for the first time the map shows it.
@@ -20,6 +20,7 @@ struct StreetnavExplorationMap: View {
     var recenter: () -> Void = {}
 
     @State private var look: Look = .standard
+    @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -29,6 +30,7 @@ struct StreetnavExplorationMap: View {
                 .onStyleLoaded { _ in try? proxy.map?.localizeLabels(into: Locale(identifier: "fr")) }
         }
         .ignoresSafeArea()
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { sunLight = StreetnavSunlight.preset(at: $0) }
         .overlay(alignment: .topTrailing) {
             // During the ride the manoeuvre card owns the top of the screen.
             if mode.isNavigationLike == false {
@@ -120,11 +122,17 @@ struct StreetnavExplorationMap: View {
     }
 
     private var mapStyle: MapStyle {
-        let light: StandardLightPreset = colorScheme == .dark ? .night : .day
+        var light: StandardLightPreset = colorScheme == .dark ? .night : sunLight
+        // Monochrome: greys and white only, so that the streets are the only colour on the map.
+        var theme = StandardTheme.monochrome
+        #if DEBUG
+        // Development: -mapLight dawn|day|dusk|night and -mapTheme default|faded|monochrome to compare looks.
+        if let forced = UserDefaults.standard.string(forKey: "mapLight") { light = StandardLightPreset(rawValue: forced) }
+        if let forced = UserDefaults.standard.string(forKey: "mapTheme") { theme = StandardTheme(rawValue: forced) }
+        #endif
         switch look {
         case .standard:
-            // Monochrome: greys and white only, so that the streets are the only colour on the map.
-            return .standard(theme: .monochrome, lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false,
+            return .standard(theme: theme, lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false,
                              showPlaceLabels: true, showRoadLabels: true, showPedestrianRoads: true, show3dObjects: true)
         case .satellite:
             return .standardSatellite(lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false)
@@ -196,6 +204,14 @@ extension StreetnavExplorationMap {
             // Tilted like Maps, turning with the ride: the route stays visible through the buildings (occlusion opacity).
             return Viewport.followPuck(zoom: 17, bearing: .course, pitch: 55).padding(.bottom, bottomInset)
         default:
+            #if DEBUG
+            // Development: -mapPitch 60 -mapZoom 16 to look at the light on the buildings in 3D.
+            let defaults = UserDefaults.standard
+            if defaults.object(forKey: "mapPitch") != nil {
+                return Viewport.followPuck(zoom: defaults.double(forKey: "mapZoom"), bearing: .constant(-25), pitch: defaults.double(forKey: "mapPitch"))
+                    .padding(.bottom, bottomInset)
+            }
+            #endif
             return Viewport.followPuck(zoom: 14.6).padding(.bottom, bottomInset)
         }
     }
@@ -259,5 +275,36 @@ extension StreetExplorationStatus {
         case .planned, .completedDuringRide: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
         case .uncertain: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round, dash: [4, 4])
         }
+    }
+}
+
+/// Where the sun stands for the rider, to light the map like the sky outside.
+enum StreetnavSunlight {
+    private static let location = CLLocationManager()
+
+    /// Night under 6° below the horizon (end of civil twilight), dawn or dusk up to 6° above it, day higher.
+    static func preset(at date: Date) -> StandardLightPreset {
+        // Paris until a position is known: close enough for the sun anywhere in France.
+        let coordinate = location.location?.coordinate ?? StreetnavMockData.parisCenter
+        let now = elevation(at: date, of: coordinate)
+        if now < -6 { return .night }
+        if now > 6 { return .day }
+        return elevation(at: date.addingTimeInterval(600), of: coordinate) > now ? .dawn : .dusk
+    }
+
+    /// Sun elevation in degrees, with the Astronomical Almanac's low-precision formulas (about 0.01° off until 2050).
+    static func elevation(at date: Date, of coordinate: CLLocationCoordinate2D) -> Double {
+        let radians = Double.pi / 180
+        let days = date.timeIntervalSince1970 / 86_400 - 10_957.5  // since 2000-01-01 12:00 UTC
+        let meanLongitude = 280.460 + 0.985_647_4 * days
+        let meanAnomaly = (357.528 + 0.985_600_3 * days) * radians
+        let eclipticLongitude = (meanLongitude + 1.915 * sin(meanAnomaly) + 0.020 * sin(2 * meanAnomaly)) * radians
+        let obliquity = (23.439 - 0.000_000_4 * days) * radians
+        let declination = asin(sin(obliquity) * sin(eclipticLongitude))
+        let rightAscension = atan2(cos(obliquity) * sin(eclipticLongitude), cos(eclipticLongitude))
+        let siderealTime = (280.460_618_37 + 360.985_647_366_29 * days + coordinate.longitude) * radians
+        let hourAngle = siderealTime - rightAscension
+        let latitude = coordinate.latitude * radians
+        return asin(sin(latitude) * sin(declination) + cos(latitude) * cos(declination) * cos(hourAngle)) / radians
     }
 }
