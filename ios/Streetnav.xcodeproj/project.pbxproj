@@ -10,6 +10,7 @@
 		MBXBLD00000000000000003 /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = MBXDEP00000000000000002 /* MapboxMaps */; };
 		664D4F272C1C476500A68BB1 /* StreetnavApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F262C1C476500A68BB1 /* StreetnavApp.swift */; };
 		664D4F292C1C476500A68BB1 /* StreetnavLegacyDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F282C1C476500A68BB1 /* StreetnavLegacyDemoView.swift */; };
+		STNB0190000000000000019 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = STNP0190000000000000019 /* AppIcon.icon */; };
 		664D4F2B2C1C476600A68BB1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 664D4F2A2C1C476600A68BB1 /* Assets.xcassets */; };
 		664D4F2E2C1C476600A68BB1 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 664D4F2D2C1C476600A68BB1 /* Preview Assets.xcassets */; };
 		STNB0010000000000000001 /* StreetnavRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0010000000000000001 /* StreetnavRootView.swift */; };
@@ -36,6 +37,7 @@
 		664D4F232C1C476500A68BB1 /* Streetnav.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Streetnav.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		664D4F262C1C476500A68BB1 /* StreetnavApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavApp.swift; sourceTree = "<group>"; };
 		664D4F282C1C476500A68BB1 /* StreetnavLegacyDemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavLegacyDemoView.swift; sourceTree = "<group>"; };
+		STNP0190000000000000019 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		664D4F2A2C1C476600A68BB1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		664D4F2D2C1C476600A68BB1 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		664D4F342C1C488A00A68BB1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -99,6 +101,7 @@ STNP0150000000000000015 /* Streetnav.entitlements */ = {isa = PBXFileReference; 
 		664D4F342C1C488A00A68BB1 /* Info.plist */,
 		STNP0150000000000000015 /* Streetnav.entitlements */,
 		664D4F2A2C1C476600A68BB1 /* Assets.xcassets */,
+		STNP0190000000000000019 /* AppIcon.icon */,
 		664D4F2C2C1C476600A68BB1 /* Preview Content */,
 	);
 	path = Streetnav;
@@ -203,6 +206,7 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 			files = (
 				664D4F2E2C1C476600A68BB1 /* Preview Assets.xcassets in Resources */,
 				664D4F2B2C1C476600A68BB1 /* Assets.xcassets in Resources */,
+				STNB0190000000000000019 /* AppIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

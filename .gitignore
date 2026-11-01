@@ -15,3 +15,6 @@ xcuserdata/
 # Generated local tool outputs
 tools/**/outputs/*
 !tools/**/outputs/.gitkeep
+
+# SF Symbol glyph of the app icon, rendered locally by ios/tools/app-icon-glyph.swift (not redistributable)
+ios/Streetnav/AppIcon.icon/Assets/Glyph.png
