@@ -148,6 +148,14 @@ class LayersTest(unittest.TestCase):
         self.assertEqual(snapshot(), before)
         self.assertEqual(layers.rebuild_gold(None, ignore_pending=False, dry_run=False), {"unchanged": 2})
 
+    def test_a_route_sent_twice_is_kept_once(self):
+        payload = workout()
+        payload["points"] = payload["points"] + payload["points"]  # the workout holds two copies of its route
+        activity_id, _ = self.push(payload)
+        version, _ = gold.load_versions(self.conn, activity_id)[0]
+        self.assertEqual([p[3] for p in version.points], sorted({p[3] for p in version.points}))
+        self.assertEqual(len(version.points), 31)
+
     def test_tracks_read_back_from_silver(self):
         activity_id, _ = self.push(workout())
         version, parsed = gold.load_versions(self.conn, activity_id)[0]

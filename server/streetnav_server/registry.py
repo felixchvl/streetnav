@@ -54,6 +54,13 @@ class ActivityCopy:
     raw: dict | None = None
 
 
+def in_time_order(samples: list[tuple], t: int) -> list[tuple]:
+    """Samples sorted by time, one per instant. Some Apple Health workouts hold their route twice, which the app
+    sends one after the other: read as is, the track would run to the end and back to the start."""
+    seen: set = set()
+    return [s for s in sorted(samples, key=lambda s: s[t]) if not (s[t] in seen or seen.add(s[t]))]
+
+
 def track_wkt(points) -> str | None:
     pts = [p for p in points if p[0] is not None and p[1] is not None]
     if len(pts) < 2:
@@ -68,6 +75,7 @@ def upsert(conn: psycopg.Connection, copy: ActivityCopy, raw_file_ids: list[int]
     `rebuild` is False. `raw_file_ids` are the bronze files it was read from (None: not read from bronze, so it does
     not count for gold yet). Returns (activity id, 'created' | 'merged' | 'updated')."""
     from . import gold
+    points, heart_rate = in_time_order(copy.points, 3), in_time_order(copy.heart_rate, 0)
     with conn.cursor() as cur:
         # One writer at a time decides which activity a version belongs to: the app, the timer and an import
         # running together cannot create the same activity twice.
@@ -116,8 +124,8 @@ def upsert(conn: psycopg.Connection, copy: ActivityCopy, raw_file_ids: list[int]
                     parsed_at = EXCLUDED.parsed_at, fetched_at = now()""",
             {**{k: getattr(copy, k) for k in METRICS}, "source": copy.source, "external_id": copy.external_id,
              "activity_id": activity_id, "started_at": copy.started_at, "device": copy.device,
-             "raw": json.dumps(copy.raw) if copy.raw is not None else None, "track": track_wkt(copy.points),
-             "hr_t": [t for t, _ in copy.heart_rate] or None, "hr_bpm": [b for _, b in copy.heart_rate] or None,
+             "raw": json.dumps(copy.raw) if copy.raw is not None else None, "track": track_wkt(points),
+             "hr_t": [t for t, _ in heart_rate] or None, "hr_bpm": [b for _, b in heart_rate] or None,
              "raw_file_ids": raw_file_ids, "parsed": raw_file_ids is not None})
     if rebuild:
         gold.rebuild_activity(conn, activity_id)
