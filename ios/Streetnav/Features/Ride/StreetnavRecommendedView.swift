@@ -7,8 +7,12 @@ struct StreetnavRecommendedView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentedSheet: StreetnavSheet?
     @State private var showsEndConfirmation = false
-    @State private var viewport = StreetnavExplorationMap.viewport(for: .home, route: nil, position: StreetnavMockData.parisCenter)
+    /// Paris until the first position comes in (or if it is refused), rather than the whole globe.
+    @State private var viewport = Viewport.camera(center: StreetnavMockData.parisCenter, zoom: 12.5).padding(.bottom, 292)
     @State private var panelDetent = StreetnavExplorePanel.summary
+    /// Top of the panel and bottom of the safe area, in screen points, followed while the panel is dragged.
+    @State private var panelTop: CGFloat?
+    @State private var safeAreaBottom: CGFloat = 0
     private let embedded: Bool
 
     init(embedded: Bool = false) {
@@ -21,17 +25,15 @@ struct StreetnavRecommendedView: View {
         self.embedded = embedded
     }
 
-    private var position: CLLocationCoordinate2D { StreetnavMockData.parisCenter }
-
     var body: some View {
         ZStack {
             StreetnavExplorationMap(
-                segments: model.streets,
+                // Which streets were ridden is not computed from the real rides yet: no made-up streets meanwhile.
+                segments: [],
                 route: model.flowState == .home || model.flowState == .planner ? nil : model.route,
                 mode: model.flowState,
-                position: position,
                 routeProgress: model.flowState.isNavigationLike ? model.rideProgress.routeProgress : 0,
-                bottomInset: mapBottomInset,
+                panelOverlap: panelTop.map { max(0, safeAreaBottom - $0) } ?? cameraInset,
                 viewport: $viewport,
                 recenter: recenter
             )
@@ -45,9 +47,14 @@ struct StreetnavRecommendedView: View {
                 if embedded { embeddedPanel }
             }
         }
-        .task { await model.load() }
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { safeAreaBottom = $0 }
+        .task {
+            recenter()
+            await model.load()
+        }
         .sheet(isPresented: panelIsPresented) {
             StreetnavExplorePanel(model: model, presentedSheet: $presentedSheet, detent: $panelDetent, focus: focus(on:))
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { panelTop = $0 }
                 .presentationDetents(StreetnavExplorePanel.detents(for: model.flowState), selection: $panelDetent)
                 .presentationBackgroundInteraction(.enabled(upThrough: StreetnavExplorePanel.preferredDetent(for: model.flowState)))
                 .presentationDragIndicator(.visible)
@@ -59,7 +66,7 @@ struct StreetnavRecommendedView: View {
         .onChange(of: model.route.id) {
             guard model.flowState.isRouteStep else { return }
             withViewportAnimation(.easeInOut(duration: 0.6)) {
-                viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, position: position)
+                viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset)
             }
         }
         .alert("Terminer la sortie ?", isPresented: $showsEndConfirmation) {
@@ -89,15 +96,15 @@ struct StreetnavRecommendedView: View {
         }
     }
 
-    /// Keeps what the camera frames above the panel.
-    private var mapBottomInset: CGFloat {
+    /// What the camera keeps clear at the bottom: the panel at the height the step opens it at, or the arrival card.
+    /// It does not follow the panel while it is dragged, so the map stays still, as in Maps.
+    private var cameraInset: CGFloat {
         if model.flowState == .arrived { return 430 }
         if model.flowState.isNavigationLike { return 0 }
         if embedded { return 300 }
-        switch panelDetent {
-        case StreetnavExplorePanel.collapsed: return 92
-        case StreetnavExplorePanel.route: return 452
-        case StreetnavExplorePanel.readiness: return 386
+        switch model.flowState {
+        case .routePreview: return 452
+        case .readiness: return 386
         default: return 292
         }
     }
@@ -106,21 +113,22 @@ struct StreetnavRecommendedView: View {
         if newState == .routePreview, presentedSheet == .planner { presentedSheet = nil }
         let preferred = StreetnavExplorePanel.preferredDetent(for: newState)
         if preferred != StreetnavExplorePanel.preferredDetent(for: oldState) { panelDetent = preferred }
-        withViewportAnimation(.easeInOut(duration: 0.8)) {
-            viewport = StreetnavExplorationMap.viewport(for: newState, route: model.route, position: position)
+        // The default animation is the one that keeps up with a moving position.
+        withViewportAnimation(.default(maxDuration: 0.8)) {
+            viewport = StreetnavExplorationMap.viewport(for: newState, route: model.route, bottomInset: cameraInset)
         }
     }
 
     private func recenter() {
-        withViewportAnimation(.easeInOut(duration: 0.5)) {
-            viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, position: position)
+        withViewportAnimation(.default(maxDuration: 0.5)) {
+            viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset)
         }
     }
 
     private func focus(on coordinates: [CLLocationCoordinate2D]) {
         if panelDetent == .large { panelDetent = StreetnavExplorePanel.preferredDetent(for: model.flowState) }
         withViewportAnimation(.easeInOut(duration: 0.6)) {
-            viewport = StreetnavExplorationMap.focus(on: coordinates)
+            viewport = StreetnavExplorationMap.focus(on: coordinates, bottomInset: cameraInset)
         }
     }
 

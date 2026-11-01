@@ -25,6 +25,7 @@ struct StreetnavExplorePanel: View {
     var focus: ([CLLocationCoordinate2D]) -> Void = { _ in }
 
     @State private var query = ""
+    @State private var visibleHeight = CGFloat.greatestFiniteMagnitude
     @FocusState private var searchFocused: Bool
     @Environment(\.openURL) private var openURL
 
@@ -55,6 +56,7 @@ struct StreetnavExplorePanel: View {
                     content
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
                 // Fully open, the panel turns into a grouped list, like a sheet in Maps: grey ground, white groups.
                 .background(Color(.systemGroupedBackground).opacity(detent == .large ? 1 : 0).ignoresSafeArea())
                 .animation(.easeInOut(duration: 0.2), value: detent)
@@ -97,12 +99,18 @@ struct StreetnavExplorePanel: View {
                     readinessContent
                 default:
                     homeContent
+                        .opacity(homeOpacity)
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, embedded ? 16 : 20)
         .padding(.bottom, 24)
+    }
+
+    /// Lowered to the search row, the neighbourhood's card fades out with the panel instead of being cut by it.
+    private var homeOpacity: Double {
+        embedded ? 1 : min(1, max(0, (visibleHeight - 110) / 90))
     }
 
     // MARK: Search

@@ -7,14 +7,15 @@ import SwiftUI
 /// The base map is Mapbox Standard in its monochrome theme, without points of interest, in day or night light with the
 /// system appearance, so that the streets carry the information. Every line is a style layer drawn by the GPU:
 /// colours, widths and dots are computed per street by the engine, lines glow at night (emissive), stay visible
-/// behind 3D buildings (occlusion opacity), and the route is trimmed as it is ridden.
+/// behind 3D buildings (occlusion opacity), and the route is trimmed as it is ridden. The blue dot is the real
+/// position from Core Location, asked for the first time the map shows it.
 struct StreetnavExplorationMap: View {
     let segments: [ExplorationStreetSegment]
     let route: StreetnavRoute?
     let mode: PrototypeFlowState
-    let position: CLLocationCoordinate2D
     var routeProgress: Double = 0
-    var bottomInset: CGFloat = 0
+    /// How far the panel rises above the bottom of the safe area, live while it is dragged: Mapbox's logo sits on it.
+    var panelOverlap: CGFloat = 0
     @Binding var viewport: Viewport
     var recenter: () -> Void = {}
 
@@ -86,20 +87,28 @@ struct StreetnavExplorationMap: View {
                     .lineTrimColor(UIColor(white: 0.55, alpha: 0.5))
             }
 
-            MapViewAnnotation(coordinate: position) {
-                StreetnavPositionPuck(showsHeading: mode.isNavigationLike)
-            }
-            .allowOverlap(true)
+            // Where the phone points while exploring, where the bike goes while riding.
+            Puck2D(bearing: mode.isNavigationLike ? .course : .heading)
+                .showsAccuracyRing(true)
         }
         .mapStyle(mapStyle)
         .ornamentOptions(OrnamentOptions(
             scaleBar: ScaleBarViewOptions(visibility: .hidden),
             compass: CompassViewOptions(position: .topTrailing, margins: CGPoint(x: 16, y: 112), visibility: .adaptive),
-            // Mapbox's logo and credits must stay visible: above the ride controls while navigating.
-            logo: LogoViewOptions(position: .bottomLeading, margins: CGPoint(x: 12, y: mode == .paused ? 296 : mode.isNavigationLike ? 236 : 8)),
-            attributionButton: AttributionButtonOptions(position: .bottomLeading, margins: CGPoint(x: 96, y: mode == .paused ? 294 : mode.isNavigationLike ? 234 : 6))
+            // Mapbox's logo and credits must stay visible: just above the panel or the ride controls.
+            logo: LogoViewOptions(position: .bottomLeading, margins: CGPoint(x: 12, y: logoLift)),
+            attributionButton: AttributionButtonOptions(position: .bottomLeading, margins: CGPoint(x: 96, y: logoLift - 2))
         ))
-        .additionalSafeAreaInsets(.bottom, bottomInset)
+    }
+
+    private var logoLift: CGFloat {
+        switch mode {
+        case .paused: 296
+        case .arrived: 438
+        case _ where mode.isNavigationLike: 236
+        // Behind the panel when it is fully open, where the map is hidden anyway.
+        default: min(panelOverlap, 600) + 8
+        }
     }
 
     private var accent: UIColor {
@@ -177,22 +186,23 @@ struct StreetnavExplorationMap: View {
 }
 
 extension StreetnavExplorationMap {
-    /// Where the camera goes for each step of the flow.
-    static func viewport(for mode: PrototypeFlowState, route: StreetnavRoute?, position: CLLocationCoordinate2D) -> Viewport {
+    /// Where the camera goes for each step of the flow, keeping `bottomInset` points clear for the panel or the cards.
+    static func viewport(for mode: PrototypeFlowState, route: StreetnavRoute?, bottomInset: CGFloat) -> Viewport {
         switch mode {
         case .routePreview, .readiness, .arrived:
-            if let route { return focus(on: route.coordinates, padding: 40) }
-            return .camera(center: position, zoom: 14.6)
+            if let route { return focus(on: route.coordinates, padding: 40, bottomInset: bottomInset) }
+            return Viewport.followPuck(zoom: 14.6).padding(.bottom, bottomInset)
         case _ where mode.isNavigationLike:
-            // Tilted like Maps: the route stays visible through the buildings (occlusion opacity).
-            return .camera(center: position, zoom: 17, bearing: 28, pitch: 55)
+            // Tilted like Maps, turning with the ride: the route stays visible through the buildings (occlusion opacity).
+            return Viewport.followPuck(zoom: 17, bearing: .course, pitch: 55).padding(.bottom, bottomInset)
         default:
-            return .camera(center: position, zoom: 14.6, bearing: 0, pitch: 0)
+            return Viewport.followPuck(zoom: 14.6).padding(.bottom, bottomInset)
         }
     }
 
-    static func focus(on coordinates: [CLLocationCoordinate2D], padding: CGFloat = 60) -> Viewport {
-        .overview(geometry: LineString(coordinates), geometryPadding: EdgeInsets(top: padding, leading: padding, bottom: padding, trailing: padding))
+    static func focus(on coordinates: [CLLocationCoordinate2D], padding: CGFloat = 60, bottomInset: CGFloat = 0) -> Viewport {
+        Viewport.overview(geometry: LineString(coordinates), geometryPadding: EdgeInsets(top: padding, leading: padding, bottom: padding, trailing: padding))
+            .padding(.bottom, bottomInset)
     }
 
     static func streetsSource(_ segments: [ExplorationStreetSegment]) -> GeoJSONSource {
@@ -249,31 +259,5 @@ extension StreetExplorationStatus {
         case .planned, .completedDuringRide: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
         case .uncertain: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round, dash: [4, 4])
         }
-    }
-}
-
-/// The blue dot of the Maps app, with an arrow while riding.
-private struct StreetnavPositionPuck: View {
-    var showsHeading: Bool
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(.blue.opacity(0.16))
-                .frame(width: 46, height: 46)
-            Circle()
-                .fill(.white)
-                .frame(width: 24, height: 24)
-                .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
-            Circle()
-                .fill(.blue)
-                .frame(width: 17, height: 17)
-            if showsHeading {
-                Image(systemName: "location.north.fill")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-        }
-        .accessibilityLabel("Ma position")
     }
 }
