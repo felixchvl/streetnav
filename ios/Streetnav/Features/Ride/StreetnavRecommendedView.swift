@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 struct StreetnavRecommendedView: View {
     @StateObject private var model: StreetnavPrototypeViewModel
+    @StateObject private var places = StreetnavPlaceSearch()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentedSheet: StreetnavSheet?
     @State private var showsEndConfirmation = false
@@ -32,6 +33,8 @@ struct StreetnavRecommendedView: View {
                 segments: [],
                 route: model.flowState == .home || model.flowState == .planner ? nil : model.route,
                 mode: model.flowState,
+                place: model.flowState == .home ? places.place : nil,
+                placeRoute: model.flowState == .home ? places.route?.coordinates : nil,
                 routeProgress: model.flowState.isNavigationLike ? model.rideProgress.routeProgress : 0,
                 panelOverlap: panelTop.map { max(0, safeAreaBottom - $0) } ?? cameraInset,
                 viewport: $viewport,
@@ -53,7 +56,7 @@ struct StreetnavRecommendedView: View {
             await model.load()
         }
         .sheet(isPresented: panelIsPresented) {
-            StreetnavExplorePanel(model: model, presentedSheet: $presentedSheet, detent: $panelDetent, focus: focus(on:))
+            StreetnavExplorePanel(model: model, places: places, presentedSheet: $presentedSheet, detent: $panelDetent, focus: focus(on:))
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { panelTop = $0 }
                 .presentationDetents(StreetnavExplorePanel.detents(for: model.flowState), selection: $panelDetent)
                 .presentationBackgroundInteraction(.enabled(upThrough: StreetnavExplorePanel.preferredDetent(for: model.flowState)))
@@ -62,6 +65,18 @@ struct StreetnavRecommendedView: View {
         }
         .onChange(of: model.flowState) { oldState, newState in
             flowChanged(from: oldState, to: newState)
+        }
+        .onChange(of: places.place) { _, place in
+            guard let place else { return recenter() }
+            withViewportAnimation(.default(maxDuration: 0.8)) {
+                viewport = Viewport.camera(center: place.coordinate, zoom: 16, pitch: 50).padding(.bottom, cameraInset)
+            }
+        }
+        .onChange(of: places.route) { _, route in
+            guard let route else { return }
+            withViewportAnimation(.easeInOut(duration: 0.8)) {
+                viewport = StreetnavExplorationMap.focus(on: route.coordinates, padding: 50, bottomInset: cameraInset)
+            }
         }
         .onChange(of: model.route.id) {
             guard model.flowState.isRouteStep else { return }
@@ -89,7 +104,7 @@ struct StreetnavRecommendedView: View {
     private var embeddedPanel: some View {
         VStack {
             Spacer()
-            StreetnavExplorePanel(model: model, presentedSheet: $presentedSheet, detent: $panelDetent, embedded: true, focus: focus(on:))
+            StreetnavExplorePanel(model: model, places: places, presentedSheet: $presentedSheet, detent: $panelDetent, embedded: true, focus: focus(on:))
                 .streetnavGlass(in: RoundedRectangle(cornerRadius: 32, style: .continuous))
                 .padding(.horizontal, 10)
                 .padding(.bottom, 8)

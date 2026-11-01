@@ -1,4 +1,5 @@
 import CoreLocation
+import MapKit
 import SwiftUI
 
 /// Sheets presented over the map screen.
@@ -19,6 +20,7 @@ enum StreetnavSheet: Identifiable {
 /// map, or inline when the screen is embedded in a development tool. Follows the « Streetnav — Design » Figma file.
 struct StreetnavExplorePanel: View {
     @ObservedObject var model: StreetnavPrototypeViewModel
+    @ObservedObject var places: StreetnavPlaceSearch
     @Binding var presentedSheet: StreetnavSheet?
     @Binding var detent: PresentationDetent
     var embedded = false
@@ -91,6 +93,8 @@ struct StreetnavExplorePanel: View {
 
             if isSearching {
                 searchResults
+            } else if let place = places.place, model.flowState.isRouteStep == false {
+                placeContent(place)
             } else {
                 switch model.flowState {
                 case .routePreview:
@@ -122,10 +126,14 @@ struct StreetnavExplorePanel: View {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Rechercher une rue", text: $query)
+                TextField("Rechercher un lieu", text: $query)
                     .focused($searchFocused)
                     .submitLabel(.search)
                     .autocorrectionDisabled()
+                    .onChange(of: query) { _, text in places.update(query: text) }
+                    .onSubmit {
+                        if let first = places.suggestions.first { choose(first) }
+                    }
                 if query.isEmpty == false {
                     Button {
                         query = ""
@@ -170,22 +178,78 @@ struct StreetnavExplorePanel: View {
         }
     }
 
+    @ViewBuilder
     private var searchResults: some View {
-        let matches = model.streets
-            .filter { query.isEmpty || $0.name.localizedStandardContains(query) }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        return Group {
-            if matches.isEmpty {
-                ContentUnavailableView.search(text: query)
-            } else {
-                section("Rues") {
-                    ForEach(Array(matches.enumerated()), id: \.element.id) { index, street in
-                        if index > 0 { separator }
-                        streetRow(street, detail: "\(street.status.label.capitalizedFirst) · \(kilometers(street.lengthMeters)) km")
+        if query.isEmpty == false && places.suggestions.isEmpty && places.isLooking == false {
+            ContentUnavailableView("Aucun résultat", systemImage: "magnifyingglass",
+                                   description: Text("Rien ne correspond à « \(query) » autour de toi."))
+        } else if places.suggestions.isEmpty == false {
+            group {
+                ForEach(Array(places.suggestions.enumerated()), id: \.offset) { index, suggestion in
+                    if index > 0 { separator }
+                    Button {
+                        choose(suggestion)
+                    } label: {
+                        row(symbol: "mappin", title: suggestion.title,
+                            detail: suggestion.subtitle.isEmpty ? nil : suggestion.subtitle)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    private func choose(_ suggestion: MKLocalSearchCompletion) {
+        query = ""
+        searchFocused = false
+        detent = StreetnavExplorePanel.summary
+        Task { await places.choose(suggestion) }
+    }
+
+    // MARK: Place
+
+    private func placeContent(_ place: StreetnavPlace) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            header(place.name, subtitle: placeSubtitle(place), close: "Fermer le lieu") { places.clear() }
+
+            group {
+                HStack(spacing: 12) {
+                    Image(systemName: "bicycle")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28)
+                    if let route = places.route {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(Duration.seconds(route.durationSeconds).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated)))
+                                .font(.headline)
+                            Text("À vélo · \(kilometers(route.distanceMeters / 1000)) km")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if places.routeFailed {
+                        Text("Itinéraire vélo indisponible")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ProgressView()
+                        Text("Calcul de l'itinéraire vélo…")
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .frame(minHeight: 64)
+            }
+
+            // Maps guides the ride until Streetnav has its own guidance.
+            primaryButton("Y aller", symbol: "arrow.triangle.turn.up.right.diamond.fill") { places.openInMaps() }
+        }
+    }
+
+    private func placeSubtitle(_ place: StreetnavPlace) -> String {
+        guard let meters = places.distanceFromHere else { return place.address }
+        let distance = Measurement(value: meters, unit: UnitLength.meters)
+            .formatted(.measurement(width: .abbreviated, usage: .road))
+        return place.address.isEmpty ? "À \(distance)" : "\(place.address) · \(distance)"
     }
 
     // MARK: Home

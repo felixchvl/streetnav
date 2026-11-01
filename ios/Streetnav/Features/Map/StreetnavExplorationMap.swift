@@ -13,6 +13,9 @@ struct StreetnavExplorationMap: View {
     let segments: [ExplorationStreetSegment]
     let route: StreetnavRoute?
     let mode: PrototypeFlowState
+    /// A place found by the search bar, and the bike route to it.
+    var place: StreetnavPlace?
+    var placeRoute: [CLLocationCoordinate2D]?
     var routeProgress: Double = 0
     /// How far the panel rises above the bottom of the safe area, live while it is dragged: Mapbox's logo sits on it.
     var panelOverlap: CGFloat = 0
@@ -64,29 +67,25 @@ struct StreetnavExplorationMap: View {
                 .lineWidth(Self.zoomed(2, 4, 9))
 
             if let route {
-                Self.routeSource(route)
-                // A soft halo under the route, as in Maps during navigation.
-                LineLayer(id: "itineraire-halo", source: "itineraire")
-                    .slot(.middle)
-                    .lineCap(.round).lineJoin(.round)
-                    .lineColor(accent)
-                    .lineOpacity(0.18)
-                    .lineBlur(Self.zoomed(4, 8, 14))
-                    .lineWidth(Self.zoomed(10, 20, 36))
-                    .lineEmissiveStrength(1)
-                    .lineOcclusionOpacity(0.2)
-                LineLayer(id: "itineraire", source: "itineraire")
-                    .slot(.middle)
-                    .lineCap(.round).lineJoin(.round)
-                    .lineColor(accent)
-                    .lineBorderColor(colorScheme == .dark ? UIColor(white: 0, alpha: 0.45) : UIColor(white: 1, alpha: 0.9))
-                    .lineBorderWidth(1.5)
-                    .lineWidth(Self.zoomed(7, 11, 18))
-                    .lineEmissiveStrength(1)
-                    .lineOcclusionOpacity(0.5)
+                Self.lineSource("itineraire", route.coordinates)
+                routeHalo("itineraire-halo", source: "itineraire")
+                routeLine("itineraire", source: "itineraire")
                     // The part already ridden fades out, as in Maps.
                     .lineTrimOffset(start: 0, end: max(0, min(1, routeProgress)))
                     .lineTrimColor(UIColor(white: 0.55, alpha: 0.5))
+            }
+
+            if let placeRoute {
+                Self.lineSource("trajet-lieu", placeRoute)
+                routeHalo("trajet-lieu-halo", source: "trajet-lieu")
+                routeLine("trajet-lieu", source: "trajet-lieu")
+            }
+            if let place {
+                MapViewAnnotation(coordinate: place.coordinate) {
+                    StreetnavPlacePin(symbol: place.symbol)
+                }
+                .allowOverlap(true)
+                .variableAnchors([ViewAnnotationAnchorConfig(anchor: .bottom)])
             }
 
             // Where the phone points while exploring, where the bike goes while riding.
@@ -136,6 +135,31 @@ struct StreetnavExplorationMap: View {
         case .satellite:
             return .standardSatellite(lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false)
         }
+    }
+
+    /// A soft halo under a route, as in Maps during navigation.
+    private func routeHalo(_ id: String, source: String) -> LineLayer {
+        LineLayer(id: id, source: source)
+            .slot(.middle)
+            .lineCap(.round).lineJoin(.round)
+            .lineColor(accent)
+            .lineOpacity(0.18)
+            .lineBlur(Self.zoomed(4, 8, 14))
+            .lineWidth(Self.zoomed(10, 20, 36))
+            .lineEmissiveStrength(1)
+            .lineOcclusionOpacity(0.2)
+    }
+
+    private func routeLine(_ id: String, source: String) -> LineLayer {
+        LineLayer(id: id, source: source)
+            .slot(.middle)
+            .lineCap(.round).lineJoin(.round)
+            .lineColor(accent)
+            .lineBorderColor(colorScheme == .dark ? UIColor(white: 0, alpha: 0.45) : UIColor(white: 1, alpha: 0.9))
+            .lineBorderWidth(1.5)
+            .lineWidth(Self.zoomed(7, 11, 18))
+            .lineEmissiveStrength(1)
+            .lineOcclusionOpacity(0.5)
     }
 
     private func streetLayer(_ id: String, status: StreetExplorationStatus) -> LineLayer {
@@ -231,9 +255,9 @@ extension StreetnavExplorationMap {
         return source
     }
 
-    static func routeSource(_ route: StreetnavRoute) -> GeoJSONSource {
-        var source = GeoJSONSource(id: "itineraire")
-        source.data = .geometry(.lineString(LineString(route.coordinates)))
+    static func lineSource(_ id: String, _ coordinates: [CLLocationCoordinate2D]) -> GeoJSONSource {
+        var source = GeoJSONSource(id: id)
+        source.data = .geometry(.lineString(LineString(coordinates)))
         // Needed for the trim of the part already ridden.
         source.lineMetrics = true
         return source
@@ -256,6 +280,29 @@ extension StreetnavExplorationMap {
 
 extension Color {
     static let streetnavRoute = Color.blue
+}
+
+/// The pin of a place found by the search bar, like the ones in Maps: its category's symbol in a red balloon.
+private struct StreetnavPlacePin: View {
+    let symbol: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(.red))
+                .overlay(Circle().stroke(.white, lineWidth: 2))
+            Image(systemName: "triangle.fill")
+                .font(.system(size: 9))
+                .foregroundStyle(.red)
+                .rotationEffect(.degrees(180))
+                .offset(y: -3)
+        }
+        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+        .accessibilityLabel("Lieu recherché")
+    }
 }
 
 extension StreetExplorationStatus {
