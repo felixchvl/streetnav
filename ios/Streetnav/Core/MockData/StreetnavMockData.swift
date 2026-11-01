@@ -27,7 +27,7 @@ enum StreetnavMockData {
         lastStravaSyncText: "il y a 6 min",
         importedRideCount: 184,
         wandrerConnected: true,
-        wandrerFreshnessText: "mis a jour il y a 2 jours",
+        wandrerFreshnessText: "mis à jour il y a 2 jours",
         missingNearbyStreets: 38,
         isOffline: false
     )
@@ -106,9 +106,9 @@ enum StreetnavMockData {
             .init(distanceText: "Dans 1,1 km", maneuver: "Prends la piste", streetName: "Boulevard Voltaire", symbolName: "bicycle", spokenLabel: "Prends la piste cyclable boulevard Voltaire")
         ],
         alternatives: [
-            .init(title: "Maximum de nouvelles rues", subtitle: "+3,1 km decouverts", durationMinutes: 42, newRoadKilometers: 3.1, routeCoordinates: [c(48.8637, 2.3708), c(48.8658, 2.3740), c(48.8643, 2.3806), c(48.8549, 2.3902), c(48.8482, 2.3959)]),
+            .init(title: "Maximum de nouvelles rues", subtitle: "+3,1 km découverts", durationMinutes: 42, newRoadKilometers: 3.1, routeCoordinates: [c(48.8637, 2.3708), c(48.8658, 2.3740), c(48.8643, 2.3806), c(48.8549, 2.3902), c(48.8482, 2.3959)]),
             .init(title: "Plus fluide", subtitle: "moins de carrefours difficiles", durationMinutes: 39, newRoadKilometers: 2.4, routeCoordinates: [c(48.8637, 2.3708), c(48.8611, 2.3715), c(48.8581, 2.3766), c(48.8532, 2.3860)]),
-            .init(title: "Plus cyclable", subtitle: "82 % pistes ou voies calmes", durationMinutes: 45, newRoadKilometers: 2.8, routeCoordinates: [c(48.8637, 2.3708), c(48.8682, 2.3676), c(48.8708, 2.3758), c(48.8599, 2.3855)])
+            .init(title: "Plus cyclable", subtitle: "82 % de pistes ou de rues calmes", durationMinutes: 45, newRoadKilometers: 2.8, routeCoordinates: [c(48.8637, 2.3708), c(48.8682, 2.3676), c(48.8708, 2.3758), c(48.8599, 2.3855)])
         ]
     )
 

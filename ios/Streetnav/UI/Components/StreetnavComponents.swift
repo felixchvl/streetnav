@@ -1,5 +1,32 @@
 import SwiftUI
 
+extension View {
+    /// Liquid Glass, as on the controls of the system apps.
+    func streetnavGlass<S: Shape>(in shape: S, interactive: Bool = false) -> some View {
+        glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
+    }
+}
+
+/// Activity-ring style progress, the way Fitness draws it.
+struct StreetnavProgressRing: View {
+    let progress: Double
+    var lineWidth: CGFloat = 8
+    var colors: [Color] = [.green, .mint]
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(colors[0].opacity(0.18), lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: max(0.001, min(1, progress)))
+                .stroke(AngularGradient(colors: colors + [colors[0]], center: .center), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .padding(lineWidth / 2)
+        .accessibilityHidden(true)
+    }
+}
+
 struct StreetnavSearchCapsule: View {
     var text = "Ou explorer ?"
     var action: () -> Void = {}

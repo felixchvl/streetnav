@@ -51,7 +51,7 @@ struct MockStravaActivityService: ActivitySyncService {
         try? await Task.sleep(nanoseconds: 350_000_000)
         var synced = status
         synced.stravaSync = .updated
-        synced.lastStravaSyncText = "a l'instant"
+        synced.lastStravaSyncText = "à l'instant"
         return synced
     }
 }
@@ -67,7 +67,7 @@ struct MockWandrerExplorationService: ExplorationDataService {
     func refreshWandrerImport() async -> IntegrationStatus {
         try? await Task.sleep(nanoseconds: 450_000_000)
         var refreshed = integration
-        refreshed.wandrerFreshnessText = "mis a jour a l'instant"
+        refreshed.wandrerFreshnessText = "mis à jour à l'instant"
         return refreshed
     }
 }
@@ -306,7 +306,7 @@ final class StreetnavPrototypeViewModel: ObservableObject {
         case .mapDataLoading:
             streets = []
         case .wandrerUpdating:
-            integrations.wandrerFreshnessText = "mise a jour en cours"
+            integrations.wandrerFreshnessText = "mise à jour en cours"
         case .noUntraveledNearby:
             area = ExplorationArea(name: "Bastille", completion: 1, remainingKilometers: 0, missingStreetCount: 0, center: StreetnavMockData.parisCenter)
             streets = streets.map { ExplorationStreetSegment(name: $0.name, status: .traveled, coordinates: $0.coordinates, lengthMeters: $0.lengthMeters) }

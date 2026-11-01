@@ -32,7 +32,7 @@ struct StreetnavPrototypeGallery: View {
                 case .completionHunt: CompletionHuntHomeDirection()
                 case .rideFocus: RideFocusHomeDirection()
                 case .nightExplorer: NightExplorerHomeDirection()
-                case .recommended: StreetnavRecommendedView()
+                case .recommended: StreetnavRecommendedView(embedded: true)
                 }
             }
         }

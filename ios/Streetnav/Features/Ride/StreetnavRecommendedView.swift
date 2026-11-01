@@ -1,241 +1,125 @@
+import MapKit
 import SwiftUI
 
 @MainActor
 struct StreetnavRecommendedView: View {
     @StateObject private var model: StreetnavPrototypeViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var presentedSheet: SheetKind?
+    @State private var presentedSheet: StreetnavSheet?
     @State private var showsEndConfirmation = false
+    @State private var camera = StreetnavExplorationMap.camera(for: .home, route: nil, position: StreetnavMockData.parisCenter)
+    @State private var panelDetent = StreetnavExplorePanel.summary
+    private let embedded: Bool
 
-    init() {
+    init(embedded: Bool = false) {
         _model = StateObject(wrappedValue: StreetnavPrototypeViewModel())
+        self.embedded = embedded
     }
 
-    init(model: StreetnavPrototypeViewModel) {
+    init(model: StreetnavPrototypeViewModel, embedded: Bool = false) {
         _model = StateObject(wrappedValue: model)
+        self.embedded = embedded
     }
+
+    private var position: CLLocationCoordinate2D { StreetnavMockData.parisCenter }
 
     var body: some View {
         ZStack {
-            StreetnavMapSurface(
+            StreetnavExplorationMap(
                 segments: model.streets,
                 route: model.flowState == .home || model.flowState == .planner ? nil : model.route,
                 mode: model.flowState,
-                tuning: model.tuning,
-                muted: model.flowState.isNavigationLike
+                position: position,
+                routeLineWidth: model.tuning.routeLineWidth,
+                camera: $camera,
+                recenter: recenter
             )
+            .safeAreaPadding(.bottom, mapBottomInset)
 
             switch model.flowState {
-            case .home, .planner, .routePreview, .readiness:
-                homeOverlay
             case .navigating, .approachingNewStreet, .completedNewStreet, .rerouting, .weakGPS, .paused:
                 navigationOverlay
             case .arrived:
                 arrivalOverlay
+            case .home, .planner, .routePreview, .readiness:
+                if embedded { embeddedPanel }
             }
         }
         .task { await model.load() }
-        .sheet(item: $presentedSheet) { sheet in
-            switch sheet {
-            case .planner:
-                StreetnavPlannerSheet(model: model)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            case .integrations:
-                StreetnavIntegrationSheet(model: model)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            case .routeDetails:
-                StreetnavRouteDetailsSheet(model: model)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+        .sheet(isPresented: panelIsPresented) {
+            StreetnavExplorePanel(model: model, presentedSheet: $presentedSheet, detent: $panelDetent, focus: focus(on:))
+                .presentationDetents(StreetnavExplorePanel.detents(for: model.flowState), selection: $panelDetent)
+                .presentationBackgroundInteraction(.enabled(upThrough: StreetnavExplorePanel.preferredDetent(for: model.flowState)))
+                .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled()
+        }
+        .onChange(of: model.flowState) { oldState, newState in
+            flowChanged(from: oldState, to: newState)
+        }
+        .onChange(of: model.route.id) {
+            guard model.flowState.isRouteStep else { return }
+            withAnimation(.smooth(duration: 0.6)) {
+                camera = StreetnavExplorationMap.camera(for: model.flowState, route: model.route, position: position)
             }
         }
         .alert("Terminer la sortie ?", isPresented: $showsEndConfirmation) {
             Button("Continuer", role: .cancel) {}
             Button("Terminer", role: .destructive) { model.finishRide() }
         } message: {
-            Text("La navigation s'arretera et Streetnav preparera le resume de la sortie.")
+            Text("La navigation s'arrêtera et Streetnav préparera le résumé de la sortie.")
         }
         .animation(StreetnavMotion.spring(model.tuning, reduceMotion: reduceMotion || model.tuning.simulateReducedMotion), value: model.flowState)
     }
 
-    private var homeOverlay: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                StreetnavSearchCapsule(text: model.gpsQuality == .denied ? "Activer la position" : "Canal Saint-Martin")
-                Button { presentedSheet = .integrations } label: {
-                    Image(systemName: "person.crop.circle")
-                        .font(.system(size: 30))
-                        .frame(width: 48, height: 48)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Ouvrir les integrations et le compte")
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
+    /// The panel stays up, like the card in Maps, everywhere but during the ride and its summary.
+    private var panelIsPresented: Binding<Bool> {
+        Binding(
+            get: { embedded == false && (model.flowState == .home || model.flowState == .planner || model.flowState.isRouteStep) },
+            set: { _ in }
+        )
+    }
 
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 8) {
-                    statusStrip
-                    if model.integrations.isOffline {
-                        StreetnavStatusPill(title: "Hors ligne", symbolName: "wifi.slash", tint: .orange, detail: "carte locale")
-                    }
-                    if model.gpsQuality != .precise {
-                        StreetnavStatusPill(title: model.gpsQuality.label, symbolName: "location.slash", tint: .orange)
-                    }
-                }
-                Spacer()
-                VStack(spacing: 10) {
-                    StreetnavFloatingControl(symbolName: "location.fill", label: "Recentrer la carte")
-                    StreetnavFloatingControl(symbolName: "safari", label: "Afficher la boussole", isSelected: model.flowState.isNavigationLike)
-                    StreetnavFloatingControl(symbolName: "square.3.layers.3d", label: "Choisir les couches")
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-
+    private var embeddedPanel: some View {
+        VStack {
             Spacer()
-
-            if model.flowState == .routePreview || model.flowState == .readiness {
-                routePreviewCard
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 10)
-            } else {
-                homeBottomCard
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 10)
-            }
+            StreetnavExplorePanel(model: model, presentedSheet: $presentedSheet, detent: $panelDetent, embedded: true, focus: focus(on:))
+                .streetnavGlass(in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
         }
     }
 
-    private var statusStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                StreetnavStatusPill(title: "Wandrer", symbolName: model.integrations.wandrerConnected ? "map.fill" : "map", tint: model.integrations.wandrerConnected ? .green : .orange, detail: model.integrations.wandrerFreshnessText)
-                StreetnavStatusPill(title: "Strava", symbolName: stravaSymbol, tint: stravaTint, detail: model.integrations.lastStravaSyncText)
-                StreetnavStatusPill(title: "Watch", symbolName: model.watch.state.symbolName, tint: model.watch.state == .ready ? .green : .secondary)
-                StreetnavStatusPill(title: "VanMoof", symbolName: model.bike.state.symbolName, tint: model.bike.state == .ready ? .green : .orange, detail: "\(model.bike.batteryPercent)%")
-            }
-            .padding(.vertical, 1)
-        }
-        .frame(maxWidth: 310)
-    }
-
-    private var homeBottomCard: some View {
-        StreetnavBottomCard {
-            HStack(alignment: .center, spacing: 12) {
-                StreetnavExplorationBadge(area: model.area)
-                Spacer(minLength: 8)
-                StreetnavMapLegend()
-                    .fixedSize()
-            }
-
-            if model.gpsQuality == .denied {
-                Text("Streetnav a besoin de ta position pour montrer les rues proches et preparer une boucle fiable.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                StreetnavPrimaryAction(title: "Ouvrir les reglages", symbolName: "gearshape") {}
-            } else if model.integrations.wandrerConnected == false {
-                Text("Importe tes donnees Wandrer pour distinguer les rues deja parcourues des rues restantes.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                StreetnavPrimaryAction(title: "Importer Wandrer", symbolName: "tray.and.arrow.down") { presentedSheet = .integrations }
-            } else if model.area.missingStreetCount == 0 {
-                Text("Ce quartier est complet. Deplace la carte vers Bastille, Nation ou Pere-Lachaise pour continuer l'exploration.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                StreetnavPrimaryAction(title: "Chercher autour", symbolName: "magnifyingglass") {}
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Autour de toi")
-                        .font(.title3.weight(.bold))
-                    Text(String(format: "%.1f km de rues encore a decouvrir", model.area.remainingKilometers))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                StreetnavPrimaryAction(title: "Explorer", symbolName: "bicycle") {
-                    model.openPlanner()
-                    presentedSheet = .planner
-                }
-            }
+    /// Keeps what the camera frames above the panel.
+    private var mapBottomInset: CGFloat {
+        if embedded { return model.flowState.isNavigationLike || model.flowState == .arrived ? 0 : 300 }
+        guard panelIsPresented.wrappedValue else { return 0 }
+        switch panelDetent {
+        case StreetnavExplorePanel.collapsed: return 92
+        case StreetnavExplorePanel.route: return 346
+        case StreetnavExplorePanel.readiness: return 396
+        default: return 276
         }
     }
 
-    private var routePreviewCard: some View {
-        StreetnavBottomCard {
-            if model.flowState == .readiness {
-                readinessContent
-            } else {
-                routePreviewContent
-            }
+    private func flowChanged(from oldState: PrototypeFlowState, to newState: PrototypeFlowState) {
+        if newState == .routePreview, presentedSheet == .planner { presentedSheet = nil }
+        let preferred = StreetnavExplorePanel.preferredDetent(for: newState)
+        if preferred != StreetnavExplorePanel.preferredDetent(for: oldState) { panelDetent = preferred }
+        withAnimation(.smooth(duration: 0.6)) {
+            camera = StreetnavExplorationMap.camera(for: newState, route: model.route, position: position)
         }
     }
 
-    private var routePreviewContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(model.route.name)
-                        .font(.title2.weight(.bold))
-                    Text("Retour au point de depart, arrivee \(model.route.arrivalText)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text(model.route.confidence.label)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Color.green.opacity(0.16), in: Capsule())
-            }
-
-            HStack {
-                StreetnavRouteMetric(title: "duree", value: "\(model.route.durationMinutes) min", symbolName: "clock")
-                StreetnavRouteMetric(title: "distance", value: String(format: "%.1f km", model.route.distanceKilometers), symbolName: "point.topleft.down.curvedto.point.bottomright.up")
-                StreetnavRouteMetric(title: "nouvelles rues", value: String(format: "%.1f km", model.route.newRoadKilometers), symbolName: "sparkle")
-            }
-            HStack {
-                StreetnavRouteMetric(title: "gain Wandrer", value: String(format: "+%.1f%%", model.route.estimatedProgressGain), symbolName: "chart.line.uptrend.xyaxis")
-                StreetnavRouteMetric(title: "denivele", value: "+\(model.route.elevationGainMeters) m", symbolName: "mountain.2")
-                StreetnavRouteMetric(title: "surface", value: "72% pistes", symbolName: "bicycle")
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(model.route.alternatives) { alternative in
-                        StreetnavRouteAlternativeCard(alternative: alternative, isSelected: model.selectedAlternativeID == alternative.id) {
-                            withAnimation { model.selectAlternative(alternative) }
-                        }
-                    }
-                }
-            }
-
-            HStack(spacing: 10) {
-                Button("Modifier") { presentedSheet = .planner }
-                    .buttonStyle(.bordered)
-                Menu {
-                    Button("Enregistrer") {}
-                    Button("Partager plus tard") {}
-                    Button("Inspecter le detail") { presentedSheet = .routeDetails }
-                } label: {
-                    Label("Plus", systemImage: "ellipsis.circle")
-                }
-                .buttonStyle(.bordered)
-                StreetnavPrimaryAction(title: "Demarrer", symbolName: "play.fill") { model.prepareRide() }
-            }
+    private func recenter() {
+        withAnimation(.smooth(duration: 0.5)) {
+            camera = StreetnavExplorationMap.camera(for: model.flowState, route: model.route, position: position)
         }
     }
 
-    private var readinessContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Pret a partir")
-                .font(.title2.weight(.bold))
-            StreetnavDeviceStatusRow(title: model.watch.name, subtitle: model.watch.workoutReady ? "Activite velo prete a demarrer" : "Tu peux partir sans Watch", state: model.watch.state)
-            StreetnavDeviceStatusRow(title: model.bike.name, subtitle: model.bike.state == .ready ? "detecte, deverrouillage manuel uniquement" : "optionnel pour cette sortie", state: model.bike.state, trailing: model.bike.batteryPercent > 0 ? "\(model.bike.batteryPercent)%" : nil)
-            StreetnavDeviceStatusRow(title: "Strava", subtitle: "synchronisation apres la sortie", state: model.integrations.stravaSync == .connected ? .ready : .actionRequired)
-            StreetnavPrimaryAction(title: "Lancer la navigation", symbolName: "location.north.line.fill") { model.startNavigation() }
+    private func focus(on coordinates: [CLLocationCoordinate2D]) {
+        if panelDetent == .large { panelDetent = StreetnavExplorePanel.preferredDetent(for: model.flowState) }
+        withAnimation(.smooth(duration: 0.6)) {
+            camera = .rect(StreetnavExplorationMap.rect(around: coordinates, margin: 0.8))
         }
     }
 
@@ -333,32 +217,6 @@ struct StreetnavRecommendedView: View {
             .padding(12)
         }
     }
-
-    private var stravaSymbol: String {
-        switch model.integrations.stravaSync {
-        case .connected, .updated: "checkmark.circle.fill"
-        case .syncing: "arrow.triangle.2.circlepath"
-        case .disconnected: "link.badge.plus"
-        case .tokenExpired: "exclamationmark.circle.fill"
-        case .unavailable: "minus.circle.fill"
-        }
-    }
-
-    private var stravaTint: Color {
-        switch model.integrations.stravaSync {
-        case .connected, .updated: .green
-        case .syncing: .orange
-        case .disconnected, .tokenExpired: .red
-        case .unavailable: .secondary
-        }
-    }
-}
-
-private enum SheetKind: Identifiable {
-    case planner
-    case integrations
-    case routeDetails
-    var id: Int { hashValue }
 }
 
 struct StreetnavPlannerSheet: View {

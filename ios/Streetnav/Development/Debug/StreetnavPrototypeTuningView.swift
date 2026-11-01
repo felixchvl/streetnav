@@ -9,7 +9,7 @@ struct StreetnavPrototypeTuningView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            StreetnavRecommendedView(model: model)
+            StreetnavRecommendedView(model: model, embedded: true)
                 .preferredColorScheme(scheme)
                 .dynamicTypeSize(dynamicType)
                 .frame(maxWidth: .infinity)

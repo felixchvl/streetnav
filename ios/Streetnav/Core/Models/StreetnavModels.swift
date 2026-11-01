@@ -13,11 +13,11 @@ enum StreetExplorationStatus: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .traveled: "deja parcourue"
-        case .untraveled: "a decouvrir"
-        case .planned: "itineraire"
-        case .completedDuringRide: "decouverte aujourd'hui"
-        case .uncertain: "donnee incertaine"
+        case .traveled: "déjà parcourue"
+        case .untraveled: "à découvrir"
+        case .planned: "itinéraire"
+        case .completedDuringRide: "découverte aujourd'hui"
+        case .uncertain: "donnée incertaine"
         }
     }
 
@@ -69,8 +69,8 @@ enum RouteConfidence: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .high: "confiance elevee"
-        case .medium: "a verifier"
+        case .high: "confiance élevée"
+        case .medium: "à vérifier"
         case .low: "incertain"
         }
     }
@@ -208,10 +208,10 @@ enum GPSQuality: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .precise: "GPS precis"
+        case .precise: "GPS précis"
         case .approximate: "position approximative"
         case .weak: "signal GPS faible"
-        case .denied: "position refusee"
+        case .denied: "position refusée"
         }
     }
 }
@@ -241,8 +241,8 @@ enum PlannerPriority: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .maximizeNewRoads: "Maximiser les rues nouvelles"
-        case .balanced: "Equilibre"
-        case .protectedCycleways: "Pistes protegees"
+        case .balanced: "Équilibré"
+        case .protectedCycleways: "Pistes protégées"
         }
     }
 }

@@ -24,6 +24,8 @@
 		STNB0110000000000000011 /* StreetnavPrototypePreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */; };
 		STNB0120000000000000012 /* StreetnavHealthSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0120000000000000012 /* StreetnavHealthSync.swift */; };
 		STNB0130000000000000013 /* StreetnavHealthSyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0130000000000000013 /* StreetnavHealthSyncView.swift */; };
+		STNB0170000000000000017 /* StreetnavExplorePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0170000000000000017 /* StreetnavExplorePanel.swift */; };
+		STNB0160000000000000016 /* StreetnavExplorationMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0160000000000000016 /* StreetnavExplorationMap.swift */; };
 		STNB0140000000000000014 /* StreetnavHealthSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0140000000000000014 /* StreetnavHealthSeeder.swift */; };
 /* End PBXBuildFile section */
 
@@ -48,6 +50,8 @@ STNP0100000000000000010 /* StreetnavPrototypeTuningView.swift */ = {isa = PBXFil
 STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavPrototypePreviews.swift; sourceTree = "<group>"; };
 STNP0120000000000000012 /* StreetnavHealthSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSync.swift; sourceTree = "<group>"; };
 STNP0130000000000000013 /* StreetnavHealthSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSyncView.swift; sourceTree = "<group>"; };
+STNP0170000000000000017 /* StreetnavExplorePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavExplorePanel.swift; sourceTree = "<group>"; };
+STNP0160000000000000016 /* StreetnavExplorationMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavExplorationMap.swift; sourceTree = "<group>"; };
 STNP0140000000000000014 /* StreetnavHealthSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSeeder.swift; sourceTree = "<group>"; };
 STNP0150000000000000015 /* Streetnav.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Streetnav.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -118,8 +122,8 @@ STGRMOCK0000000000000007 /* MockData */ = { isa = PBXGroup; children = ( STNP003
 STGRSERV0000000000000008 /* Services */ = { isa = PBXGroup; children = ( STNP0040000000000000004 /* StreetnavPrototypeServices.swift */, ); path = Services; sourceTree = "<group>"; };
 STGRMOTN0000000000000009 /* Motion */ = { isa = PBXGroup; children = ( STNP0090000000000000009 /* StreetnavMotion.swift */, ); path = Motion; sourceTree = "<group>"; };
 STGRFEAT0000000000000003 /* Features */ = { isa = PBXGroup; children = ( STGRMAP000000000000000A /* Map */, STGRRIDE000000000000000B /* Ride */, STGRFHLT0000000000000012 /* Health */, ); path = Features; sourceTree = "<group>"; };
-STGRMAP000000000000000A /* Map */ = { isa = PBXGroup; children = ( STNP0060000000000000006 /* StreetnavMapSurface.swift */, ); path = Map; sourceTree = "<group>"; };
-STGRRIDE000000000000000B /* Ride */ = { isa = PBXGroup; children = ( STNP0070000000000000007 /* StreetnavRecommendedView.swift */, ); path = Ride; sourceTree = "<group>"; };
+STGRMAP000000000000000A /* Map */ = { isa = PBXGroup; children = ( STNP0060000000000000006 /* StreetnavMapSurface.swift */, STNP0160000000000000016 /* StreetnavExplorationMap.swift */, ); path = Map; sourceTree = "<group>"; };
+STGRRIDE000000000000000B /* Ride */ = { isa = PBXGroup; children = ( STNP0070000000000000007 /* StreetnavRecommendedView.swift */, STNP0170000000000000017 /* StreetnavExplorePanel.swift */, ); path = Ride; sourceTree = "<group>"; };
 STGRUI000000000000000004 /* UI */ = { isa = PBXGroup; children = ( STGRCOMP000000000000000C /* Components */, ); path = UI; sourceTree = "<group>"; };
 STGRCOMP000000000000000C /* Components */ = { isa = PBXGroup; children = ( STNP0050000000000000005 /* StreetnavComponents.swift */, ); path = Components; sourceTree = "<group>"; };
 STGRDEV00000000000000005 /* Development */ = { isa = PBXGroup; children = ( STGRLEGC000000000000000D /* Legacy */, STGRDEBG000000000000000E /* Debug */, STGRPREV000000000000000F /* Previews */, STGRVARI0000000000000010 /* Variations */, ); path = Development; sourceTree = "<group>"; };
@@ -214,6 +218,8 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 				STNB0010000000000000001 /* StreetnavRootView.swift in Sources */,
 				STNB0120000000000000012 /* StreetnavHealthSync.swift in Sources */,
 				STNB0130000000000000013 /* StreetnavHealthSyncView.swift in Sources */,
+				STNB0170000000000000017 /* StreetnavExplorePanel.swift in Sources */,
+				STNB0160000000000000016 /* StreetnavExplorationMap.swift in Sources */,
 				STNB0140000000000000014 /* StreetnavHealthSeeder.swift in Sources */,
 				664D4F292C1C476500A68BB1 /* StreetnavLegacyDemoView.swift in Sources */,
 				664D4F272C1C476500A68BB1 /* StreetnavApp.swift in Sources */,
