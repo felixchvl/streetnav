@@ -10,12 +10,17 @@ import os
 from datetime import datetime
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.concurrency import run_in_threadpool
+
+from . import map_data
 
 from .registry import connect, ingest, remove
 from .sources import WorkoutIn
 
 app = FastAPI(title="Streetnav", version="1")
+# The tracks for the map are a 2 MB GeoJSON: a fifth of it over the air.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 def require_token(authorization: str = Header(default="")) -> None:
@@ -124,3 +129,6 @@ def delete_copy(source: str, external_id: str) -> dict:
         activity_id, outcome = remove(conn, source, external_id)
         conn.commit()
     return {"id": activity_id, "outcome": outcome}
+
+
+app.include_router(map_data.router(require_token))

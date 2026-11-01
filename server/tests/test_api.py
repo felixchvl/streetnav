@@ -55,3 +55,19 @@ class ApiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_tracks_and_stats(self):
+        self.client.post("/activities", content=json.dumps(workout()).encode(), headers={"Content-Type": "application/json"})
+        response = self.client.get("/tracks")
+        self.assertEqual(response.status_code, 200)
+        collection = response.json()
+        self.assertEqual(collection["type"], "FeatureCollection")
+        self.assertEqual(len(collection["features"]), 1)
+        self.assertEqual(collection["features"][0]["geometry"]["type"], "LineString")
+        # Same rides: nothing to download again.
+        again = self.client.get("/tracks", headers={"If-None-Match": response.headers["ETag"]})
+        self.assertEqual(again.status_code, 304)
+        stats = self.client.get("/stats").json()
+        self.assertEqual(stats["total"]["rides"], 1)
+        self.assertEqual(len(stats["by_year"]), 1)
+        self.assertEqual(self.client.get("/stats", headers={"Authorization": ""}).status_code, 401)
