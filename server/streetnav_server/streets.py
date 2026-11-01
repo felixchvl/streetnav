@@ -1,15 +1,27 @@
-"""Streets ridden and not ridden yet, the layer the app colours: OpenStreetMap's bike-usable streets around Paris, each
-cut into the parts a bike ride went along and the parts never ridden.
+"""Streets ridden and not ridden yet, the layer the app colours: OpenStreetMap's ways around Paris, the bike-usable
+ones cut into the parts a bike ride went along and the parts never ridden.
+
+The street table is the one copy of OpenStreetMap for Streetnav and paris-rues (which attaches the named ways of Paris
+to the city's register of voies): every street and road of the kinds in HIGHWAYS, named or not, every named way, and
+every way marked open to bikes. Whether a bike may ride a way (bike_access) and whether it is a way of its own rather
+than part of a street (counted: not a sidewalk, a crossing or an area) are paris-rues's rules:
+- open: bicycle=yes, designated, permissive, destination or use_sidepath;
+- closed: bicycle=no, dismount or private; access or vehicle closed (no, private, customers...); motor roads,
+  motorways; steps, footways, pedestrian streets, bridleways; works;
+- open otherwise: streets, service roads, cycleways, tracks, and paths (open to bikes in France).
+Only the ways a bike may ride and that count are drawn and measured.
 
 A point of a street counts as ridden when a ride's track passes within REACH_M of it. Points are sampled every STEP_M
 along each street; consecutive points with the same answer make a part. A ridden part shorter than MIN_RIDDEN_SAMPLES
 points is only a ride crossing the street, unless it is the whole street.
 
-A bike path running alongside a street (within SIDE_M of a street all along) belongs to that street, as the map shows
-it: it is neither drawn nor counted, and riding it rides the street (9,371 of the 9,838 bike paths on 2026-11-01).
+A bike path (or any SIDE_WAYS way) running alongside a street a bike may ride (within SIDE_M of it all along) belongs
+to that street, as the map shows it: it is neither drawn nor counted, and riding it rides the street. Beside a street
+closed to bikes it stays a way of its own.
 
-  python -m streetnav_server.streets fetch [--bbox S,W,N,E]   download the streets from Overpass and load them
-  python -m streetnav_server.streets load FILE.tsv            load streets (osm id, name, highway, EWKT)
+  python -m streetnav_server.streets fetch [--bbox S,W,N,E]   download the ways from Overpass, load them, compute
+  python -m streetnav_server.streets fetch --out FILE.tsv     only download them, to load on another machine
+  python -m streetnav_server.streets load FILE.tsv            load ways (osm id, name, highway, tags as JSON, EWKT)
   python -m streetnav_server.streets compute                  every street, from every ride (about a minute)
   python -m streetnav_server.streets refresh                  only around the rides added or changed since the last run
 """
@@ -20,6 +32,7 @@ import csv
 import json
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -31,19 +44,33 @@ MIN_RIDDEN_SAMPLES = 5
 SIDE_M = 20
 # Paris and the inner suburbs: 96 % of the rides' distance on 2026-11-01.
 DEFAULT_BBOX = (48.75, 2.15, 48.95, 2.55)
+# Downloaded in TILES x TILES boxes: the whole box at once takes 900 MB to read, too much for the container.
+TILES = 3
+MIN_WAYS = 100_000  # 120,679 on 2026-11-02: fewer is a truncated answer, not half of Paris gone
 HIGHWAYS = ("primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|"
             "living_street|pedestrian|cycleway")
+OPEN = {"yes", "designated", "permissive", "destination", "use_sidepath"}
+CLOSED = {"no", "private", "customers", "delivery", "permit", "emergency", "agricultural", "forestry"}
+NO_BIKES = {"motorway", "motorway_link", "steps", "footway", "pedestrian", "bridleway", "corridor", "construction"}
+NOT_WAYS = {"proposed", "abandoned", "razed", "disused", "platform"}
+PARTS_OF_A_STREET = {"sidewalk", "crossing", "traffic_island"}
+# Ways that run beside a street rather than being it.
+SIDE_WAYS = ("cycleway", "footway", "path", "bridleway", "busway")
+SIDE_ARRAY = "'{" + ",".join(SIDE_WAYS) + "}'::text[]"
+# A way drawn and measured.
+MEASURED = "{t}.bike AND {t}.counted"
 
-# Bike paths whose start, quarter points, middle and end are all within SIDE_M of a street; alongside is the street
-# near most of these points (then the nearest to the middle), not one crossing it.
+# Side ways a bike may ride whose start, quarter points, middle and end are all within SIDE_M of a street a bike may
+# ride; alongside is the street near most of these points (then the nearest to the middle), not one crossing it.
+STREET_BESIDE = f"{MEASURED.format(t='r')} AND r.highway <> ALL({SIDE_ARRAY})"
 SIDEPATHS_SQL = f"""
     UPDATE street c SET alongside = (
         SELECT r.id FROM street r, unnest(ARRAY[0, 0.25, 0.5, 0.75, 1]::float8[]) f
-        WHERE r.highway <> 'cycleway' AND ST_DWithin(r.geom, ST_LineInterpolatePoint(c.geom, f), {SIDE_M})
+        WHERE {STREET_BESIDE} AND ST_DWithin(r.geom, ST_LineInterpolatePoint(c.geom, f), {SIDE_M})
         GROUP BY r.id ORDER BY count(*) DESC, min(ST_Distance(r.geom, ST_LineInterpolatePoint(c.geom, 0.5))) LIMIT 1)
-    WHERE c.highway = 'cycleway' AND NOT EXISTS (
+    WHERE c.highway = ANY({SIDE_ARRAY}) AND {MEASURED.format(t='c')} AND NOT EXISTS (
         SELECT 1 FROM unnest(ARRAY[0, 0.25, 0.5, 0.75, 1]::float8[]) f
-        WHERE NOT EXISTS (SELECT 1 FROM street r WHERE r.highway <> 'cycleway'
+        WHERE NOT EXISTS (SELECT 1 FROM street r WHERE {STREET_BESIDE}
                           AND ST_DWithin(r.geom, ST_LineInterpolatePoint(c.geom, f), {SIDE_M})))"""
 
 PIECES_SQL = """
@@ -54,7 +81,8 @@ PIECES_SQL = """
 # Samples every STEP_M metres (ridden: a ride within reach, or along a bike path beside the sample: at the path's point
 # q nearest to the sample, the sample being the street's point nearest to q, which a street crossing the path is not),
 # gaps-and-islands into runs, short ridden runs (a ride crossing) turned back to not
-# ridden, then neighbouring runs with the same answer merged again. Bike paths alongside a street get no parts.
+# ridden, then neighbouring runs with the same answer merged again. Only the ways measured get parts, not the side
+# ways alongside a street.
 PARTS_SQL = f"""
     INSERT INTO street_part (street_id, ridden, geom, length_m)
     WITH samples AS (
@@ -66,7 +94,7 @@ PARTS_SQL = f"""
                             AND EXISTS (SELECT 1 FROM ride_piece r WHERE ST_DWithin(r.geom, cq.q, {REACH_M}))) AS hit
         FROM street s, LATERAL (SELECT greatest(1, ceil(s.length_m / {STEP_M}))::int AS n) k, generate_series(0, k.n) i,
              LATERAL (SELECT ST_LineInterpolatePoint(s.geom, i::float8 / k.n) AS pt) p
-        WHERE s.alongside IS NULL AND {{where}}),
+        WHERE {MEASURED.format(t='s')} AND s.alongside IS NULL AND {{where}}),
     runs AS (
         SELECT id, n, hit, min(i) AS a, max(i) AS b
         FROM (SELECT *, i - row_number() OVER (PARTITION BY id, hit ORDER BY i) AS g FROM samples) x
@@ -87,34 +115,81 @@ PARTS_SQL = f"""
     WHERE ST_Length(part) > 0"""
 
 
+def bike_access(tags: dict) -> tuple[bool, str]:
+    """May a bike ride this way, and the tag that decided."""
+    bicycle = tags.get("bicycle")
+    if bicycle in OPEN:
+        return True, f"bicycle={bicycle}"
+    if bicycle in {"no", "dismount", "private"}:
+        return False, f"bicycle={bicycle}"
+    for key in ("access", "vehicle"):
+        if tags.get(key) in CLOSED:
+            return False, f"{key}={tags[key]}"
+    if tags.get("motorroad") == "yes":
+        return False, "motorroad=yes"
+    return tags["highway"] not in NO_BIKES, f"highway={tags['highway']}"
+
+
+def counted(tags: dict) -> bool:
+    """A way of its own, not a sidewalk, a crossing or an area (a square drawn as a polygon)."""
+    return tags.get("footway") not in PARTS_OF_A_STREET and tags.get("area") != "yes"
+
+
 def load(rows, conn) -> int:
-    """Upserts streets from rows of (osm id, name, highway, EWKT in WGS84)."""
+    """Replaces every way with rows of (osm id, name, highway, tags as JSON, EWKT in WGS84); parts go with them."""
     with conn.cursor() as cur:
-        cur.execute("CREATE TEMP TABLE osm_in (id bigint, name text, highway text, ewkt text) ON COMMIT DROP")
+        cur.execute("CREATE TEMP TABLE osm_in (id bigint, name text, highway text, tags jsonb, bike boolean, "
+                    "bike_reason text, counted boolean, ewkt text) ON COMMIT DROP")
         with cur.copy("COPY osm_in FROM STDIN") as copy:
-            for row in rows:
-                copy.write_row(row)
+            for osm_id, name, highway, tags_json, ewkt in rows:
+                tags = json.loads(tags_json)
+                copy.write_row((osm_id, name, highway, tags_json, *bike_access(tags), counted(tags), ewkt))
+        cur.execute("TRUNCATE street, street_part")
         cur.execute(
-            """INSERT INTO street (id, name, highway, geom, length_m)
-               SELECT id, nullif(name, ''), highway, g, ST_Length(g)
-               FROM (SELECT id, name, highway, ST_Transform(ST_GeomFromEWKT(ewkt), 2154) g FROM osm_in) t
-               ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, highway = EXCLUDED.highway,
-                                              geom = EXCLUDED.geom, length_m = EXCLUDED.length_m""")
+            """INSERT INTO street (id, name, highway, tags, bike, bike_reason, counted, geom, length_m)
+               SELECT id, nullif(name, ''), highway, tags, bike, bike_reason, counted, g, ST_Length(g)
+               FROM (SELECT *, ST_Transform(ST_GeomFromEWKT(ewkt), 2154) g FROM osm_in) t""")
         return cur.rowcount
 
 
+def overpass(query: str) -> list[dict]:
+    """The elements Overpass answers, waiting and asking again while it is busy (429, 502, 503, 504)."""
+    request = urllib.request.Request(
+        "https://overpass-api.de/api/interpreter", data=urllib.parse.urlencode({"data": query}).encode(),
+        headers={"User-Agent": "streetnav/1 (personal project)", "Accept": "application/json"})
+    for wait in (30, 60, 120, 240, None):
+        try:
+            with urllib.request.urlopen(request, timeout=600) as response:
+                return json.load(response)["elements"]
+        except urllib.error.HTTPError as error:
+            if error.code not in (429, 502, 503, 504) or wait is None:
+                raise
+            time.sleep(wait)
+
+
 def fetch(bbox=DEFAULT_BBOX) -> list[tuple]:
-    """Bike-usable OpenStreetMap ways in the box (south, west, north, east), from the Overpass API."""
-    query = (f'[out:json][timeout:300];way["highway"~"^({HIGHWAYS})$"]["area"!="yes"]["access"!~"^(private|no)$"]'
-             f'["bicycle"!="no"]({",".join(map(str, bbox))});out geom tags qt;')
-    request = urllib.request.Request("https://overpass-api.de/api/interpreter",
-                                     data=urllib.parse.urlencode({"data": query}).encode(),
-                                     headers={"User-Agent": "streetnav/1 (personal project)", "Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=600) as response:
-        elements = json.load(response)["elements"]
-    return [(w["id"], (w["tags"].get("name") or ""), w["tags"]["highway"],
-             "SRID=4326;LINESTRING(" + ",".join(f'{p["lon"]:.7f} {p["lat"]:.7f}' for p in w["geometry"]) + ")")
-            for w in elements if w["type"] == "way" and len(w.get("geometry", [])) >= 2]
+    """The ways in the box (south, west, north, east) from the Overpass API, as load takes them, tile by tile (a way
+    across two tiles comes once)."""
+    south, west, north, east = bbox
+    ways = {}
+    for i in range(TILES):
+        for j in range(TILES):
+            box = ",".join(str(round(v, 6)) for v in (south + (north - south) * i / TILES, west + (east - west) * j / TILES,
+                                                      south + (north - south) * (i + 1) / TILES,
+                                                      west + (east - west) * (j + 1) / TILES))
+            query = (f'[out:json][timeout:300];(way["highway"~"^({HIGHWAYS})$"]({box});way["highway"]["name"]({box});'
+                     f'way["highway"]["bicycle"~"^({"|".join(sorted(OPEN))})$"]({box}););out geom tags qt;')
+            elements = overpass(query)
+            for w in elements:
+                if w["type"] == "way" and len(w.get("geometry", [])) >= 2 and w["tags"]["highway"] not in NOT_WAYS:
+                    ways[w["id"]] = (w["id"], w["tags"].get("name") or "", w["tags"]["highway"],
+                                     json.dumps(w["tags"], ensure_ascii=False),
+                                     "SRID=4326;LINESTRING(" + ",".join(f'{p["lon"]:.7f} {p["lat"]:.7f}'
+                                                                        for p in w["geometry"]) + ")")
+            del elements
+    if len(ways) < MIN_WAYS:
+        raise SystemExit(f"only {len(ways)} ways from Overpass, a truncated answer: nothing changed")
+    return list(ways.values())
 
 
 def compute(conn) -> None:
@@ -144,10 +219,10 @@ def refresh(conn) -> int:
         cur.execute("DELETE FROM ride_piece WHERE activity_id = ANY(%s)", (changed,))
         cur.execute(PIECES_SQL.format(where="id = ANY(%(ids)s)"), {"ids": changed})
         # Streets within reach, and those whose bike path is.
-        cur.execute("""CREATE TEMP TABLE touched ON COMMIT DROP AS
-                       SELECT DISTINCT s.id FROM street s JOIN ride_piece r
-                         ON r.activity_id = ANY(%s) AND ST_DWithin(s.geom, r.geom, %s)
-                       WHERE s.alongside IS NULL""", (changed, REACH_M + SIDE_M))
+        cur.execute(f"""CREATE TEMP TABLE touched ON COMMIT DROP AS
+                        SELECT DISTINCT s.id FROM street s JOIN ride_piece r
+                          ON r.activity_id = ANY(%s) AND ST_DWithin(s.geom, r.geom, %s)
+                        WHERE {MEASURED.format(t='s')} AND s.alongside IS NULL""", (changed, REACH_M + SIDE_M))
         cur.execute("DELETE FROM street_part WHERE street_id IN (SELECT id FROM touched)")
         cur.execute(PARTS_SQL.format(where="s.id IN (SELECT id FROM touched)"))
         return len(changed)
@@ -155,8 +230,9 @@ def refresh(conn) -> int:
 
 def record(conn, started: float) -> dict:
     with conn.cursor() as cur:
-        cur.execute("""SELECT (SELECT count(*) FROM street WHERE alongside IS NULL), coalesce(sum(length_m), 0) / 1000,
-                              coalesce(sum(length_m) FILTER (WHERE ridden), 0) / 1000 FROM street_part""")
+        cur.execute(f"""SELECT (SELECT count(*) FROM street s WHERE {MEASURED.format(t='s')} AND s.alongside IS NULL),
+                               coalesce(sum(length_m), 0) / 1000,
+                               coalesce(sum(length_m) FILTER (WHERE ridden), 0) / 1000 FROM street_part""")
         streets, total, ridden = cur.fetchone()
         seconds = time.monotonic() - started
         cur.execute("INSERT INTO street_run VALUES (now(), %s, %s, %s, %s)", (streets, total, ridden, seconds))
@@ -168,12 +244,18 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     fetch_cmd = sub.add_parser("fetch")
     fetch_cmd.add_argument("--bbox", default=",".join(map(str, DEFAULT_BBOX)), help="south,west,north,east")
+    fetch_cmd.add_argument("--out", help="write the ways to this TSV file instead of loading them")
     sub.add_parser("load").add_argument("file")
     sub.add_parser("compute")
     sub.add_parser("refresh")
     args = parser.parse_args(argv)
 
     started = time.monotonic()
+    if args.command == "fetch" and args.out:
+        with open(args.out, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f, delimiter="\t", quoting=csv.QUOTE_NONE, escapechar="\\").writerows(
+                fetch(tuple(float(v) for v in args.bbox.split(","))))
+        return 0
     with connect() as conn:
         # One run at a time (the timer and a manual run).
         if not conn.execute("SELECT pg_try_advisory_lock(hashtext('streetnav.streets'))").fetchone()[0]:
@@ -185,7 +267,7 @@ def main(argv=None) -> int:
             else:
                 with open(args.file, newline="", encoding="utf-8") as f:
                     rows = list(csv.reader(f, delimiter="\t", quoting=csv.QUOTE_NONE, escapechar="\\"))
-            print(f"{load(rows, conn)} streets loaded")
+            print(f"{load(rows, conn)} ways loaded")
             compute(conn)
         elif args.command == "compute":
             compute(conn)

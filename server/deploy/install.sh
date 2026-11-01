@@ -57,7 +57,7 @@ cp -r "$SRC/streetnav_server" "$APP/"
 install -m 755 "$SRC/deploy/streetnav-backup" /usr/local/bin/streetnav-backup
 cp "$SRC"/deploy/*.service "$SRC"/deploy/*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now streetnav-api.service streetnav-backup.timer streetnav-streets.timer
+systemctl enable --now streetnav-api.service streetnav-backup.timer streetnav-streets.timer streetnav-osm.timer
 systemctl restart streetnav-api.service
 if grep -q '^RWGPS_AUTH_TOKEN=.\+' "$ENV_FILE"; then
   systemctl enable --now streetnav-rwgps.timer

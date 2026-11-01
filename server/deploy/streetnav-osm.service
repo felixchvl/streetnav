@@ -1,0 +1,12 @@
+[Unit]
+Description=Streetnav: download OpenStreetMap's ways around Paris again and measure every street
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=streetnav
+EnvironmentFile=/etc/streetnav/streetnav.env
+WorkingDirectory=/opt/streetnav
+ExecStart=/opt/streetnav/venv/bin/python -m streetnav_server.streets fetch
+MemoryMax=768M

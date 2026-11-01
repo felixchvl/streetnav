@@ -11,8 +11,10 @@ from streetnav_server import registry, streets
 from test_registry import T0, URL, workout
 
 
-def street(osm_id, lon_from, lat_from, lon_to, lat_to, highway="residential"):
-    return (osm_id, f"Rue {osm_id}", highway, f"SRID=4326;LINESTRING({lon_from} {lat_from},{lon_to} {lat_to})")
+def street(osm_id, lon_from, lat_from, lon_to, lat_to, highway="residential", **tags):
+    tags = {"highway": highway, "name": f"Rue {osm_id}", **tags}
+    return (osm_id, tags["name"], highway, json.dumps(tags),
+            f"SRID=4326;LINESTRING({lon_from} {lat_from},{lon_to} {lat_to})")
 
 
 @unittest.skipUnless(URL, "STREETNAV_TEST_DATABASE_URL not set")
@@ -71,6 +73,31 @@ class StreetsTest(unittest.TestCase):
         self.assertEqual(self.parts(2), [])
         self.assertEqual([r for r, _ in self.parts(3)], [False])
         self.assertEqual([r for r, _ in self.parts(4)], [True])
+
+    def test_only_the_ways_a_bike_may_ride_are_measured(self):
+        self.push(workout())
+        streets.load([street(1, 2.36, 48.85, 2.37, 48.85, "pedestrian"),                   # closed to bikes
+                      street(2, 2.37, 48.85, 2.38, 48.85, "pedestrian", bicycle="yes"),    # opened by its tag
+                      street(3, 2.38, 48.85, 2.39, 48.85, footway="sidewalk"),             # part of a street
+                      street(4, 2.39, 48.85, 2.40, 48.85, access="private"),               # closed
+                      street(5, 2.36, 48.87, 2.37, 48.87, "path")], self.conn)             # open in France
+        streets.compute(self.conn)
+        self.assertEqual(self.conn.execute("SELECT id, bike, bike_reason, counted FROM street ORDER BY id").fetchall(),
+                         [(1, False, "highway=pedestrian", True), (2, True, "bicycle=yes", True),
+                          (3, True, "highway=residential", False), (4, False, "access=private", True),
+                          (5, True, "highway=path", True)])
+        self.assertEqual([r for r, _ in self.parts(2)], [True])
+        self.assertEqual([r for r, _ in self.parts(5)], [False])
+        self.assertEqual([self.parts(i) for i in (1, 3, 4)], [[], [], []])
+
+    def test_bike_path_beside_a_street_closed_to_bikes_is_its_own(self):
+        self.push(workout())
+        streets.load([street(1, 2.36, 48.849865, 2.37, 48.849865, "primary", bicycle="no"),
+                      street(2, 2.36, 48.85, 2.37, 48.85, "cycleway")], self.conn)
+        streets.compute(self.conn)
+        self.assertEqual(self.conn.execute("SELECT alongside FROM street WHERE id = 2").fetchone(), (None,))
+        self.assertEqual([r for r, _ in self.parts(2)], [True])
+        self.assertEqual(self.parts(1), [])
 
     def test_refresh_only_near_new_rides(self):
         streets.load([street(1, 2.36, 48.85, 2.37, 48.85)], self.conn)
