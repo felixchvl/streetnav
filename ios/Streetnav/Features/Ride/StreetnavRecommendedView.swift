@@ -463,6 +463,8 @@ struct StreetnavPlannerSheet: View {
 struct StreetnavIntegrationSheet: View {
     @ObservedObject var model: StreetnavPrototypeViewModel
     @ObservedObject private var healthSync = StreetnavHealthSync.shared
+    @ObservedObject private var vanMoof = StreetnavVanMoofAccount.shared
+    @ObservedObject private var vanMoofBike = StreetnavVanMoofBike.shared
     @Environment(\.dismiss) private var dismiss
     @State private var activityCount: Int?
     @State private var serverError = false
@@ -501,10 +503,13 @@ struct StreetnavIntegrationSheet: View {
                 }
 
                 Section {
-                    StreetnavSettingsRow(symbol: batterySymbol, title: "Batterie", value: model.bike.batteryPercent > 0 ? model.bike.batteryPercent.formatted(.percent) : "—")
-                    StreetnavSettingsRow(symbol: model.bike.isLocked ? "lock.fill" : "lock.open.fill", title: "Verrou", value: model.bike.isLocked ? "Verrouillé" : "Déverrouillé")
+                    NavigationLink {
+                        StreetnavVanMoofView()
+                    } label: {
+                        StreetnavSettingsRow(symbol: "bicycle", title: vanMoof.bike?.name ?? "VanMoof S6", value: bikeText)
+                    }
                 } header: {
-                    header(model.bike.name)
+                    header("Vélo")
                 }
             }
             .navigationTitle("Réglages")
@@ -526,6 +531,12 @@ struct StreetnavIntegrationSheet: View {
             .textCase(nil)
     }
 
+    private var bikeText: String {
+        guard vanMoof.isSignedIn else { return "À connecter" }
+        if vanMoofBike.state == .ready, let battery = vanMoofBike.battery { return "\(battery) %" }
+        return vanMoofBike.state == .ready ? "Connecté" : "Prêt"
+    }
+
     private var serverDetail: String {
         guard let url = StreetnavServerSettings.baseURL, let host = url.host() else { return "À configurer" }
         let address = url.port.map { "\(host):\($0)" } ?? host
@@ -537,16 +548,6 @@ struct StreetnavIntegrationSheet: View {
         if healthSync.isSyncing { return "Synchro…" }
         if healthSync.lastError != nil { return "Erreur" }
         return healthSync.lastSync == nil ? "À configurer" : "À jour"
-    }
-
-    private var batterySymbol: String {
-        switch model.bike.batteryPercent {
-        case 88...: "battery.100percent"
-        case 63..<88: "battery.75percent"
-        case 38..<63: "battery.50percent"
-        case 13..<38: "battery.25percent"
-        default: "battery.0percent"
-        }
     }
 
     private func loadActivityCount() async {

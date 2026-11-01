@@ -18,3 +18,6 @@ tools/**/outputs/*
 
 # SF Symbol glyph of the app icon, rendered locally by ios/tools/app-icon-glyph.swift (not redistributable)
 ios/Streetnav/AppIcon.icon/Assets/Glyph.png
+
+# Secrets of the iOS build (VanMoof API key)
+ios/Streetnav/Config/Secrets.xcconfig

@@ -4,6 +4,8 @@
 	<dict>
 		<key>MBXAccessToken</key>
 		<string>pk.eyJ1IjoiZmVsaXhjaHZsIiwiYSI6ImNsajlzcHpvcTFiMGwzaHFuejE5NzVvczkifQ.8AR_lOl1-Uc2dkwz2xusQg</string>
+		<key>VanMoofAPIKey</key>
+		<string>$(VANMOOF_API_KEY)</string>
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>Streetnav utilise ta position pour afficher ta progression sur la carte et préparer des boucles autour de toi.</string>
 	</dict>
