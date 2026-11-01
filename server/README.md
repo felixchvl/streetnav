@@ -165,16 +165,17 @@ from the home network.
 2.2 MB, 0.5 MB gzipped), with an ETag; `GET /stats` the riding statistics. The app caches both.
 
 `GET /streets` returns every street around Paris cut into ridden (`r` = 1) and not ridden (`r` = 0) parts,
-the two colours of the app's map (1.5 MB gzipped, ETag on the last street run). `streetnav_server/streets.py`
+the two colours of the app's map (1.6 MB gzipped, ETag on the last street run). `streetnav_server/streets.py`
 builds them (`sql/005_streets.sql`): OpenStreetMap's ways in Paris and the inner suburbs, from Overpass every month
 (`streetnav-osm.timer`, the 1st at 04:00, 120,679 ways in 3 x 3 tiles, 300 MB at most). The `street` table is the one
 copy of OpenStreetMap for Streetnav and paris-rues, which reads the named ways of Paris from it and attaches them to
-the city's register of voies (its role may read `street`, `ride_piece` and `activity`). A bike may ride a way or not
+the city's register of voies (its role may read `street` and `activity`). A bike may ride a way or not
 by paris-rues's rules (explicit `bicycle` tags first, then access, then the kind of way: footways, steps and
 pedestrian streets without `bicycle=yes` are closed), and sidewalks, crossings and areas are not ways of their own;
 only the ways a bike may ride are drawn and measured. A point of a street
 counts as ridden when a ride passes within 12 m, sampled every 10 m, and a ridden stretch shorter than 5
 samples is only a ride crossing the street. A bike path (or footway, path, busway) running alongside a street a bike
 may ride (within 20 m all along) belongs to that street, as on the map: it is neither drawn nor counted, and riding it rides
-the street. `compute` redoes everything (18 s); `streetnav-streets.timer` runs
+the street. On 2026-11-02: 85,435 ways measured, 9,520 km, 1,440 km ridden. `compute` redoes everything
+(about 50 s); `streetnav-streets.timer` runs
 `refresh` every 15 minutes, only around the rides added or changed since the last run.
