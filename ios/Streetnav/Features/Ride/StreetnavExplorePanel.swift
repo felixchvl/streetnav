@@ -21,6 +21,7 @@ enum StreetnavSheet: Identifiable {
 struct StreetnavExplorePanel: View {
     @ObservedObject var model: StreetnavPrototypeViewModel
     @ObservedObject var places: StreetnavPlaceSearch
+    @ObservedObject private var guidance = StreetnavGuidance.shared
     @Binding var presentedSheet: StreetnavSheet?
     @Binding var detent: PresentationDetent
     var embedded = false
@@ -63,6 +64,9 @@ struct StreetnavExplorePanel: View {
                 .background(Color(.systemGroupedBackground).opacity(detent == .large ? 1 : 0).ignoresSafeArea())
                 .animation(.easeInOut(duration: 0.2), value: detent)
             }
+        }
+        .fullScreenCover(isPresented: Binding(get: { guidance.isActive }, set: { if $0 == false { guidance.stop() } })) {
+            StreetnavGuidanceView()
         }
         .sheet(item: $presentedSheet, onDismiss: sheetDismissed) { sheet in
             switch sheet {
@@ -240,8 +244,15 @@ struct StreetnavExplorePanel: View {
                 .frame(minHeight: 64)
             }
 
-            // Maps guides the ride until Streetnav has its own guidance.
-            primaryButton("Y aller", symbol: "arrow.triangle.turn.up.right.diamond.fill") { places.openInMaps() }
+            primaryButton(guidance.isStarting ? "Calcul…" : "Y aller", symbol: "arrow.triangle.turn.up.right.diamond.fill") {
+                Task { await guidance.start(to: place, from: places.hereLocation) }
+            }
+            .disabled(guidance.isStarting)
+            if let failure = guidance.failure {
+                Text(failure)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
         }
     }
 

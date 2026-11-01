@@ -47,6 +47,7 @@ final class StreetnavPlaceSearch: NSObject, ObservableObject {
     }
 
     var here: CLLocationCoordinate2D { location.location?.coordinate ?? StreetnavMockData.parisCenter }
+    var hereLocation: CLLocation? { location.location }
 
     func update(query: String) {
         // Ranked around the rider, like Maps.
