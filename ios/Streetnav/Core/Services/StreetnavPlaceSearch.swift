@@ -128,7 +128,8 @@ final class StreetnavPlaceSearch: NSObject, ObservableObject {
         let center = ["latitude": here.latitude, "longitude": here.longitude]
         let body: [String: Any] = [
             "input": query, "sessionToken": token, "languageCode": "fr", "regionCode": "fr", "includedRegionCodes": ["fr"],
-            "locationBias": ["circle": ["center": center, "radius": 30_000.0]], "origin": center,
+            // Restricted, not just biased: within 30 km of the rider, where a bike goes.
+            "locationRestriction": ["circle": ["center": center, "radius": 30_000.0]], "origin": center,
         ]
         guard var request = googleRequest("https://places.googleapis.com/v1/places:autocomplete") else { return }
         request.httpMethod = "POST"
