@@ -132,10 +132,11 @@ keeps one sample per instant).
 
 ## QGIS
 
-The `qgis` login role (created by hand for the `paris_rues` database on the same server, password kept out of
-this repo) reads Streetnav too, from the home network only and over TLS: `sql/004_qgis.sql` grants it `SELECT`
-on `activity`, `activity_heart_rate` and `activity_source`, and `pg_hba.conf` holds
-`hostssl streetnav qgis 192.168.1.0/24 scram-sha-256` (added by hand, like the `paris_rues` line). In QGIS: a
+The `qgis` login role (created by paris-rues's install, password kept out of this repo) reads Streetnav from the
+home network only and over TLS: `sql/004_qgis.sql` grants it `SELECT` on `activity`, `activity_heart_rate` and
+`activity_source`, and `pg_hba.conf` holds `hostssl streetnav qgis 192.168.1.0/24 scram-sha-256` (added by hand).
+Since 2026-11-02 paris-rues's tables live in this database too, in the `paris_rues` schema (its own install, its own
+nightly dump; `streetnav-backup` leaves that schema out). In QGIS: a
 PostgreSQL connection to `192.168.1.62:5432`, database `streetnav`, SSL mode `require`. Useful layers:
 `activity` (track, one line per activity; filter `sport = 'cycling'`) and `activity_source` (one track per
 version, to compare them). Tracks are `LineStringZM` in EPSG:4326, both with a spatial index.
