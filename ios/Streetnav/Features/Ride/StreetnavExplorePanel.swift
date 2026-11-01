@@ -314,47 +314,6 @@ struct StreetnavExplorePanel: View {
                 }
             }
 
-            if embedded == false {
-                moreContent
-                    // Only once the panel is fully open, so that no half-cut row shows under the button.
-                    .opacity(detent == .large ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.2), value: detent)
-            }
-        }
-    }
-
-    private var moreContent: some View {
-        let untraveled = model.streets
-            .filter { $0.status == .untraveled }
-            .sorted { $0.lengthMeters > $1.lengthMeters }
-        return VStack(alignment: .leading, spacing: 16) {
-            if untraveled.isEmpty == false {
-                section("À découvrir près de toi") {
-                    ForEach(Array(untraveled.enumerated()), id: \.element.id) { index, street in
-                        if index > 0 { separator }
-                        streetRow(street, detail: "\(kilometers(street.lengthMeters)) km jamais parcourus")
-                    }
-                }
-            }
-
-            if model.recentRides.isEmpty == false {
-                section("Dernières sorties") {
-                    ForEach(Array(model.recentRides.enumerated()), id: \.element.id) { index, ride in
-                        if index > 0 { separator }
-                        row(symbol: "figure.outdoor.cycle", title: ride.name, detail: ride.detail, chevron: true)
-                    }
-                }
-            }
-
-            #if DEBUG
-            section("Développement") {
-                Button { presentedSheet = .gallery } label: { row(symbol: "square.grid.2x2", title: "Galerie des directions", chevron: true) }
-                    .buttonStyle(.plain)
-                separator
-                Button { presentedSheet = .tuning } label: { row(symbol: "slider.horizontal.3", title: "Laboratoire de réglages", chevron: true) }
-                    .buttonStyle(.plain)
-            }
-            #endif
         }
     }
 
@@ -540,16 +499,6 @@ struct StreetnavExplorePanel: View {
             .fill(Color(.separator))
             .frame(height: 1 / 3)
             .padding(.leading, leading)
-    }
-
-    private func streetRow(_ street: ExplorationStreetSegment, detail: String) -> some View {
-        Button {
-            searchFocused = false
-            focus(street.coordinates)
-        } label: {
-            row(symbol: "road.lanes", title: street.name, detail: detail, chevron: true)
-        }
-        .buttonStyle(.plain)
     }
 
     /// A row like the ones in Settings: grey symbol, title and optional detail, optional value and chevron.

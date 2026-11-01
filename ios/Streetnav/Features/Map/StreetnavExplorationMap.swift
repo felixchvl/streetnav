@@ -222,7 +222,7 @@ extension StreetnavExplorationMap {
         switch mode {
         case .routePreview, .readiness, .arrived:
             if let route { return focus(on: route.coordinates, padding: 40, bottomInset: bottomInset) }
-            return Viewport.followPuck(zoom: 15.6, pitch: 50).padding(.bottom, bottomInset)
+            return Viewport.followPuck(zoom: 16.6, pitch: 50).padding(.bottom, bottomInset)
         case _ where mode.isNavigationLike:
             // Tilted like Maps, turning with the ride: the route stays visible through the buildings (occlusion opacity).
             return Viewport.followPuck(zoom: 17, bearing: .course, pitch: 55).padding(.bottom, bottomInset)
@@ -235,8 +235,8 @@ extension StreetnavExplorationMap {
                     .padding(.bottom, bottomInset)
             }
             #endif
-            // Tilted enough to see the buildings and their light, north still up.
-            return Viewport.followPuck(zoom: 15.6, pitch: 50).padding(.bottom, bottomInset)
+            // Close enough to read the streets around, tilted enough to see the buildings and their light, north up.
+            return Viewport.followPuck(zoom: 16.6, pitch: 50).padding(.bottom, bottomInset)
         }
     }
 
