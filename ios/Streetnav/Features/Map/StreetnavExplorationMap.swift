@@ -78,14 +78,14 @@ struct StreetnavExplorationMap: View {
         Map(viewport: $viewport) {
             if let streets {
                 Self.streetsLayerSource(streets)
-                // Every street not ridden yet, quiet; those already ridden in the accent, as Wandrer colours them.
+                // Every street not ridden yet in red, those already ridden in the accent, as Wandrer colours them.
                 LineLayer(id: "rues-jamais", source: "rues-osm")
                     .filter(Exp(.eq) { Exp(.get) { "r" }; 0 })
                     .slot(.middle)
                     .lineCap(.round).lineJoin(.round)
-                    .lineColor(colorScheme == .dark ? UIColor(white: 1, alpha: 1) : UIColor(white: 0.25, alpha: 1))
-                    .lineOpacity(colorScheme == .dark ? 0.32 : 0.35)
-                    .lineWidth(Self.zoomed(0.8, 2, 5))
+                    .lineColor(notRidden)
+                    .lineOpacity(0.75)
+                    .lineWidth(Self.zoomed(1.2, 3, 6))
                     .lineEmissiveStrength(1)
                     .lineOcclusionOpacity(0.2)
                 LineLayer(id: "rues-faites", source: "rues-osm")
@@ -184,6 +184,11 @@ struct StreetnavExplorationMap: View {
 
     private var accent: UIColor {
         colorScheme == .dark ? UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1) : UIColor(red: 0, green: 0.48, blue: 1, alpha: 1)
+    }
+
+    /// The system red, for the streets still to ride.
+    private var notRidden: UIColor {
+        colorScheme == .dark ? UIColor(red: 1, green: 0.27, blue: 0.23, alpha: 1) : UIColor(red: 1, green: 0.22, blue: 0.24, alpha: 1)
     }
 
     private var neutral: UIColor {
