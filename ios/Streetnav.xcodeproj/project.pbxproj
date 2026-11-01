@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		MBXBLD00000000000000003 /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = MBXDEP00000000000000002 /* MapboxMaps */; };
+		NAVBLD00000000000000006 /* MapboxNavigationCore in Frameworks */ = {isa = PBXBuildFile; productRef = NAVDEP00000000000000005 /* MapboxNavigationCore */; };
 		664D4F272C1C476500A68BB1 /* StreetnavApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F262C1C476500A68BB1 /* StreetnavApp.swift */; };
 		664D4F292C1C476500A68BB1 /* StreetnavLegacyDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 664D4F282C1C476500A68BB1 /* StreetnavLegacyDemoView.swift */; };
 		STNB0190000000000000019 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = STNP0190000000000000019 /* AppIcon.icon */; };
@@ -78,6 +79,7 @@ STNP0150000000000000015 /* Streetnav.entitlements */ = {isa = PBXFileReference; 
 			buildActionMask = 2147483647;
 			files = (
 				MBXBLD00000000000000003 /* MapboxMaps in Frameworks */,
+				NAVBLD00000000000000006 /* MapboxNavigationCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -173,6 +175,7 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 			name = Streetnav;
 			packageProductDependencies = (
 				MBXDEP00000000000000002 /* MapboxMaps */,
+				NAVDEP00000000000000005 /* MapboxNavigationCore */,
 			);
 			productName = Streetnav;
 			productReference = 664D4F232C1C476500A68BB1 /* Streetnav.app */;
@@ -204,6 +207,7 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 			mainGroup = 664D4F1A2C1C476500A68BB1;
 			packageReferences = (
 				MBXPKG00000000000000001 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */,
+				NAVPKG00000000000000004 /* XCRemoteSwiftPackageReference "mapbox-navigation-ios" */,
 			);
 			productRefGroup = 664D4F242C1C476500A68BB1 /* Products */;
 			projectDirPath = "";
@@ -485,6 +489,14 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 				version = 11.27.3;
 			};
 		};
+		NAVPKG00000000000000004 /* XCRemoteSwiftPackageReference "mapbox-navigation-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mapbox/mapbox-navigation-ios.git";
+			requirement = {
+				kind = exactVersion;
+				version = 3.27.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -492,6 +504,11 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 			isa = XCSwiftPackageProductDependency;
 			package = MBXPKG00000000000000001 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */;
 			productName = MapboxMaps;
+		};
+		NAVDEP00000000000000005 /* MapboxNavigationCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = NAVPKG00000000000000004 /* XCRemoteSwiftPackageReference "mapbox-navigation-ios" */;
+			productName = MapboxNavigationCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
