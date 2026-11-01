@@ -163,3 +163,11 @@ from the home network.
 
 `GET /tracks` returns every bike ride's track as GeoJSON, simplified to about 5 metres (2,273 rides:
 2.2 MB, 0.5 MB gzipped), with an ETag; `GET /stats` the riding statistics. The app caches both.
+
+`GET /streets` returns every street around Paris cut into ridden (`r` = 1) and not ridden (`r` = 0) parts,
+the two colours of the app's map (1.5 MB gzipped, ETag on the last street run). `streetnav_server/streets.py`
+builds them (`sql/005_streets.sql`): OpenStreetMap's bike-usable ways in Paris and the inner suburbs, fetched
+once from Overpass (`python -m streetnav_server.streets fetch`, 85,795 streets, 8,967 km); a point of a street
+counts as ridden when a ride passes within 12 m, sampled every 10 m, and a ridden stretch shorter than 5
+samples is only a ride crossing the street. `compute` redoes everything (18 s); `streetnav-streets.timer` runs
+`refresh` every 15 minutes, only around the rides added or changed since the last run.

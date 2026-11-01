@@ -27,7 +27,7 @@ class ApiTest(unittest.TestCase):
         self.raw = tempfile.TemporaryDirectory()
         os.environ["STREETNAV_RAW_DIR"] = self.raw.name
         with registry.connect() as conn:
-            conn.execute("TRUNCATE activity, activity_source, activity_heart_rate, sync_run, raw_file RESTART IDENTITY")
+            conn.execute("TRUNCATE activity, activity_source, activity_heart_rate, sync_run, raw_file, ride_piece, street_part, street_run RESTART IDENTITY")
 
     def tearDown(self):
         self.raw.cleanup()
@@ -70,4 +70,8 @@ if __name__ == "__main__":
         stats = self.client.get("/stats").json()
         self.assertEqual(stats["total"]["rides"], 1)
         self.assertEqual(len(stats["by_year"]), 1)
+        self.assertEqual(stats["streets"], {"ridden_km": 0, "total_km": 0})
+        streets = self.client.get("/streets")
+        self.assertEqual(streets.json(), {"type": "FeatureCollection", "features": []})
+        self.assertEqual(self.client.get("/streets", headers={"If-None-Match": streets.headers["ETag"]}).status_code, 304)
         self.assertEqual(self.client.get("/stats", headers={"Authorization": ""}).status_code, 401)

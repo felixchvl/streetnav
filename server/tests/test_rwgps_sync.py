@@ -62,7 +62,7 @@ class SyncTest(unittest.TestCase):
         self.raw = tempfile.TemporaryDirectory()
         os.environ["STREETNAV_RAW_DIR"] = self.raw.name
         with registry.connect() as conn:
-            conn.execute("TRUNCATE activity, activity_source, activity_heart_rate, sync_run, raw_file RESTART IDENTITY")
+            conn.execute("TRUNCATE activity, activity_source, activity_heart_rate, sync_run, raw_file, ride_piece, street_part, street_run RESTART IDENTITY")
 
     def tearDown(self):
         self.raw.cleanup()
