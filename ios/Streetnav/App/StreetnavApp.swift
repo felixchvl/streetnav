@@ -23,11 +23,16 @@ struct StreetnavApp: App {
         WindowGroup {
             StreetnavRootView()
         }
-        // Apple Health checked again whenever the app opens; leaving it books the next check in the background.
+        // Apple Health checked again whenever the app opens; leaving it books the next check in the background. The
+        // streets ridden right now are followed while the app is on screen.
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .active: Task { await StreetnavHealthSync.shared.check() }
-            case .background: StreetnavHealthSync.shared.scheduleRefresh()
+            case .active:
+                Task { await StreetnavHealthSync.shared.check() }
+                StreetnavLiveStreets.shared.start()
+            case .background:
+                StreetnavHealthSync.shared.scheduleRefresh()
+                StreetnavLiveStreets.shared.stop()
             default: break
             }
         }

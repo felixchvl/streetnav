@@ -6,6 +6,7 @@ struct StreetnavRecommendedView: View {
     @StateObject private var model: StreetnavPrototypeViewModel
     @StateObject private var places = StreetnavPlaceSearch()
     @ObservedObject private var history = StreetnavRideHistory.shared
+    @ObservedObject private var live = StreetnavLiveStreets.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentedSheet: StreetnavSheet?
     @State private var showsEndConfirmation = false
@@ -39,6 +40,7 @@ struct StreetnavRecommendedView: View {
                 placeRoute: model.flowState == .home ? places.route?.coordinates : nil,
                 rides: history.tracks,
                 streets: history.streets,
+                live: live.ridden,
                 routeProgress: model.flowState.isNavigationLike ? model.rideProgress.routeProgress : 0,
                 panelOverlap: panelTop.map { max(0, safeAreaBottom - $0) } ?? cameraInset,
                 viewport: $viewport,

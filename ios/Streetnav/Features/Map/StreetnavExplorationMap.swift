@@ -20,6 +20,8 @@ struct StreetnavExplorationMap: View {
     var rides: String?
     /// The streets around Paris, ridden (`r` = 1) or not (`r` = 0), GeoJSON.
     var streets: String?
+    /// The streets ridden on this ride, before the server knows (StreetnavLiveStreets), GeoJSON.
+    var live: String?
     var routeProgress: Double = 0
     /// How far the panel rises above the bottom of the safe area, live while it is dragged: Mapbox's logo sits on it.
     var panelOverlap: CGFloat = 0
@@ -94,6 +96,11 @@ struct StreetnavExplorationMap: View {
                     .lineWidth(Self.zoomed(1.2, 3, 6))
                     .lineEmissiveStrength(1)
                     .lineOcclusionOpacity(0.3)
+            }
+            if let live, streetFilter.showsRidden {
+                // Above the streets still to ride that this ride has just turned blue.
+                Self.liveSource(live)
+                Self.streetsRidden(dark: colorScheme == .dark, id: "rues-direct", source: "rues-direct")
             }
             Self.streetsSource(segments)
             streetLayer("rues-parcourues", status: .traveled)
@@ -401,8 +408,8 @@ extension StreetnavExplorationMap {
             .lineOcclusionOpacity(0.2)
     }
 
-    static func streetsRidden(dark: Bool) -> LineLayer {
-        LineLayer(id: "rues-faites", source: "rues-osm")
+    static func streetsRidden(dark: Bool, id: String = "rues-faites", source: String = "rues-osm") -> LineLayer {
+        LineLayer(id: id, source: source)
             .filter(Exp(.eq) { Exp(.get) { "r" }; 1 })
             .slot(.middle)
             .lineCap(.round).lineJoin(.round)
@@ -454,6 +461,12 @@ extension StreetnavExplorationMap {
         // 88,000 street parts: tiles cut up to zoom 14 only, then scaled, to keep the memory down.
         source.maxzoom = 14
         source.tolerance = 0.5
+        return source
+    }
+
+    static func liveSource(_ geojson: String) -> GeoJSONSource {
+        var source = GeoJSONSource(id: "rues-direct")
+        source.data = .string(geojson)
         return source
     }
 
