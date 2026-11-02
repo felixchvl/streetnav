@@ -501,7 +501,8 @@ enum StreetnavSunlight {
     }
 }
 
-/// The compass of Maps: a glass button with a large N, a ring of ticks and a red mark that points north.
+/// The compass of Maps, measured on its screens: a plain light disc (glass would wash the ticks out over the map) with a
+/// large N, a ring of 24 ticks, east, south and west darker, and a red mark that points north.
 private struct StreetnavCompass: View {
     let bearing: Double
     let action: () -> Void
@@ -510,28 +511,45 @@ private struct StreetnavCompass: View {
         Button(action: action) {
             ZStack {
                 ZStack {
-                    // No tick at north: the red mark stands in for it (the glass draws the ticks over it).
+                    // No tick at north: the red mark stands in for it.
                     ForEach(1..<24, id: \.self) { tick in
+                        let cardinal = tick % 6 == 0
                         Capsule()
-                            .fill(Color.primary.opacity(tick % 6 == 0 ? 0.9 : 0.55))
-                            .frame(width: 1.5, height: tick % 6 == 0 ? 4.5 : 3)
+                            .fill(Color.primary.opacity(cardinal ? 1 : 0.5))
+                            .frame(width: cardinal ? 1.75 : 1.5, height: cardinal ? 4 : 3)
                             .offset(y: -18)
                             .rotationEffect(.degrees(Double(tick) * 15))
                     }
-                    Image(systemName: "triangle.fill")
-                        .font(.system(size: 7, weight: .bold))
-                        .foregroundStyle(.red)
-                        .offset(y: -18)
+                    // Its corners rounded by the stroke, from 15.5 to 21.5 points from the centre.
+                    NorthMark()
+                        .fill(Color.red)
+                        .stroke(Color.red, style: StrokeStyle(lineWidth: 1, lineJoin: .round))
+                        .frame(width: 6.5, height: 5)
+                        .offset(y: -18.5)
                 }
                 .rotationEffect(.degrees(-bearing))
                 Text(verbatim: "N")
-                    .font(.system(size: 19, weight: .medium, design: .rounded))
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
             }
             .frame(width: 48, height: 48)
-            .streetnavGlass(in: Circle(), interactive: true)
+            .background(Circle().fill(Color(.systemGray6)))
+            .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.14), radius: 5, y: 1)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Orienter la carte vers le nord")
+    }
+
+    /// A triangle pointing out of the disc.
+    private struct NorthMark: Shape {
+        func path(in rect: CGRect) -> Path {
+            Path { path in
+                path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+                path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+                path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+                path.closeSubpath()
+            }
+        }
     }
 }
