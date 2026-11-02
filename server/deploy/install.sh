@@ -59,6 +59,12 @@ cp "$SRC"/deploy/*.service "$SRC"/deploy/*.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now streetnav-api.service streetnav-backup.timer streetnav-streets.timer streetnav-osm.timer
 systemctl restart streetnav-api.service
+# The arrondissements and communes of the streets ridden zone by zone, once (zones.py): the street runs then place the
+# new parts themselves
+if [ "$(runuser -u postgres -- psql -tA -d streetnav -c 'SELECT count(*) FROM zone')" = 0 ]; then
+  systemd-run --wait --pipe --collect -p User=streetnav -p EnvironmentFile="$ENV_FILE" -p WorkingDirectory="$APP" \
+    "$APP/venv/bin/python" -m streetnav_server.zones fetch
+fi
 if grep -q '^RWGPS_AUTH_TOKEN=.\+' "$ENV_FILE"; then
   systemctl enable --now streetnav-rwgps.timer
 else

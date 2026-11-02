@@ -166,7 +166,8 @@ from the home network.
 2.2 MB, 0.5 MB gzipped), with an ETag; `GET /stats` the riding statistics. The app caches both.
 
 `GET /streets` returns every street around Paris cut into ridden (`r` = 1) and not ridden (`r` = 0) parts,
-the two colours of the app's map (1.6 MB gzipped, ETag on the last street run). `streetnav_server/streets.py`
+the two colours of the app's map, with the width class of their road in Mapbox Standard (`k`, `map_data.ROAD_CLASS`) for
+the app to draw them as wide as the road (1.6 MB gzipped, ETag on the last street run and the format). `streetnav_server/streets.py`
 builds them (`sql/005_streets.sql`): OpenStreetMap's ways in Paris and the inner suburbs, from Overpass every month
 (`streetnav-osm.timer`, the 1st at 04:00, 120,679 ways in 3 x 3 tiles, 300 MB at most). The `street` table is the one
 copy of OpenStreetMap for Streetnav and paris-rues, which reads the named ways of Paris from it and attaches them to
@@ -184,3 +185,9 @@ rides measured). On 2026-11-02: 85,435 ways measured, 9,520 km, 1,440 km ridden,
 through. `compute` redoes everything
 (about 50 s); `streetnav-streets.timer` runs
 `refresh` every 15 minutes, only around the rides added or changed since the last run.
+
+The streets ridden zone by zone (`streetnav_server/zones.py`, `sql/006_zones.sql`, in `GET /stats`): the 20
+arrondissements of Paris and the 122 communes of the 92, 93 and 94 from the State's API Géo (`zones fetch`, once at
+install), numbered in rings out from Paris: ring 1 is the 29 communes along its edge, and ring 6 the far end of the 93
+and 94. Each part belongs to the zone its middle lies in. The box the ways are downloaded in leaves out about a third
+of the 93 and of the 94 (90 and 87 km² of 237 and 245), so their totals stop at its edge.
