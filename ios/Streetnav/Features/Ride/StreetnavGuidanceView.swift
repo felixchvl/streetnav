@@ -9,13 +9,15 @@ import SwiftUI
 /// street being ridden and a card with the arrival, which slides up to end the route.
 struct StreetnavGuidanceView: View {
     @ObservedObject private var guidance = StreetnavGuidance.shared
+    @ObservedObject private var history = StreetnavRideHistory.shared
     @Environment(\.colorScheme) private var colorScheme
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @State private var showsOverview = false
     @State private var showsEnd = false
 
     var body: some View {
-        StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview)
+        StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview,
+                             streets: history.streets, dark: colorScheme == .dark)
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
@@ -243,12 +245,17 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     @ObservedObject var guidance: StreetnavGuidance
     let light: StandardLightPreset
     let showsOverview: Bool
+    /// The streets ridden or not, drawn under the route as on the exploration map.
+    let streets: String?
+    let dark: Bool
 
     final class Coordinator {
         var shownRoute: String?
         var light: StandardLightPreset?
         var styleObserver: AnyCancelable?
         var showsOverview = false
+        var streets: String?
+        var dark = false
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -259,9 +266,14 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
                                      routeRefreshing: guidance.routeRefreshing)
         view.mapView.mapboxMap.mapStyle = Self.style(light)
         context.coordinator.light = light
-        context.coordinator.styleObserver = view.mapView.mapboxMap.onStyleLoaded.observe { [weak view] _ in
-            try? view?.mapView.mapboxMap.localizeLabels(into: Locale(identifier: "fr"))
+        context.coordinator.styleObserver = view.mapView.mapboxMap.onStyleLoaded.observe { [weak view, weak coordinator = context.coordinator] _ in
+            guard let map = view?.mapView.mapboxMap, let coordinator else { return }
+            try? map.localizeLabels(into: Locale(identifier: "fr"))
+            // A new style has none of them.
+            Self.show(streets: coordinator.streets, dark: coordinator.dark, in: map, reload: true)
         }
+        context.coordinator.streets = streets
+        context.coordinator.dark = dark
         view.routeColor = .systemBlue
         view.routeCasingColor = UIColor(white: 1, alpha: 0.9)
         view.traversedRouteColor = UIColor(white: 0.55, alpha: 0.5)
@@ -289,6 +301,30 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         if context.coordinator.light != light {
             view.mapView.mapboxMap.mapStyle = Self.style(light)
             context.coordinator.light = light
+        }
+        if context.coordinator.streets != streets || context.coordinator.dark != dark {
+            let restyle = context.coordinator.dark != dark
+            context.coordinator.streets = streets
+            context.coordinator.dark = dark
+            if view.mapView.mapboxMap.isStyleLoaded {
+                Self.show(streets: streets, dark: dark, in: view.mapView.mapboxMap, reload: restyle)
+            }
+        }
+    }
+
+    /// The streets source and its two layers, first of the layers added to the style so that they lie under the route
+    /// (same slot); `reload` draws the layers again, in the other mode's colours.
+    private static func show(streets: String?, dark: Bool, in map: MapboxMap, reload: Bool) {
+        guard let streets else { return }
+        if map.sourceExists(withId: "rues-osm") {
+            map.updateGeoJSONSource(withId: "rues-osm", data: .string(streets))
+        } else {
+            try? map.addSource(StreetnavExplorationMap.streetsLayerSource(streets))
+        }
+        // Inserted at the bottom one after the other: the streets ridden end up above those still to ride.
+        for layer in [StreetnavExplorationMap.streetsRidden(dark: dark), StreetnavExplorationMap.streetsNotRidden(dark: dark)] {
+            if reload, map.layerExists(withId: layer.id) { try? map.removeLayer(withId: layer.id) }
+            if map.layerExists(withId: layer.id) == false { try? map.addLayer(layer, layerPosition: .at(0)) }
         }
     }
 

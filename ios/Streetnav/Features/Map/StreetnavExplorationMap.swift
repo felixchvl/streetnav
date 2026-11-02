@@ -78,25 +78,8 @@ struct StreetnavExplorationMap: View {
         Map(viewport: $viewport) {
             if let streets {
                 Self.streetsLayerSource(streets)
-                // Every street not ridden yet in red, those already ridden in the accent, as Wandrer colours them.
-                LineLayer(id: "rues-jamais", source: "rues-osm")
-                    .filter(Exp(.eq) { Exp(.get) { "r" }; 0 })
-                    .slot(.middle)
-                    .lineCap(.round).lineJoin(.round)
-                    .lineColor(notRidden)
-                    .lineOpacity(0.75)
-                    .lineWidth(Self.zoomed(1.2, 3, 6))
-                    .lineEmissiveStrength(1)
-                    .lineOcclusionOpacity(0.2)
-                LineLayer(id: "rues-faites", source: "rues-osm")
-                    .filter(Exp(.eq) { Exp(.get) { "r" }; 1 })
-                    .slot(.middle)
-                    .lineCap(.round).lineJoin(.round)
-                    .lineColor(accent)
-                    .lineOpacity(0.9)
-                    .lineWidth(Self.zoomed(1.2, 3, 6))
-                    .lineEmissiveStrength(1)
-                    .lineOcclusionOpacity(0.35)
+                Self.streetsNotRidden(dark: colorScheme == .dark)
+                Self.streetsRidden(dark: colorScheme == .dark)
             } else if let rides {
                 Self.ridesSource(rides)
                 // Where the rider has already been: the accent, quiet, under the streets still to discover.
@@ -182,14 +165,7 @@ struct StreetnavExplorationMap: View {
         }
     }
 
-    private var accent: UIColor {
-        colorScheme == .dark ? UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1) : UIColor(red: 0, green: 0.48, blue: 1, alpha: 1)
-    }
-
-    /// The system red, for the streets still to ride.
-    private var notRidden: UIColor {
-        colorScheme == .dark ? UIColor(red: 1, green: 0.27, blue: 0.23, alpha: 1) : UIColor(red: 1, green: 0.22, blue: 0.24, alpha: 1)
-    }
+    private var accent: UIColor { Self.accent(dark: colorScheme == .dark) }
 
     private var neutral: UIColor {
         colorScheme == .dark ? UIColor(white: 0.62, alpha: 1) : UIColor(white: 0.45, alpha: 1)
@@ -371,6 +347,37 @@ extension StreetnavExplorationMap {
     static func focus(on coordinates: [CLLocationCoordinate2D], padding: CGFloat = 60, bottomInset: CGFloat = 0) -> Viewport {
         Viewport.overview(geometry: LineString(coordinates), geometryPadding: EdgeInsets(top: padding, leading: padding, bottom: padding, trailing: padding))
             .padding(.bottom, bottomInset)
+    }
+
+    static func accent(dark: Bool) -> UIColor {
+        dark ? UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1) : UIColor(red: 0, green: 0.48, blue: 1, alpha: 1)
+    }
+
+    // The streets of `streetsLayerSource`, here and under the route of the navigation map: every street not ridden yet
+    // in red (the system red), those already ridden in the accent, as Wandrer colours them.
+
+    static func streetsNotRidden(dark: Bool) -> LineLayer {
+        LineLayer(id: "rues-jamais", source: "rues-osm")
+            .filter(Exp(.eq) { Exp(.get) { "r" }; 0 })
+            .slot(.middle)
+            .lineCap(.round).lineJoin(.round)
+            .lineColor(dark ? UIColor(red: 1, green: 0.27, blue: 0.23, alpha: 1) : UIColor(red: 1, green: 0.22, blue: 0.24, alpha: 1))
+            .lineOpacity(0.75)
+            .lineWidth(zoomed(1.2, 3, 6))
+            .lineEmissiveStrength(1)
+            .lineOcclusionOpacity(0.2)
+    }
+
+    static func streetsRidden(dark: Bool) -> LineLayer {
+        LineLayer(id: "rues-faites", source: "rues-osm")
+            .filter(Exp(.eq) { Exp(.get) { "r" }; 1 })
+            .slot(.middle)
+            .lineCap(.round).lineJoin(.round)
+            .lineColor(accent(dark: dark))
+            .lineOpacity(0.9)
+            .lineWidth(zoomed(1.2, 3, 6))
+            .lineEmissiveStrength(1)
+            .lineOcclusionOpacity(0.35)
     }
 
     static func streetsLayerSource(_ geojson: String) -> GeoJSONSource {
