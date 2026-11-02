@@ -30,6 +30,8 @@ struct StreetnavExplorePanel: View {
     var focus: ([CLLocationCoordinate2D]) -> Void = { _ in }
 
     @State private var query = ""
+    /// The zone groups opened in the rides details, to list their arrondissements or communes.
+    @State private var openZones: Set<String> = []
     /// The suggestion just chosen, shown as its card at once while its location comes, as Maps does.
     @State private var choosing: StreetnavSuggestion?
     @State private var visibleHeight = CGFloat.greatestFiniteMagnitude
@@ -498,6 +500,11 @@ struct StreetnavExplorePanel: View {
                 }
             }
 
+            if let zones = stats.zones, zones.isEmpty == false {
+                zoneSection("Par couronne", groups: Self.rings(zones))
+                zoneSection("Par département", groups: Self.departments(zones))
+            }
+
             if let longest = stats.longest {
                 section("Record") {
                     row(symbol: "trophy", title: "Plus longue sortie", detail: Self.day(longest.day), value: "\(distance(longest.km)) km")
@@ -564,6 +571,119 @@ struct StreetnavExplorePanel: View {
         // Checked at every opening and in the background: half a day without a check means something is wrong.
         if now.timeIntervalSince(last) > 12 * 3600 { return ("Santé vérifiée \(ago)", "clock.badge.exclamationmark", .orange) }
         return ("Santé à jour · vérifiée \(ago)", "checkmark.circle.fill", .green)
+    }
+
+    // MARK: Zones
+
+    /// Paris or a ring of communes, a department: the zones it holds and their streets together.
+    private struct ZoneGroup: Identifiable {
+        let id: String
+        let title: String
+        let detail: String
+        let zones: [StreetnavRideHistory.Stats.Zone]
+        var riddenKm: Double { zones.reduce(0) { $0 + $1.riddenKm } }
+        var totalKm: Double { zones.reduce(0) { $0 + $1.totalKm } }
+    }
+
+    /// Paris, then the 29 communes along its edge, the ring after, and so on to the far end of the 92, 93 and 94.
+    private static func rings(_ zones: [StreetnavRideHistory.Stats.Zone]) -> [ZoneGroup] {
+        let byRing = Dictionary(grouping: zones.filter { $0.ring != nil }) { $0.ring ?? 0 }
+        return byRing.keys.sorted().map { ring in
+            let members = byRing[ring] ?? []
+            let title: String
+            let detail: String
+            switch ring {
+            case 0: (title, detail) = ("Paris", "\(members.count) arrondissements")
+            case 1: (title, detail) = ("1re couronne", "\(members.count) communes limitrophes")
+            default: (title, detail) = ("\(ring)e couronne", "\(members.count) communes")
+            }
+            return ZoneGroup(id: "ring-\(ring)", title: title, detail: detail, zones: sorted(members))
+        }
+    }
+
+    private static func departments(_ zones: [StreetnavRideHistory.Stats.Zone]) -> [ZoneGroup] {
+        let names = ["92": "Hauts-de-Seine", "93": "Seine-Saint-Denis", "94": "Val-de-Marne"]
+        return Dictionary(grouping: zones.filter { $0.department != "75" }, by: \.department)
+            .sorted { $0.key < $1.key }
+            .map { department, members in
+                ZoneGroup(id: "department-\(department)", title: "\(names[department] ?? department) (\(department))",
+                          detail: "\(members.count) communes", zones: sorted(members))
+            }
+    }
+
+    /// Arrondissements in their order, communes by name.
+    private static func sorted(_ zones: [StreetnavRideHistory.Stats.Zone]) -> [StreetnavRideHistory.Stats.Zone] {
+        zones.sorted { $0.department == "75" ? $0.code < $1.code : $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// « Paris 1er Arrondissement » from API Géo, « 1er arrondissement » here.
+    private static func zoneName(_ zone: StreetnavRideHistory.Stats.Zone) -> String {
+        guard zone.department == "75" else { return zone.name }
+        return zone.name.replacingOccurrences(of: "Paris ", with: "").replacingOccurrences(of: "Arrondissement", with: "arrondissement")
+    }
+
+    private func zoneSection(_ title: String, groups: [ZoneGroup]) -> some View {
+        section(title) {
+            ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
+                if index > 0 { separator(leading: 16) }
+                let open = openZones.contains(group.id)
+                Button {
+                    // At once: animated, the rows below slide over the ones coming in.
+                    if open { openZones.remove(group.id) } else { openZones.insert(group.id) }
+                } label: {
+                    zoneRow(group.title, detail: group.detail, riddenKm: group.riddenKm, totalKm: group.totalKm, open: open)
+                }
+                .buttonStyle(.plain)
+                if open {
+                    ForEach(group.zones) { zone in
+                        separator(leading: 32)
+                        zoneRow(Self.zoneName(zone), detail: nil, riddenKm: zone.riddenKm, totalKm: zone.totalKm, open: nil)
+                            .padding(.leading, 16)
+                    }
+                }
+            }
+        }
+    }
+
+    /// A zone's share of streets ridden, its kilometres and a bar; `open` says whether its zones are listed below. A zone
+    /// beyond the streets the server loads has none to measure.
+    private func zoneRow(_ title: String, detail: String?, riddenKm: Double, totalKm: Double, open: Bool?) -> some View {
+        let share = totalKm > 0 ? riddenKm / totalKm : 0
+        let kilometres = totalKm > 0 ? "\(distance(riddenKm)) km sur \(distance(totalKm))" : "rues pas encore chargées"
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(open == nil ? .subheadline : .headline)
+                    Text([detail, kilometres].compactMap { $0 }.joined(separator: " · "))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(totalKm > 0 ? "\((share * 100).formatted(.number.precision(.fractionLength(0)).locale(Self.french))) %" : "–")
+                    .font(open == nil ? .subheadline : .headline)
+                    .monospacedDigit()
+                if let open {
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                }
+            }
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color(.tertiarySystemFill))
+                    if share > 0 {
+                        Capsule().fill(Color.accentColor).frame(width: max(4, geometry.size.width * share))
+                    }
+                }
+            }
+            .frame(height: 6)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 
     private func lastRideText(_ stats: StreetnavRideHistory.Stats) -> String {

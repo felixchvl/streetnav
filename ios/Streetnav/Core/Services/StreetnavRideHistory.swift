@@ -46,15 +46,32 @@ final class StreetnavRideHistory: ObservableObject {
 
             enum CodingKeys: String, CodingKey { case riddenKm = "ridden_km", totalKm = "total_km" }
         }
+        /// An arrondissement of Paris or a commune of the inner suburbs: its ring (0 for Paris, 1 for the communes
+        /// along its edge…) and its streets (server zones.py).
+        struct Zone: Codable, Equatable, Identifiable {
+            let code: String
+            let name: String
+            let department: String
+            let ring: Int?
+            let riddenKm: Double
+            let totalKm: Double
+            var id: String { code }
+
+            enum CodingKeys: String, CodingKey {
+                case code, name, department, ring, riddenKm = "ridden_km", totalKm = "total_km"
+            }
+        }
         let longest: Longest?
         let lastRide: String?
         let byYear: [Year]
         let streets: Streets?
+        /// Absent from servers older than the zones.
+        let zones: [Zone]?
 
         enum CodingKeys: String, CodingKey {
             case total, longest
             case thisYear = "this_year", thisMonth = "this_month", last30Days = "last_30_days", lastRide = "last_ride"
-            case byYear = "by_year", streets
+            case byYear = "by_year", streets, zones
         }
 
         var lastRideDate: Date? {
