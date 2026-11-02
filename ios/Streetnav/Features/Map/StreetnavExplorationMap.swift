@@ -486,7 +486,8 @@ private struct StreetnavCompass: View {
         Button(action: action) {
             ZStack {
                 ZStack {
-                    ForEach(0..<24, id: \.self) { tick in
+                    // No tick at north: the red mark stands in for it (the glass draws the ticks over it).
+                    ForEach(1..<24, id: \.self) { tick in
                         Capsule()
                             .fill(Color.primary.opacity(tick % 6 == 0 ? 0.9 : 0.55))
                             .frame(width: 1.5, height: tick % 6 == 0 ? 4.5 : 3)
