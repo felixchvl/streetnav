@@ -30,6 +30,7 @@ struct StreetnavExplorationMap: View {
 
     /// The map's heading, rounded to the degree so that the view only redraws when the compass would change.
     @State private var bearing: Double = 0
+    @AppStorage(StreetnavStreetFilter.key) private var streetFilter: StreetnavStreetFilter = .all
     @State private var camera = CameraBox()
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @Environment(\.colorScheme) private var colorScheme
@@ -77,9 +78,9 @@ struct StreetnavExplorationMap: View {
         Map(viewport: $viewport) {
             if let streets {
                 Self.streetsLayerSource(streets)
-                Self.streetsNotRidden(dark: colorScheme == .dark)
-                Self.streetsRidden(dark: colorScheme == .dark)
-            } else if let rides {
+                if streetFilter.showsNotRidden { Self.streetsNotRidden(dark: colorScheme == .dark) }
+                if streetFilter.showsRidden { Self.streetsRidden(dark: colorScheme == .dark) }
+            } else if let rides, streetFilter.showsRidden {
                 Self.ridesSource(rides)
                 // Where the rider has already been: the accent, quiet, under the streets still to discover.
                 LineLayer(id: "sorties", source: "sorties")
@@ -252,9 +253,24 @@ struct StreetnavExplorationMap: View {
         .accessibilityLabel(isThreeD.wrappedValue ? "Vue de dessus" : "Vue en 3D")
     }
 
-    /// The location button in a capsule, like the Maps app (no satellite view: it has no 3D).
+    /// Which streets the map shows, then the location button, stacked in one capsule like the Maps app (where the first
+    /// one picks the map type: no satellite view here, it has no 3D).
     private var controls: some View {
         VStack(spacing: 0) {
+            Menu {
+                Picker("Rues affichées", selection: $streetFilter) {
+                    ForEach(StreetnavStreetFilter.allCases) { filter in
+                        Label(filter.title, systemImage: filter.symbolName).tag(filter)
+                    }
+                }
+            } label: {
+                Image(systemName: streetFilter.symbolName)
+                    .frame(width: 48, height: 52)
+                    .contentShape(Rectangle())
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .accessibilityLabel("Rues affichées : \(streetFilter.title)")
+
             Button(action: recenter) {
                 Image(systemName: locationSymbol)
                     .frame(width: 48, height: 52)
@@ -404,6 +420,38 @@ extension StreetnavExplorationMap {
 
 extension Color {
     static let streetnavRoute = Color.blue
+}
+
+/// Which streets both maps show: those ridden (blue), those still to ride (red), both or none. Kept between launches.
+enum StreetnavStreetFilter: String, CaseIterable, Identifiable {
+    case all
+    case ridden
+    case notRidden
+    case none
+
+    static let key = "streetnav.streetFilter"
+
+    var id: String { rawValue }
+    var showsRidden: Bool { self == .all || self == .ridden }
+    var showsNotRidden: Bool { self == .all || self == .notRidden }
+
+    var title: String {
+        switch self {
+        case .all: "Toutes les rues"
+        case .ridden: "Rues parcourues"
+        case .notRidden: "Rues à découvrir"
+        case .none: "Aucune"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .all: "road.lanes"
+        case .ridden: "checkmark.circle"
+        case .notRidden: "circle.dashed"
+        case .none: "eye.slash"
+        }
+    }
 }
 
 /// The pin of a place found by the search bar, like the ones in Maps: its category's symbol in a red balloon.
