@@ -1,3 +1,4 @@
+import BackgroundTasks
 import CoreLocation
 import Foundation
 import HealthKit
@@ -193,7 +194,9 @@ enum StreetnavWorkoutKind {
 ///
 /// An anchored query remembers what was already sent: the first sync sends the whole history, later ones only the
 /// workouts added or deleted since. The anchor moves on once the server has taken a whole batch, so nothing is lost
-/// while the server cannot be reached. iOS wakes the app up when a new workout reaches Health (background delivery).
+/// while the server cannot be reached. iOS wakes the app up when a new workout reaches Health (background delivery);
+/// in case that wake-up came while Health could not be read (iPhone locked) or the server could not be reached, the app
+/// also checks whenever it opens and now and then in the background (app refresh task, StreetnavApp).
 @MainActor
 final class StreetnavHealthSync: ObservableObject {
     static let shared = StreetnavHealthSync()
@@ -213,6 +216,8 @@ final class StreetnavHealthSync: ObservableObject {
     @Published private(set) var progress = ""
     @Published private(set) var lastSync: Date?
     @Published private(set) var lastError: String?
+    /// Health cannot be read while the iPhone is locked: the next check, once it is unlocked, sends what is new.
+    @Published private(set) var waitsForUnlock = false
     @Published private(set) var sentCount: Int
     @Published private(set) var deletedCount: Int
     @Published private(set) var refusedCount: Int
@@ -303,6 +308,21 @@ final class StreetnavHealthSync: ObservableObject {
         }
     }
 
+    static let refreshTask = "com.felixchevalier.streetnav.health-sync"
+
+    /// Asks iOS for the next background check, in an hour at the earliest (iOS picks the moment).
+    func scheduleRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: Self.refreshTask)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 3600)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    /// Looks for workouts added or deleted since the last sync, once Health access was asked for.
+    func check() async {
+        guard defaults.bool(forKey: Keys.requested), HKHealthStore.isHealthDataAvailable() else { return }
+        await sync()
+    }
+
     /// Sends everything again on the next sync, e.g. after the server's database was rebuilt. Deletes nothing.
     func resendEverything() async {
         guard isSyncing == false else { return }
@@ -328,6 +348,10 @@ final class StreetnavHealthSync: ObservableObject {
                 try await sendChanges(with: client)
                 lastSync = Date()
                 defaults.set(lastSync, forKey: Keys.lastSync)
+                waitsForUnlock = false
+            } catch let error as HKError where error.code == .errorDatabaseInaccessible {
+                waitsForUnlock = true
+                break
             } catch {
                 lastError = error.localizedDescription
                 break

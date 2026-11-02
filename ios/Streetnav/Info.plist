@@ -8,6 +8,14 @@
 		<string>$(GOOGLE_PLACES_API_KEY)</string>
 		<key>VanMoofAPIKey</key>
 		<string>$(VANMOOF_API_KEY)</string>
+		<key>BGTaskSchedulerPermittedIdentifiers</key>
+		<array>
+			<string>com.felixchevalier.streetnav.health-sync</string>
+		</array>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>fetch</string>
+		</array>
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>Streetnav utilise ta position pour afficher ta progression sur la carte et préparer des boucles autour de toi.</string>
 	</dict>

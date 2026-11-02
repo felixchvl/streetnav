@@ -23,6 +23,7 @@ struct StreetnavExplorePanel: View {
     @ObservedObject var places: StreetnavPlaceSearch
     @ObservedObject private var guidance = StreetnavGuidance.shared
     @ObservedObject private var history = StreetnavRideHistory.shared
+    @ObservedObject private var healthSync = StreetnavHealthSync.shared
     @Binding var presentedSheet: StreetnavSheet?
     @Binding var detent: PresentationDetent
     var embedded = false
@@ -458,6 +459,7 @@ struct StreetnavExplorePanel: View {
                     Text(lastRideText(stats))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    healthStatus
                 }
             }
             .accessibilityElement(children: .combine)
@@ -536,6 +538,32 @@ struct StreetnavExplorePanel: View {
             }
         }
         .padding(.top, 8)
+    }
+
+    /// Whether every Apple Health workout has reached the server: when the app last checked, or why it could not.
+    private var healthStatus: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            let (text, symbol, color) = healthState(now: context.date)
+            Label {
+                Text(text)
+            } icon: {
+                Image(systemName: symbol)
+                    .foregroundStyle(color)
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func healthState(now: Date) -> (String, String, Color) {
+        if healthSync.isSyncing { return ("Santé : synchronisation…", "arrow.triangle.2.circlepath", .secondary) }
+        guard let last = healthSync.lastSync else { return ("Santé : à configurer", "heart.slash", .orange) }
+        if healthSync.waitsForUnlock { return ("Santé : en attente du déverrouillage", "lock.fill", .orange) }
+        if healthSync.lastError != nil { return ("Santé : pas synchronisée", "exclamationmark.triangle.fill", .orange) }
+        let ago = last.formatted(.relative(presentation: .named, unitsStyle: .abbreviated).locale(Self.french))
+        // Checked at every opening and in the background: half a day without a check means something is wrong.
+        if now.timeIntervalSince(last) > 12 * 3600 { return ("Santé vérifiée \(ago)", "clock.badge.exclamationmark", .orange) }
+        return ("Santé à jour · vérifiée \(ago)", "checkmark.circle.fill", .green)
     }
 
     private func lastRideText(_ stats: StreetnavRideHistory.Stats) -> String {

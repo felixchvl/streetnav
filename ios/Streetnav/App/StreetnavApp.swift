@@ -9,6 +9,8 @@ import SwiftUI
 
 @main
 struct StreetnavApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     init() {
         // No Mapbox telemetry, for the map and the navigation alike: the switch of the map's (i) menu, turned off before
         // the first map is made.
@@ -20,6 +22,18 @@ struct StreetnavApp: App {
     var body: some Scene {
         WindowGroup {
             StreetnavRootView()
+        }
+        // Apple Health checked again whenever the app opens; leaving it books the next check in the background.
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active: Task { await StreetnavHealthSync.shared.check() }
+            case .background: StreetnavHealthSync.shared.scheduleRefresh()
+            default: break
+            }
+        }
+        .backgroundTask(.appRefresh(StreetnavHealthSync.refreshTask)) {
+            await StreetnavHealthSync.shared.scheduleRefresh()
+            await StreetnavHealthSync.shared.check()
         }
     }
 }
