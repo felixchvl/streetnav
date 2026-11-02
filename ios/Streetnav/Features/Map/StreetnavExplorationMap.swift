@@ -28,7 +28,6 @@ struct StreetnavExplorationMap: View {
     var isThreeD: Binding<Bool> = .constant(true)
     var recenter: () -> Void = {}
 
-    @State private var look: Look = .standard
     /// The map's heading, rounded to the degree so that the view only redraws when the compass would change.
     @State private var bearing: Double = 0
     @State private var camera = CameraBox()
@@ -179,13 +178,8 @@ struct StreetnavExplorationMap: View {
         if let forced = UserDefaults.standard.string(forKey: "mapLight") { light = StandardLightPreset(rawValue: forced) }
         if let forced = UserDefaults.standard.string(forKey: "mapTheme") { theme = StandardTheme(rawValue: forced) }
         #endif
-        switch look {
-        case .standard:
-            return .standard(theme: theme, lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false,
-                             showPlaceLabels: true, showRoadLabels: true, showPedestrianRoads: true, show3dObjects: true)
-        case .satellite:
-            return .standardSatellite(lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false)
-        }
+        return .standard(theme: theme, lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false,
+                         showPlaceLabels: true, showRoadLabels: true, showPedestrianRoads: true, show3dObjects: true)
     }
 
     /// A soft halo under a route, as in Maps during navigation.
@@ -226,7 +220,6 @@ struct StreetnavExplorationMap: View {
             .lineOcclusionOpacity(0.35)
     }
 
-    /// Location and map type, stacked in one capsule like the Maps app.
     /// Turns the map back to north where it is, as the compass in Maps does.
     private func pointNorth() {
         guard let state = camera.state else { return }
@@ -259,21 +252,9 @@ struct StreetnavExplorationMap: View {
         .accessibilityLabel(isThreeD.wrappedValue ? "Vue de dessus" : "Vue en 3D")
     }
 
+    /// The location button in a capsule, like the Maps app (no satellite view: it has no 3D).
     private var controls: some View {
         VStack(spacing: 0) {
-            Menu {
-                Picker("Type de carte", selection: $look) {
-                    ForEach(Look.allCases) { look in
-                        Label(look.title, systemImage: look.symbolName).tag(look)
-                    }
-                }
-            } label: {
-                Image(systemName: look == .standard ? "map.fill" : "globe.europe.africa.fill")
-                    .frame(width: 48, height: 52)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("Type de carte")
-
             Button(action: recenter) {
                 Image(systemName: locationSymbol)
                     .frame(width: 48, height: 52)
@@ -303,15 +284,6 @@ struct StreetnavExplorationMap: View {
         case .some: "Suivre ma direction"
         case nil: "Recentrer sur ma position"
         }
-    }
-
-    private enum Look: String, CaseIterable, Identifiable {
-        case standard
-        case satellite
-
-        var id: String { rawValue }
-        var title: String { self == .standard ? "Plan" : "Satellite" }
-        var symbolName: String { self == .standard ? "map" : "globe.europe.africa" }
     }
 }
 
