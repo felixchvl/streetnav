@@ -71,6 +71,7 @@ if __name__ == "__main__":
         self.assertEqual(stats["total"]["rides"], 1)
         self.assertEqual(len(stats["by_year"]), 1)
         self.assertEqual(stats["streets"], {"ridden_km": 0, "total_km": 0})
+        self.assertEqual(stats["zones"], [])
         streets = self.client.get("/streets")
         self.assertEqual(streets.json(), {"type": "FeatureCollection", "features": []})
         self.assertEqual(self.client.get("/streets", headers={"If-None-Match": streets.headers["ETag"]}).status_code, 304)

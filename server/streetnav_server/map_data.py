@@ -4,7 +4,8 @@ GET /tracks: one GeoJSON feature per ride with a track, simplified to about 5 me
 gzipped), with an ETag so that the app only downloads them again when a ride was added or changed.
 GET /streets: every street around Paris cut into ridden and not ridden parts (streets.py), for the map's two colours,
 with the class of their road for the map to draw them as wide as it; 2 MB gzipped, with an ETag on the last street run.
-GET /stats: totals, this year, this month, the last 30 days, records, kilometres by year and streets ridden.
+GET /stats: totals, this year, this month, the last 30 days, records, kilometres by year and streets ridden, overall and
+in each arrondissement of Paris and commune of the inner suburbs, with its ring (zones.py).
 """
 from __future__ import annotations
 
@@ -88,6 +89,11 @@ def router(require_token) -> APIRouter:
             streets = conn.execute(
                 f"""SELECT coalesce(sum(length_m) FILTER (WHERE {SHOWN_RIDDEN}), 0) / 1000, coalesce(sum(length_m), 0) / 1000
                     FROM street_part""").fetchone()
+            zones = conn.execute(
+                f"""SELECT z.code, z.name, z.department, z.ring,
+                           coalesce(sum(p.length_m) FILTER (WHERE {SHOWN_RIDDEN}), 0) / 1000, coalesce(sum(p.length_m), 0) / 1000
+                    FROM zone z LEFT JOIN street_part p ON p.zone = z.code
+                    GROUP BY z.code ORDER BY z.ring NULLS LAST, z.code""").fetchall()
             by_year = conn.execute(
                 """SELECT extract(year FROM started_at)::int, count(*), round((sum(distance_m) / 1000)::numeric)
                    FROM activity WHERE sport = 'cycling' GROUP BY 1 ORDER BY 1""").fetchall()
@@ -100,6 +106,9 @@ def router(require_token) -> APIRouter:
                 "last_ride": last,
                 "by_year": [{"year": y, "rides": n, "km": float(km or 0)} for y, n, km in by_year],
                 "streets": {"ridden_km": round(streets[0], 1), "total_km": round(streets[1], 1)},
+                "zones": [{"code": code, "name": name, "department": department, "ring": ring,
+                           "ridden_km": round(ridden, 1), "total_km": round(total, 1)}
+                          for code, name, department, ring, ridden, total in zones],
             }
 
     return api

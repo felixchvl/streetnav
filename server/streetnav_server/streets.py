@@ -24,6 +24,9 @@ paris_rues schema of this database) is one open area: once rides went through it
 part inside it counts as ridden. Parts are cut at the place's edge (a little wider, PLACE_MARGIN_M) so that the
 streets leaving it keep their own answer. Without paris-rues there are no places.
 
+Each part then belongs to the arrondissement or commune of the inner suburbs its middle lies in (zones.py), for the
+streets ridden zone by zone.
+
   python -m streetnav_server.streets fetch [--bbox S,W,N,E]   download the ways from Overpass, load them, compute
   python -m streetnav_server.streets fetch --out FILE.tsv     only download them, to load on another machine
   python -m streetnav_server.streets load FILE.tsv            load ways (osm id, name, highway, tags as JSON, EWKT)
@@ -41,6 +44,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from . import zones
 from .registry import connect
 
 REACH_M = 12
@@ -243,6 +247,7 @@ def compute(conn) -> None:
         cur.execute("ANALYZE ride_piece")
         cur.execute(PARTS_SQL.format(where="true"))
         places(cur, "true")
+        zones.assign(cur, "true")
 
 
 def places(cur, where: str) -> None:
@@ -283,6 +288,7 @@ def refresh(conn) -> int:
         cur.execute("DELETE FROM street_part WHERE street_id IN (SELECT id FROM touched)")
         cur.execute(PARTS_SQL.format(where="s.id IN (SELECT id FROM touched)"))
         places(cur, "p.street_id IN (SELECT id FROM touched)")
+        zones.assign(cur, "p.street_id IN (SELECT id FROM touched)")
         return len(changed)
 
 
