@@ -299,15 +299,34 @@ struct StreetnavExplorationMap: View {
             .accessibilityLabel("Type de carte")
 
             Button(action: recenter) {
-                Image(systemName: "location")
+                Image(systemName: locationSymbol)
                     .frame(width: 48, height: 52)
                     .contentShape(Rectangle())
+                    .contentTransition(.symbolEffect(.replace))
             }
-            .accessibilityLabel("Recentrer sur ma position")
+            .accessibilityLabel(locationLabel)
         }
         .font(.system(size: 20, weight: .medium))
         .foregroundStyle(.primary)
         .streetnavGlass(in: Capsule(), interactive: true)
+    }
+
+    /// As in Maps: hollow while the map is moved by hand, filled while it follows the rider, with a line while it turns
+    /// with where the phone points.
+    private var locationSymbol: String {
+        switch viewport.followPuck?.bearing {
+        case .heading?: "location.north.line.fill"
+        case .some: "location.fill"
+        case nil: "location"
+        }
+    }
+
+    private var locationLabel: String {
+        switch viewport.followPuck?.bearing {
+        case .heading?: "Revenir au nord"
+        case .some: "Suivre ma direction"
+        case nil: "Recentrer sur ma position"
+        }
     }
 
     private enum Look: String, CaseIterable, Identifiable {
@@ -342,6 +361,11 @@ extension StreetnavExplorationMap {
             // Close enough to read the streets around, tilted enough to see the buildings and their light, north up.
             return Viewport.followPuck(zoom: 16.6, pitch: pitch).padding(.bottom, bottomInset)
         }
+    }
+
+    /// The location button tapped again while following: closer, tilted, turning with where the phone points.
+    static func headingViewport(bottomInset: CGFloat) -> Viewport {
+        Viewport.followPuck(zoom: 17.6, bearing: .heading, pitch: 60).padding(.bottom, bottomInset)
     }
 
     static func focus(on coordinates: [CLLocationCoordinate2D], padding: CGFloat = 60, bottomInset: CGFloat = 0) -> Viewport {

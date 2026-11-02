@@ -43,7 +43,7 @@ struct StreetnavRecommendedView: View {
                 panelOverlap: panelTop.map { max(0, safeAreaBottom - $0) } ?? cameraInset,
                 viewport: $viewport,
                 isThreeD: $isThreeD,
-                recenter: recenter
+                recenter: locationTapped
             )
 
             switch model.flowState {
@@ -149,6 +149,16 @@ struct StreetnavRecommendedView: View {
     private func recenter() {
         withViewportAnimation(.default(maxDuration: 0.5)) {
             viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? 50 : 0)
+        }
+    }
+
+    /// The location button, as in Maps: back to the rider and following them; tapped again, closer, tilted and turning
+    /// with where the phone points; once more, north up again.
+    private func locationTapped() {
+        let exploring = model.flowState == .home || model.flowState == .planner
+        guard exploring, let following = viewport.followPuck, following.bearing != .heading else { return recenter() }
+        withViewportAnimation(.default(maxDuration: 0.6)) {
+            viewport = StreetnavExplorationMap.headingViewport(bottomInset: cameraInset)
         }
     }
 
