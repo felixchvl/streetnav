@@ -11,6 +11,7 @@ struct StreetnavGuidanceView: View {
     @ObservedObject private var guidance = StreetnavGuidance.shared
     @ObservedObject private var history = StreetnavRideHistory.shared
     @AppStorage(StreetnavStreetFilter.key) private var streetFilter: StreetnavStreetFilter = .all
+    @AppStorage(StreetnavMapZoom.key) private var zoomOffset = 0.0
     @Environment(\.colorScheme) private var colorScheme
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @State private var showsOverview = false
@@ -18,7 +19,7 @@ struct StreetnavGuidanceView: View {
 
     var body: some View {
         StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview,
-                             streets: history.streets, filter: streetFilter, dark: colorScheme == .dark)
+                             streets: history.streets, filter: streetFilter, dark: colorScheme == .dark, zoomOffset: zoomOffset)
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
@@ -30,6 +31,10 @@ struct StreetnavGuidanceView: View {
                             showsOverview.toggle()
                         }
                         .padding(.trailing, 8)
+                        if showsOverview == false {
+                            zoomButtons
+                                .padding(.trailing, 8)
+                        }
                     }
                     .padding(.horizontal, 8)
                     .padding(.top, 2)
@@ -178,6 +183,28 @@ struct StreetnavGuidanceView: View {
         .streetnavGlass(in: RoundedRectangle(cornerRadius: 48, style: .continuous))
     }
 
+    /// Closer or farther, as in Waze: the camera still frames the turns ahead, a step closer or farther than before, and
+    /// the exploration map follows the rider at that distance too.
+    private var zoomButtons: some View {
+        VStack(spacing: 0) {
+            Button { zoomOffset = StreetnavMapZoom.clamped(zoomOffset + StreetnavMapZoom.step) } label: {
+                Image(systemName: "plus")
+                    .frame(width: 60, height: 56)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Zoomer")
+            Button { zoomOffset = StreetnavMapZoom.clamped(zoomOffset - StreetnavMapZoom.step) } label: {
+                Image(systemName: "minus")
+                    .frame(width: 60, height: 56)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Dézoomer")
+        }
+        .font(.system(size: 22, weight: .semibold))
+        .foregroundStyle(.primary)
+        .streetnavGlass(in: Capsule(), interactive: true)
+    }
+
     private func roundButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
@@ -250,6 +277,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     let streets: String?
     let filter: StreetnavStreetFilter
     let dark: Bool
+    /// StreetnavMapZoom's offset: the following camera's zoom bounds move by it.
+    let zoomOffset: Double
 
     final class Coordinator {
         var shownRoute: String?
@@ -259,6 +288,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         var streets: String?
         var filter = StreetnavStreetFilter.all
         var dark = false
+        var zoomOffset: Double?
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -291,6 +321,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         view.mapView.ornaments.options.logo.margins = CGPoint(x: 16, y: 142)
         view.mapView.ornaments.options.attributionButton.position = .bottomLeading
         view.mapView.ornaments.options.attributionButton.margins = CGPoint(x: 100, y: 140)
+        Self.follow(at: zoomOffset, in: view)
+        context.coordinator.zoomOffset = zoomOffset
         view.update(navigationCameraState: .following)
         show(guidance.routes, in: view, context: context)
         return view
@@ -298,6 +330,10 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
 
     func updateUIView(_ view: NavigationMapView, context: Context) {
         show(guidance.routes, in: view, context: context)
+        if context.coordinator.zoomOffset != zoomOffset {
+            context.coordinator.zoomOffset = zoomOffset
+            Self.follow(at: zoomOffset, in: view)
+        }
         if context.coordinator.showsOverview != showsOverview {
             context.coordinator.showsOverview = showsOverview
             view.update(navigationCameraState: showsOverview ? .overview : .following)
@@ -316,6 +352,13 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
                 Self.show(streets: streets, filter: filter, dark: dark, in: view.mapView.mapboxMap, reload: relayer)
             }
         }
+    }
+
+    /// The camera keeps choosing its zoom to frame the turns ahead, between the SDK's bounds moved by the offset.
+    private static func follow(at zoomOffset: Double, in view: NavigationMapView) {
+        guard let source = view.navigationCamera.viewportDataSource as? MobileViewportDataSource else { return }
+        let bounds = FollowingCameraOptions().zoomRange
+        source.options.followingCameraOptions.zoomRange = (bounds.lowerBound + zoomOffset)...(bounds.upperBound + zoomOffset)
     }
 
     /// The streets source and the layers the filter keeps, first of the layers added to the style so that they lie under

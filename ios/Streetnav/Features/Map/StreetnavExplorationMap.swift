@@ -47,7 +47,10 @@ struct StreetnavExplorationMap: View {
         // and 21 on the left; they go once the panel is open.
         .overlay(alignment: .bottomTrailing) {
             if showsButtons {
-                controls
+                VStack(spacing: 10) {
+                    zoomButtons
+                    controls
+                }
                     .padding(.trailing, 22)
                     .padding(.bottom, panelOverlap + 14)
                     .transition(.opacity)
@@ -253,6 +256,48 @@ struct StreetnavExplorationMap: View {
         .accessibilityLabel(isThreeD.wrappedValue ? "Vue de dessus" : "Vue en 3D")
     }
 
+    /// Closer or farther, as in Waze: while the map follows the rider, the new distance becomes the default one, kept
+    /// between launches and followed by the navigation; a map moved by hand only zooms where it is.
+    private var zoomButtons: some View {
+        VStack(spacing: 0) {
+            Button { zoom(closer: true) } label: {
+                Image(systemName: "plus")
+                    .frame(width: 48, height: 48)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Zoomer")
+            Button { zoom(closer: false) } label: {
+                Image(systemName: "minus")
+                    .frame(width: 48, height: 48)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Dézoomer")
+        }
+        .font(.system(size: 20, weight: .medium))
+        .foregroundStyle(.primary)
+        .streetnavGlass(in: Capsule(), interactive: true)
+    }
+
+    private func zoom(closer: Bool) {
+        let padding = viewport.padding
+        if let following = viewport.followPuck {
+            let offset = StreetnavMapZoom.clamped(StreetnavMapZoom.offset + (closer ? StreetnavMapZoom.step : -StreetnavMapZoom.step))
+            let change = offset - StreetnavMapZoom.offset
+            guard change != 0 else { return }
+            StreetnavMapZoom.offset = offset
+            withViewportAnimation(.default(maxDuration: 0.3)) {
+                viewport = Viewport.followPuck(zoom: following.zoom + change, bearing: following.bearing, pitch: following.pitch)
+                    .padding(padding)
+            }
+        } else if let state = camera.state {
+            withViewportAnimation(.default(maxDuration: 0.3)) {
+                viewport = Viewport.camera(center: state.center, zoom: state.zoom + (closer ? 1 : -1), bearing: state.bearing,
+                                           pitch: state.pitch)
+                    .padding(padding)
+            }
+        }
+    }
+
     /// Which streets the map shows, then the location button, stacked in one capsule like the Maps app (where the first
     /// one picks the map type: no satellite view here, it has no 3D).
     private var controls: some View {
@@ -309,10 +354,10 @@ extension StreetnavExplorationMap {
         switch mode {
         case .routePreview, .readiness, .arrived:
             if let route { return focus(on: route.coordinates, padding: 40, bottomInset: bottomInset) }
-            return Viewport.followPuck(zoom: 16.6, pitch: pitch).padding(.bottom, bottomInset)
+            return Viewport.followPuck(zoom: 16.6 + StreetnavMapZoom.offset, pitch: pitch).padding(.bottom, bottomInset)
         case _ where mode.isNavigationLike:
             // Tilted like Maps, turning with the ride: the route stays visible through the buildings (occlusion opacity).
-            return Viewport.followPuck(zoom: 17, bearing: .course, pitch: 55).padding(.bottom, bottomInset)
+            return Viewport.followPuck(zoom: 17 + StreetnavMapZoom.offset, bearing: .course, pitch: 55).padding(.bottom, bottomInset)
         default:
             #if DEBUG
             // Development: -mapPitch 60 -mapZoom 16.2 to try other angles.
@@ -323,13 +368,13 @@ extension StreetnavExplorationMap {
             }
             #endif
             // Close enough to read the streets around, tilted enough to see the buildings and their light, north up.
-            return Viewport.followPuck(zoom: 16.6, pitch: pitch).padding(.bottom, bottomInset)
+            return Viewport.followPuck(zoom: 16.6 + StreetnavMapZoom.offset, pitch: pitch).padding(.bottom, bottomInset)
         }
     }
 
     /// The location button tapped again while following: closer, tilted, turning with where the phone points.
     static func headingViewport(bottomInset: CGFloat) -> Viewport {
-        Viewport.followPuck(zoom: 17.6, bearing: .heading, pitch: 60).padding(.bottom, bottomInset)
+        Viewport.followPuck(zoom: 17.6 + StreetnavMapZoom.offset, bearing: .heading, pitch: 60).padding(.bottom, bottomInset)
     }
 
     static func focus(on coordinates: [CLLocationCoordinate2D], padding: CGFloat = 60, bottomInset: CGFloat = 0) -> Viewport {
@@ -455,6 +500,23 @@ extension StreetnavExplorationMap {
 
 extension Color {
     static let streetnavRoute = Color.blue
+}
+
+/// How much closer than usual the maps follow the rider, in zoom levels, set with their + and − buttons as in Waze. Kept
+/// between launches.
+enum StreetnavMapZoom {
+    static let key = "streetnav.mapZoomOffset"
+    static let step = 0.5
+    private static let range = -3.0...2.0
+
+    static var offset: Double {
+        get { UserDefaults.standard.double(forKey: key) }
+        set { UserDefaults.standard.set(clamped(newValue), forKey: key) }
+    }
+
+    static func clamped(_ offset: Double) -> Double {
+        min(range.upperBound, max(range.lowerBound, offset))
+    }
 }
 
 /// Which streets both maps show: those ridden (blue), those still to ride (red), both or none. Kept between launches.
