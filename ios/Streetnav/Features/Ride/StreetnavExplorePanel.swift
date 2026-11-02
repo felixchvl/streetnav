@@ -165,6 +165,7 @@ struct StreetnavExplorePanel: View {
                     .onSubmit {
                         if let first = places.suggestions.first { choose(first) }
                     }
+                // No microphone: the keyboard's dictation is there for that.
                 if query.isEmpty == false {
                     Button {
                         query = ""
@@ -174,10 +175,6 @@ struct StreetnavExplorePanel: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Effacer la recherche")
-                } else {
-                    Image(systemName: "mic")
-                        .foregroundStyle(.primary)
-                        .accessibilityHidden(true)
                 }
             }
             .font(.system(size: collapsedBar ? 20 : 17))
