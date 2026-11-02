@@ -77,6 +77,13 @@ struct StreetnavRecommendedView: View {
             flowChanged(from: oldState, to: newState)
         }
         .onChange(of: isThreeD) { recenter() }
+        .onChange(of: panelDetent) {
+            // Still following the rider, the same way (north up or turning with the phone), with the new room.
+            guard viewport.followPuck != nil else { return }
+            withViewportAnimation(.default(maxDuration: 0.4)) {
+                viewport = viewport.padding(.bottom, cameraInset)
+            }
+        }
         .onChange(of: places.place) { _, place in
             guard let place else { return recenter() }
             withViewportAnimation(.default(maxDuration: 0.8)) {
@@ -122,12 +129,14 @@ struct StreetnavRecommendedView: View {
         }
     }
 
-    /// What the camera keeps clear at the bottom: the panel at the height the step opens it at, or the arrival card.
-    /// It does not follow the panel while it is dragged, so the map stays still, as in Maps.
+    /// What the camera keeps clear at the bottom: the panel where it rests (only the search bar once folded, its height
+    /// for the step otherwise), or the arrival card. It does not follow the panel while it is dragged, so the map stays
+    /// still, as in Maps: the rider comes back to the middle of the map left once the panel settles.
     private var cameraInset: CGFloat {
         if model.flowState == .arrived { return 430 }
         if model.flowState.isNavigationLike { return 0 }
         if embedded { return 300 }
+        if panelDetent == StreetnavExplorePanel.collapsed { return 76 }
         switch model.flowState {
         case .routePreview: return 452
         case .readiness: return 386
