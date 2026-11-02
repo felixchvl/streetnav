@@ -19,6 +19,11 @@ A bike path (or any SIDE_WAYS way) running alongside a street a bike may ride (w
 to that street, as the map shows it: it is neither drawn nor counted, and riding it rides the street. Beside a street
 closed to bikes it stays a way of its own.
 
+A place of Paris (a place, carrefour or rond-point of the Ville's register of voies, which paris-rues keeps in the
+paris_rues schema of this database) is one open area: once rides went through it along TRAVERSED_M of its ways, every
+part inside it counts as ridden. Parts are cut at the place's edge (a little wider, PLACE_MARGIN_M) so that the
+streets leaving it keep their own answer. Without paris-rues there are no places.
+
   python -m streetnav_server.streets fetch [--bbox S,W,N,E]   download the ways from Overpass, load them, compute
   python -m streetnav_server.streets fetch --out FILE.tsv     only download them, to load on another machine
   python -m streetnav_server.streets load FILE.tsv            load ways (osm id, name, highway, tags as JSON, EWKT)
@@ -59,6 +64,14 @@ SIDE_WAYS = ("cycleway", "footway", "path", "bridleway", "busway")
 SIDE_ARRAY = "'{" + ",".join(SIDE_WAYS) + "}'::text[]"
 # A way drawn and measured.
 MEASURED = "{t}.bike AND {t}.counted"
+PLACE_KINDS = ("place", "placette", "carrefour", "rond-point", "rond")
+PLACE_ARRAY = "'{" + ",".join(PLACE_KINDS) + "}'::text[]"
+PLACE_MARGIN_M = 3
+TRAVERSED_M = 20
+# A part shown as ridden: a ride went along it, or it lies in a place that rides went through.
+SHOWN_RIDDEN = f"""(ridden OR place IS NOT NULL AND place IN (
+                        SELECT place FROM street_part WHERE ridden AND place IS NOT NULL
+                        GROUP BY place HAVING sum(length_m) >= {TRAVERSED_M}))"""
 
 # Side ways a bike may ride whose start, quarter points, middle and end are all within SIDE_M of a street a bike may
 # ride; alongside is the street near most of these points (then the nearest to the middle), not one crossing it.
@@ -113,6 +126,34 @@ PARTS_SQL = f"""
     FROM merged m JOIN street s ON s.id = m.id,
          LATERAL (SELECT ST_LineSubstring(s.geom, greatest(0, (m.a - 0.5) / m.n), least(1, (m.b + 0.5) / m.n)) AS part) p
     WHERE ST_Length(part) > 0"""
+
+# Each place's footprint, a little wider, less the places of a lower id it overlaps (a part lies in one place only).
+PLACE_CELLS_SQL = (
+    f"""CREATE TEMP TABLE place_cell ON COMMIT DROP AS
+        SELECT id, ST_Buffer(footprint, {PLACE_MARGIN_M}) AS geom FROM paris_rues.voie
+        WHERE kind = ANY({PLACE_ARRAY}) AND footprint IS NOT NULL""",
+    "CREATE INDEX ON place_cell USING gist (geom)",
+    "ANALYZE place_cell",
+    """UPDATE place_cell c SET geom = ST_Difference(c.geom, o.lower)
+       FROM (SELECT c2.id, ST_Union(o2.geom) AS lower FROM place_cell c2
+             JOIN place_cell o2 ON o2.id < c2.id AND ST_Intersects(o2.geom, c2.geom) GROUP BY c2.id) o
+       WHERE o.id = c.id""")
+
+# The parts across a place's edge cut there: the pieces inside carry the place.
+PLACE_PARTS_SQL = """
+    WITH cut AS (
+        DELETE FROM street_part p WHERE {where} AND EXISTS (SELECT 1 FROM place_cell c WHERE ST_Intersects(p.geom, c.geom))
+        RETURNING street_id, ridden, geom)
+    INSERT INTO street_part (street_id, ridden, geom, length_m, place)
+    SELECT street_id, ridden, d.geom, ST_Length(d.geom), place
+    FROM (SELECT k.street_id, k.ridden, c.id AS place, ST_Intersection(k.geom, c.geom) AS g
+          FROM cut k JOIN place_cell c ON ST_Intersects(k.geom, c.geom)
+          UNION ALL
+          SELECT k.street_id, k.ridden, NULL,
+                 ST_Difference(k.geom, (SELECT ST_Union(c.geom) FROM place_cell c WHERE ST_Intersects(k.geom, c.geom)))
+          FROM cut k) x,
+         LATERAL ST_Dump(ST_CollectionExtract(x.g, 2)) d
+    WHERE ST_Length(d.geom) > 0"""
 
 
 def bike_access(tags: dict) -> tuple[bool, str]:
@@ -201,6 +242,22 @@ def compute(conn) -> None:
         cur.execute(PIECES_SQL.format(where="true"))
         cur.execute("ANALYZE ride_piece")
         cur.execute(PARTS_SQL.format(where="true"))
+        places(cur, "true")
+
+
+def places(cur, where: str) -> None:
+    """Cuts the parts of the streets in `where` (on p.street_id) at the places' edges, when paris-rues's register of
+    voies is there to read."""
+    cur.execute("""SELECT has_schema_privilege(n.oid, 'USAGE') AND has_table_privilege(c.oid, 'SELECT')
+                   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE n.nspname = 'paris_rues' AND c.relname = 'voie'""")
+    readable = cur.fetchone()
+    if not (readable and readable[0]):
+        return
+    for sql in PLACE_CELLS_SQL:
+        cur.execute(sql)
+    cur.execute(PLACE_PARTS_SQL.format(where=where))
+    cur.execute("DROP TABLE place_cell")
 
 
 def refresh(conn) -> int:
@@ -225,6 +282,7 @@ def refresh(conn) -> int:
                         WHERE {MEASURED.format(t='s')} AND s.alongside IS NULL""", (changed, REACH_M + SIDE_M))
         cur.execute("DELETE FROM street_part WHERE street_id IN (SELECT id FROM touched)")
         cur.execute(PARTS_SQL.format(where="s.id IN (SELECT id FROM touched)"))
+        places(cur, "p.street_id IN (SELECT id FROM touched)")
         return len(changed)
 
 
@@ -232,7 +290,7 @@ def record(conn, started: float) -> dict:
     with conn.cursor() as cur:
         cur.execute(f"""SELECT (SELECT count(*) FROM street s WHERE {MEASURED.format(t='s')} AND s.alongside IS NULL),
                                coalesce(sum(length_m), 0) / 1000,
-                               coalesce(sum(length_m) FILTER (WHERE ridden), 0) / 1000 FROM street_part""")
+                               coalesce(sum(length_m) FILTER (WHERE {SHOWN_RIDDEN}), 0) / 1000 FROM street_part""")
         streets, total, ridden = cur.fetchone()
         seconds = time.monotonic() - started
         cur.execute("INSERT INTO street_run VALUES (now(), %s, %s, %s, %s)", (streets, total, ridden, seconds))

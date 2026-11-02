@@ -13,6 +13,7 @@ import hashlib
 from fastapi import APIRouter, Depends, Header, Response
 
 from .registry import connect
+from .streets import SHOWN_RIDDEN
 
 # About 5 metres in Paris (degrees of longitude / latitude): below what a phone screen shows at street level.
 SIMPLIFY_DEGREES = 0.00005
@@ -48,10 +49,10 @@ def router(require_token) -> APIRouter:
             if if_none_match == etag:
                 return Response(status_code=304, headers={"ETag": etag})
             body = conn.execute(
-                """SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(
+                f"""SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(
                               json_build_object('type', 'Feature',
                                                 'geometry', ST_AsGeoJSON(ST_Transform(ST_Simplify(geom, 1.5), 4326), 5)::json,
-                                                'properties', json_build_object('r', ridden::int))), '[]'::json))::text
+                                                'properties', json_build_object('r', {SHOWN_RIDDEN}::int))), '[]'::json))::text
                    FROM street_part""").fetchone()[0]
         return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
@@ -70,8 +71,8 @@ def router(require_token) -> APIRouter:
                    WHERE sport = 'cycling' AND distance_m IS NOT NULL ORDER BY distance_m DESC LIMIT 1""").fetchone()
             last = conn.execute("SELECT max(started_at) FROM activity WHERE sport = 'cycling'").fetchone()[0]
             streets = conn.execute(
-                """SELECT coalesce(sum(length_m) FILTER (WHERE ridden), 0) / 1000, coalesce(sum(length_m), 0) / 1000
-                   FROM street_part""").fetchone()
+                f"""SELECT coalesce(sum(length_m) FILTER (WHERE {SHOWN_RIDDEN}), 0) / 1000, coalesce(sum(length_m), 0) / 1000
+                    FROM street_part""").fetchone()
             by_year = conn.execute(
                 """SELECT extract(year FROM started_at)::int, count(*), round((sum(distance_m) / 1000)::numeric)
                    FROM activity WHERE sport = 'cycling' GROUP BY 1 ORDER BY 1""").fetchall()

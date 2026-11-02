@@ -177,6 +177,10 @@ only the ways a bike may ride are drawn and measured. A point of a street
 counts as ridden when a ride passes within 12 m, sampled every 10 m, and a ridden stretch shorter than 5
 samples is only a ride crossing the street. A bike path (or footway, path, busway) running alongside a street a bike
 may ride (within 20 m all along) belongs to that street, as on the map: it is neither drawn nor counted, and riding it rides
-the street. On 2026-11-02: 85,435 ways measured, 9,520 km, 1,440 km ridden. `compute` redoes everything
+the street. A place of Paris (place, carrefour or rond-point in the city's register, read from paris-rues's
+`paris_rues.voie`, footprint widened by 3 m) is one open area: parts are cut at its edge, and once rides went through
+it along 20 m of its ways, every part inside it is shown as ridden (`street_part.place`; `ridden` stays what the
+rides measured). On 2026-11-02: 85,435 ways measured, 9,520 km, 1,440 km ridden, 1,453 km with the 344 places ridden
+through. `compute` redoes everything
 (about 50 s); `streetnav-streets.timer` runs
 `refresh` every 15 minutes, only around the rides added or changed since the last run.

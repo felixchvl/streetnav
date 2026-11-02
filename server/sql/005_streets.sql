@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS street_part (
     geom      geometry(LineString, 2154) NOT NULL,
     length_m  double precision NOT NULL
 );
+-- The place of Paris a part lies in (its id in paris-rues's register of voies), parts being cut at the places' edges;
+-- NULL elsewhere (streets.py).
+ALTER TABLE street_part ADD COLUMN IF NOT EXISTS place integer;
 CREATE INDEX IF NOT EXISTS street_part_street ON street_part (street_id);
 CREATE INDEX IF NOT EXISTS street_part_geom ON street_part USING gist (geom);
 

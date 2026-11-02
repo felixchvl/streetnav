@@ -99,6 +99,34 @@ class StreetsTest(unittest.TestCase):
         self.assertEqual([r for r, _ in self.parts(2)], [True])
         self.assertEqual(self.parts(1), [])
 
+    def test_a_place_ridden_through_counts_as_ridden_all_over(self):
+        # paris-rues's register of voies, only what streets.places reads (rolled back with the test).
+        self.conn.execute("""CREATE SCHEMA paris_rues;
+                             CREATE TABLE paris_rues.voie (id integer, kind text, footprint geometry(MultiPolygon, 2154))""")
+        for voie_id, kind, south in ((1, "place", 48.8496), (2, "place", 48.8596), (3, "rue", 48.8696)):
+            self.conn.execute("INSERT INTO paris_rues.voie VALUES (%s, %s, ST_Multi(ST_Transform(ST_MakeEnvelope("
+                              "2.3743, %s, 2.3757, %s, 4326), 2154)))", (voie_id, kind, south, south + 0.0008))
+        self.push(workout())  # along latitude 48.85, through place 1
+        streets.load([street(1, 2.37, 48.85, 2.38, 48.85),           # under the ride, across place 1
+                      street(2, 2.3746, 48.8503, 2.3754, 48.8503),   # in place 1, 33 m from the ride
+                      street(3, 2.3753, 48.849, 2.3753, 48.852),     # across place 1 and beyond, crossed by the ride
+                      street(4, 2.3746, 48.86, 2.3754, 48.86),       # in place 2, never ridden through
+                      street(5, 2.3746, 48.87, 2.3754, 48.87)], self.conn)  # in a street's footprint, not a place's
+        streets.compute(self.conn)
+
+        def shown(osm_id):
+            return [r for r, in self.conn.execute(
+                f"SELECT {streets.SHOWN_RIDDEN} FROM street_part WHERE street_id = %s ORDER BY "
+                "ST_LineLocatePoint((SELECT geom FROM street WHERE id = %s), ST_StartPoint(geom))", (osm_id, osm_id))]
+        self.assertEqual(shown(1), [True, True, True])
+        self.assertEqual([r for r, _ in self.parts(2)], [False])
+        self.assertEqual(shown(2), [True])
+        self.assertEqual(shown(3), [False, True, False])
+        self.assertEqual(shown(4), [False])
+        self.assertEqual(shown(5), [False])
+        self.assertEqual(self.conn.execute("SELECT DISTINCT place FROM street_part WHERE street_id IN (2, 4, 5) "
+                                           "ORDER BY 1").fetchall(), [(1,), (2,), (None,)])
+
     def test_refresh_only_near_new_rides(self):
         streets.load([street(1, 2.36, 48.85, 2.37, 48.85)], self.conn)
         streets.compute(self.conn)
