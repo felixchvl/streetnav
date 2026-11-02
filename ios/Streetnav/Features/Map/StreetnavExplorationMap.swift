@@ -342,16 +342,16 @@ extension StreetnavExplorationMap {
     }
 
     // The streets of `streetsLayerSource`, here and under the route of the navigation map: every street not ridden yet
-    // in red (the system red), those already ridden in the accent, as Wandrer colours them.
+    // in red (the system red, lighter by day), those already ridden in the accent, as Wandrer colours them, as wide as
+    // their road. Opaque: where two parts of a street meet, their round ends would otherwise show darker.
 
     static func streetsNotRidden(dark: Bool) -> LineLayer {
         LineLayer(id: "rues-jamais", source: "rues-osm")
             .filter(Exp(.eq) { Exp(.get) { "r" }; 0 })
             .slot(.middle)
             .lineCap(.round).lineJoin(.round)
-            .lineColor(dark ? UIColor(red: 1, green: 0.27, blue: 0.23, alpha: 1) : UIColor(red: 1, green: 0.22, blue: 0.24, alpha: 1))
-            .lineOpacity(0.75)
-            .lineWidth(zoomed(1.2, 3, 6))
+            .lineColor(dark ? UIColor(red: 1, green: 0.27, blue: 0.23, alpha: 1) : UIColor(red: 1, green: 0.42, blue: 0.43, alpha: 1))
+            .lineWidth(roadWidth)
             .lineEmissiveStrength(1)
             .lineOcclusionOpacity(0.2)
     }
@@ -362,10 +362,45 @@ extension StreetnavExplorationMap {
             .slot(.middle)
             .lineCap(.round).lineJoin(.round)
             .lineColor(accent(dark: dark))
-            .lineOpacity(0.9)
-            .lineWidth(zoomed(1.2, 3, 6))
+            .lineWidth(roadWidth)
             .lineEmissiveStrength(1)
             .lineOcclusionOpacity(0.35)
+    }
+
+    /// The width Mapbox Standard draws a road with (its "roads" and "road-path" layers, read from the style), from the
+    /// road class `k` of each street part (map_data.py), a street when there is none; never under 1.2 points zoomed out,
+    /// where Standard thins the small roads away.
+    private static var roadWidth: Exp {
+        Exp(.interpolate) {
+            Exp(.exponential) { 1.5 }
+            Exp(.zoom)
+            12
+            byRoadClass(motorway: 3.2, primary: 3, secondary: 2.2, street: 1.2, link: 1.2, service: 1.2, path: 1.2)
+            18
+            byRoadClass(motorway: 30, primary: 28, secondary: 26, street: 20, link: 18, service: 10, path: 6)
+            22
+            byRoadClass(motorway: 300, primary: 280, secondary: 260, street: 200, link: 180, service: 100, path: 80)
+        }
+    }
+
+    private static func byRoadClass(motorway: Double, primary: Double, secondary: Double, street: Double, link: Double,
+                                    service: Double, path: Double) -> Exp {
+        Exp(.match) {
+            Exp(.get) { "k" }
+            0
+            motorway
+            1
+            primary
+            2
+            secondary
+            4
+            link
+            5
+            service
+            6
+            path
+            street
+        }
     }
 
     static func streetsLayerSource(_ geojson: String) -> GeoJSONSource {
