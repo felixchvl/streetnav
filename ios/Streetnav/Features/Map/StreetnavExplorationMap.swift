@@ -501,8 +501,8 @@ enum StreetnavSunlight {
     }
 }
 
-/// The compass of Maps, measured on its screens: a plain light disc (glass would wash the ticks out over the map) with a
-/// large N, a ring of 24 ticks, east, south and west darker, and a red mark that points north.
+/// The compass of Maps, measured on its iOS 27 screens: a glass button with a large N, 16 faint ticks (east, south and
+/// west darker) and a red mark that points north.
 private struct StreetnavCompass: View {
     let bearing: Double
     let action: () -> Void
@@ -511,43 +511,46 @@ private struct StreetnavCompass: View {
         Button(action: action) {
             ZStack {
                 ZStack {
-                    // No tick at north: the red mark stands in for it.
-                    ForEach(1..<24, id: \.self) { tick in
-                        let cardinal = tick % 6 == 0
+                    // Every 22.5°, from 15 to 19.8 points from the centre; none at north, where the red mark is.
+                    ForEach(1..<16, id: \.self) { tick in
                         Capsule()
-                            .fill(Color.primary.opacity(cardinal ? 1 : 0.5))
-                            .frame(width: cardinal ? 1.75 : 1.5, height: cardinal ? 4 : 3)
-                            .offset(y: -18)
-                            .rotationEffect(.degrees(Double(tick) * 15))
+                            .fill(Color.primary.opacity(tick % 4 == 0 ? 0.65 : 0.135))
+                            .frame(width: 1.85, height: 4.8)
+                            .offset(y: -17.4)
+                            .rotationEffect(.degrees(Double(tick) * 22.5))
                     }
-                    // Its corners rounded by the stroke, from 15.5 to 21.5 points from the centre.
+                    // From 15 to 20 points from the centre. Deeper than the system red, which the glass pales: it comes out
+                    // as bright as in Maps.
                     NorthMark()
-                        .fill(Color.red)
-                        .stroke(Color.red, style: StrokeStyle(lineWidth: 1, lineJoin: .round))
-                        .frame(width: 6.5, height: 5)
-                        .offset(y: -18.5)
+                        .fill(Color(red: 1, green: 0.05, blue: 0.09))
+                        .frame(width: 6.2, height: 5.8)
+                        .offset(y: -17.85)
                 }
                 .rotationEffect(.degrees(-bearing))
+                // A little low, as in Maps.
                 Text(verbatim: "N")
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .font(.system(size: 19.5, weight: .medium, design: .rounded))
                     .foregroundStyle(.primary)
+                    .offset(y: 0.2)
             }
             .frame(width: 48, height: 48)
-            .background(Circle().fill(Color(.systemGray6)))
-            .overlay(Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
-            .shadow(color: .black.opacity(0.14), radius: 5, y: 1)
+            .streetnavGlass(in: Circle(), interactive: true)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Orienter la carte vers le nord")
     }
 
-    /// A triangle pointing out of the disc.
+    /// A triangle pointing out of the disc, its corners rounded.
     private struct NorthMark: Shape {
         func path(in rect: CGRect) -> Path {
-            Path { path in
-                path.move(to: CGPoint(x: rect.midX, y: rect.minY))
-                path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-                path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            let top = CGPoint(x: rect.midX, y: rect.minY)
+            let right = CGPoint(x: rect.maxX, y: rect.maxY)
+            let left = CGPoint(x: rect.minX, y: rect.maxY)
+            return Path { path in
+                path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+                path.addArc(tangent1End: right, tangent2End: top, radius: 0.6)
+                path.addArc(tangent1End: top, tangent2End: left, radius: 0.6)
+                path.addArc(tangent1End: left, tangent2End: right, radius: 0.6)
                 path.closeSubpath()
             }
         }
