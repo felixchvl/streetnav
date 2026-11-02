@@ -75,3 +75,15 @@ if __name__ == "__main__":
         self.assertEqual(streets.json(), {"type": "FeatureCollection", "features": []})
         self.assertEqual(self.client.get("/streets", headers={"If-None-Match": streets.headers["ETag"]}).status_code, 304)
         self.assertEqual(self.client.get("/stats", headers={"Authorization": ""}).status_code, 401)
+
+    def test_streets_carry_their_road_class(self):
+        from streetnav_server import streets
+        from test_streets import street
+        with registry.connect() as conn:
+            conn.execute("TRUNCATE street CASCADE")
+            streets.load([street(1, 2.36, 48.85, 2.37, 48.85, "primary"), street(2, 2.36, 48.86, 2.37, 48.86),
+                          street(3, 2.36, 48.87, 2.37, 48.87, "service")], conn)
+            streets.compute(conn)
+        features = self.client.get("/streets").json()["features"]
+        self.assertEqual(sorted(f["properties"]["k"] for f in features), [1, 3, 5])
+        self.assertEqual({f["properties"]["r"] for f in features}, {0})

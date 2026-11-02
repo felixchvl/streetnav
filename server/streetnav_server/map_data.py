@@ -2,8 +2,8 @@
 
 GET /tracks: one GeoJSON feature per ride with a track, simplified to about 5 metres (2,273 rides: 2 MB, much less
 gzipped), with an ETag so that the app only downloads them again when a ride was added or changed.
-GET /streets: every street around Paris cut into ridden and not ridden parts (streets.py), for the map's two colours;
-2 MB gzipped, with an ETag on the last street run.
+GET /streets: every street around Paris cut into ridden and not ridden parts (streets.py), for the map's two colours,
+with the class of their road for the map to draw them as wide as it; 2 MB gzipped, with an ETag on the last street run.
 GET /stats: totals, this year, this month, the last 30 days, records, kilometres by year and streets ridden.
 """
 from __future__ import annotations
@@ -17,6 +17,20 @@ from .streets import SHOWN_RIDDEN
 
 # About 5 metres in Paris (degrees of longitude / latitude): below what a phone screen shows at street level.
 SIMPLIFY_DEGREES = 0.00005
+
+# The width classes of Mapbox Standard's roads (its "roads" and "road-path" layers), from OpenStreetMap's highway tag:
+# 0 motorway or trunk, 1 primary, 2 secondary or tertiary, 3 street (the rest: residential, unclassified, motorway
+# links…), 4 link of a primary, secondary or tertiary, 5 service, track…, 6 path, footway, cycleway, pedestrian, steps.
+ROAD_CLASS = """CASE
+    WHEN s.highway IN ('motorway', 'trunk') THEN 0
+    WHEN s.highway = 'primary' THEN 1
+    WHEN s.highway IN ('secondary', 'tertiary') THEN 2
+    WHEN s.highway IN ('primary_link', 'secondary_link', 'tertiary_link') THEN 4
+    WHEN s.highway IN ('service', 'services', 'rest_area', 'track', 'construction', 'bus_stop', 'elevator') THEN 5
+    WHEN s.highway IN ('path', 'footway', 'cycleway', 'pedestrian', 'steps', 'bridleway') THEN 6
+    ELSE 3 END"""
+# Bumped whenever the street features change shape, so that the app downloads them again.
+STREETS_FORMAT = 2
 
 
 def router(require_token) -> APIRouter:
@@ -45,15 +59,16 @@ def router(require_token) -> APIRouter:
     def streets(if_none_match: str | None = Header(default=None)) -> Response:
         with connect() as conn:
             last = conn.execute("SELECT max(finished_at) FROM street_run").fetchone()[0]
-            etag = '"' + hashlib.sha256(f"streets:{last}".encode()).hexdigest()[:16] + '"'
+            etag = '"' + hashlib.sha256(f"streets:{last}:{STREETS_FORMAT}".encode()).hexdigest()[:16] + '"'
             if if_none_match == etag:
                 return Response(status_code=304, headers={"ETag": etag})
             body = conn.execute(
                 f"""SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(
                               json_build_object('type', 'Feature',
-                                                'geometry', ST_AsGeoJSON(ST_Transform(ST_Simplify(geom, 1.5), 4326), 5)::json,
-                                                'properties', json_build_object('r', {SHOWN_RIDDEN}::int))), '[]'::json))::text
-                   FROM street_part""").fetchone()[0]
+                                                'geometry', ST_AsGeoJSON(ST_Transform(ST_Simplify(p.geom, 1.5), 4326), 5)::json,
+                                                'properties', json_build_object('r', {SHOWN_RIDDEN}::int, 'k', {ROAD_CLASS}))),
+                              '[]'::json))::text
+                   FROM street_part p JOIN street s ON s.id = p.street_id""").fetchone()[0]
         return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
     @api.get("/stats")
