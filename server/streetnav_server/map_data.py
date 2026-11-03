@@ -6,6 +6,7 @@ GET /streets: every street around Paris cut into ridden and not ridden parts (st
 with the class of their road for the map to draw them as wide as it; 2 MB gzipped, with an ETag on the last street run.
 GET /stats: totals, this year, this month, the last 30 days, records, kilometres by year and streets ridden, overall and
 in each arrondissement of Paris and commune of the inner suburbs, with its ring (zones.py).
+GET /zones: the outlines of those zones, simplified to about 25 m, for the app's maps of the streets ridden by zone.
 """
 from __future__ import annotations
 
@@ -32,6 +33,8 @@ ROAD_CLASS = """CASE
     ELSE 3 END"""
 # Bumped whenever the street features change shape, so that the app downloads them again.
 STREETS_FORMAT = 2
+# Metres: the zones drawn a few centimetres wide on a phone.
+ZONE_SIMPLIFY_M = 25
 
 
 def router(require_token) -> APIRouter:
@@ -70,6 +73,21 @@ def router(require_token) -> APIRouter:
                                                 'properties', json_build_object('r', {SHOWN_RIDDEN}::int, 'k', {ROAD_CLASS}))),
                               '[]'::json))::text
                    FROM street_part p JOIN street s ON s.id = p.street_id""").fetchone()[0]
+        return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
+
+    @api.get("/zones")
+    def zone_shapes(if_none_match: str | None = Header(default=None)) -> Response:
+        with connect() as conn:
+            zones, points = conn.execute("SELECT count(*), coalesce(sum(ST_NPoints(geom)), 0) FROM zone").fetchone()
+            etag = '"' + hashlib.sha256(f"zones:{zones}:{points}:{ZONE_SIMPLIFY_M}".encode()).hexdigest()[:16] + '"'
+            if if_none_match == etag:
+                return Response(status_code=304, headers={"ETag": etag})
+            body = conn.execute(
+                """SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(
+                          json_build_object('type', 'Feature',
+                                            'geometry', ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(geom, %s), 4326), 5)::json,
+                                            'properties', json_build_object('code', code)) ORDER BY code), '[]'::json))::text
+                   FROM zone""", (ZONE_SIMPLIFY_M,)).fetchone()[0]
         return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
     @api.get("/stats")

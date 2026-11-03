@@ -53,9 +53,6 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT count(*) FROM raw_file").fetchone()[0], 0)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_tracks_and_stats(self):
         self.client.post("/activities", content=json.dumps(workout()).encode(), headers={"Content-Type": "application/json"})
         response = self.client.get("/tracks")
@@ -77,6 +74,19 @@ if __name__ == "__main__":
         self.assertEqual(self.client.get("/streets", headers={"If-None-Match": streets.headers["ETag"]}).status_code, 304)
         self.assertEqual(self.client.get("/stats", headers={"Authorization": ""}).status_code, 401)
 
+    def test_zone_outlines(self):
+        from streetnav_server import zones
+        from test_zones import square
+        with registry.connect() as conn:
+            zones.load([square("75101", 2.33, 48.84, 2.35, 48.86), square("92001", 2.35, 48.84, 2.37, 48.86)], conn)
+        response = self.client.get("/zones")
+        features = response.json()["features"]
+        self.assertEqual([f["properties"]["code"] for f in features], ["75101", "92001"])
+        self.assertIn(features[0]["geometry"]["type"], ("Polygon", "MultiPolygon"))
+        self.assertEqual(self.client.get("/zones", headers={"If-None-Match": response.headers["ETag"]}).status_code, 304)
+        with registry.connect() as conn:
+            conn.execute("TRUNCATE zone")
+
     def test_streets_carry_their_road_class(self):
         from streetnav_server import streets
         from test_streets import street
@@ -88,3 +98,7 @@ if __name__ == "__main__":
         features = self.client.get("/streets").json()["features"]
         self.assertEqual(sorted(f["properties"]["k"] for f in features), [1, 3, 5])
         self.assertEqual({f["properties"]["r"] for f in features}, {0})
+
+
+if __name__ == "__main__":
+    unittest.main()
