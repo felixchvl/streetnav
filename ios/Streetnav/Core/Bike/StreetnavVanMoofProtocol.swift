@@ -140,6 +140,7 @@ enum StreetnavVanMoofProtocol {
         return fields.map { field -> String in
             switch field {
             case .int(let value): String(value)
+            case .double(let value): value.formatted(.number.precision(.fractionLength(0...2)))
             case .text(let text): text
             case .bytes(let data): data.map { String(format: "%02X", $0) }.joined()
             case .array(let items): "[" + items.map { $0.encoded.map { String(format: "%02X", $0) }.joined() }.joined(separator: " ") + "]"
@@ -183,6 +184,7 @@ indirect enum CBOR: Equatable {
     case array([CBOR])
     case map([(CBOR, CBOR)])
     case simple(UInt8)
+    case double(Double)
 
     static func == (lhs: CBOR, rhs: CBOR) -> Bool { lhs.encoded == rhs.encoded }
 
@@ -194,6 +196,7 @@ indirect enum CBOR: Equatable {
         case .array(let items): items.reduce(Self.head(4, UInt64(items.count))) { $0 + $1.encoded }
         case .map(let pairs): pairs.reduce(Self.head(5, UInt64(pairs.count))) { $0 + $1.0.encoded + $1.1.encoded }
         case .simple(let value): Data([0xE0 | value])
+        case .double(let value): Data([0xFB] + (0..<8).reversed().map { UInt8(value.bitPattern >> ($0 * 8) & 0xFF) })
         }
     }
 
@@ -281,6 +284,9 @@ indirect enum CBOR: Equatable {
                 }
                 return .map(pairs)
             case 6: return item()  // a tag: keep the tagged item
+            case 7 where info == 25: return .double(Double(Float16(bitPattern: UInt16(value))))
+            case 7 where info == 26: return .double(Double(Float(bitPattern: UInt32(value))))
+            case 7 where info == 27: return .double(Double(bitPattern: value))
             default: return .simple(UInt8(clamping: value))
             }
         }

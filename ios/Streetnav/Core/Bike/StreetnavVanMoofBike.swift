@@ -31,6 +31,8 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     @Published private(set) var chargeLimit: Int?
     /// As the bike sends it: its unit is undocumented.
     @Published private(set) var speed: String?
+    /// The speed in km/h, once its unit is known (`noteGPS`): nil until then, or when the bike has not sent it lately.
+    @Published private(set) var speedKmh: Double?
     /// Diagnostic trouble codes: (device class << 8) | subcode.
     @Published private(set) var errorCodes: [Int]?
     /// Undocumented registers, as the bike sends them.
@@ -53,6 +55,21 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     private var fragmentID: UInt8 = 0
     private var deadline: Task<Void, Never>?
     private var lockWaiters: [CheckedContinuation<Bool?, Never>] = []
+    /// The GPS speed of the moment, km/h, to find the unit of the bike's own (`calibrate`).
+    private var gpsSpeed: (kmh: Double, at: Date)?
+    private var unitVotes: [Double: Int] = [:]
+    private static let speedFactorKey = "streetnav.vanmoof.speedFactor"
+    /// The bike's speed times this is km/h, once found; the units it could be in: km/h, tenths and hundredths of km/h,
+    /// m/s, tenths and hundredths of m/s.
+    private var speedFactor: Double? = UserDefaults.standard.object(forKey: speedFactorKey) as? Double
+    private static let speedUnits = [1, 0.1, 0.01, 3.6, 0.36, 0.036]
+
+    /// Connects when the account is set up and the bike not yet connected: at launch and when guidance starts, so that
+    /// the map and the navigation show the bike at once. The bike takes one connection at a time.
+    func connectIfSignedIn() async {
+        guard StreetnavVanMoofAccount.shared.isSignedIn, state == .idle || state.isFailure else { return }
+        await connect()
+    }
 
     /// Connects and authenticates; `ready` once the bike accepted the certificate.
     func connect() async {
@@ -110,9 +127,49 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         for topic in topics { request(topic) }
     }
 
-    /// The speed again, while the rider watches it.
+    /// The speed again, while the rider watches it: the S6 sends nothing unasked, so twice a second, as the official
+    /// app shows it.
     func refreshSpeed() {
         if state == .ready { request(.speed) }
+    }
+
+    #if DEBUG
+    /// Development: -sampleBike YES shows the bike connected with sample values, to lay the screens out without it.
+    func showSampleIfAsked() {
+        guard UserDefaults.standard.bool(forKey: "sampleBike") else { return }
+        state = .ready
+        battery = 78
+        isLocked = false
+        assistLevel = 1
+        lightMode = 3
+        speedKmh = 18.4
+        chargeLimit = 80
+        alarmOn = false
+        alarmSensitivity = 2
+    }
+    #endif
+
+    /// What the map and the navigation show, now and then.
+    func refreshStatus() {
+        guard state == .ready else { return }
+        for topic in [P.Topic.batteryLevel, .lockState, .assistLevel, .lightMode] { request(topic) }
+    }
+
+    /// The GPS speed, to find the unit the bike sends its own in: once eight readings above 9 km/h agree on one unit, it
+    /// is kept for good.
+    func noteGPS(speedKmh: Double) {
+        gpsSpeed = (speedKmh, Date())
+    }
+
+    private func calibrate(raw: Double) {
+        guard speedFactor == nil, raw > 0, let gps = gpsSpeed, Date().timeIntervalSince(gps.at) < 1.5, gps.kmh >= 9 else { return }
+        guard let unit = Self.speedUnits.first(where: { abs(gps.kmh / (raw * $0) - 1) < 0.2 }) else { return }
+        unitVotes[unit, default: 0] += 1
+        let others = unitVotes.filter { $0.key != unit }.values.reduce(0, +)
+        if unitVotes[unit, default: 0] >= 8, others <= 2 {
+            speedFactor = unit
+            UserDefaults.standard.set(unit, forKey: Self.speedFactorKey)
+        }
     }
 
     func setAssistLevel(_ level: Int) { set(.assistLevel, [level], allowed: 0...4) }
@@ -185,7 +242,17 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         case .alarm: alarmOn = firstInt(message.payload).map { $0 != 0 }
         case .alarmSensitivity: alarmSensitivity = firstInt(message.payload)
         case .chargeLimit: chargeLimit = firstInt(message.payload)
-        case .speed: speed = P.raw(message.payload)
+        case .speed:
+            speed = P.raw(message.payload)
+            let raw: Double? = switch P.fields(of: message.payload)?.first {
+            case .int(let value)?: Double(value)
+            case .double(let value)?: value
+            default: nil
+            }
+            if let raw {
+                calibrate(raw: raw)
+                speedKmh = speedFactor.map { raw * $0 }
+            }
         case .errors:
             errorCodes = (P.fields(of: message.payload) ?? []).flatMap { field -> [Int] in
                 switch field {
