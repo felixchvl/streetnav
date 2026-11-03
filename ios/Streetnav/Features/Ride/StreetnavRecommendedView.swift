@@ -514,7 +514,7 @@ struct StreetnavIntegrationSheet: View {
             List {
                 Section {
                     NavigationLink {
-                        StreetnavHealthSyncView()
+                        StreetnavServerSettingsView()
                     } label: {
                         StreetnavSettingsRow(symbol: "server.rack", title: "Serveur Streetnav", detail: serverDetail)
                     }

@@ -28,6 +28,7 @@
 		STNB0290000000000000029 /* StreetnavServerAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0290000000000000029 /* StreetnavServerAccess.swift */; };
 		STNB0120000000000000012 /* StreetnavHealthSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0120000000000000012 /* StreetnavHealthSync.swift */; };
 		STNB0130000000000000013 /* StreetnavHealthSyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0130000000000000013 /* StreetnavHealthSyncView.swift */; };
+		STNB0310000000000000031 /* StreetnavServerSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0310000000000000031 /* StreetnavServerSettingsView.swift */; };
 		STNB0180000000000000018 /* StreetnavMapBenchmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0180000000000000018 /* StreetnavMapBenchmark.swift */; };
 		STNB0170000000000000017 /* StreetnavExplorePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0170000000000000017 /* StreetnavExplorePanel.swift */; };
 		STNB0210000000000000021 /* StreetnavVanMoofProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = STNP0210000000000000021 /* StreetnavVanMoofProtocol.swift */; };
@@ -66,6 +67,7 @@ STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */ = {isa = PBXFileR
 STNP0290000000000000029 /* StreetnavServerAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavServerAccess.swift; sourceTree = "<group>"; };
 STNP0120000000000000012 /* StreetnavHealthSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSync.swift; sourceTree = "<group>"; };
 STNP0130000000000000013 /* StreetnavHealthSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavHealthSyncView.swift; sourceTree = "<group>"; };
+STNP0310000000000000031 /* StreetnavServerSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavServerSettingsView.swift; sourceTree = "<group>"; };
 STNP0180000000000000018 /* StreetnavMapBenchmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavMapBenchmark.swift; sourceTree = "<group>"; };
 STNP0170000000000000017 /* StreetnavExplorePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavExplorePanel.swift; sourceTree = "<group>"; };
 STNP0210000000000000021 /* StreetnavVanMoofProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreetnavVanMoofProtocol.swift; sourceTree = "<group>"; };
@@ -166,7 +168,7 @@ STGRBIKE0000000000000013 /* Bike */ = { isa = PBXGroup; children = ( STNP0210000
 STGRFBIK0000000000000014 /* Bike */ = { isa = PBXGroup; children = ( STNP0250000000000000025 /* StreetnavVanMoofView.swift */, ); path = Bike; sourceTree = "<group>"; };
 STGRCONF0000000000000015 /* Config */ = { isa = PBXGroup; children = ( STNP0240000000000000024 /* Streetnav.xcconfig */, ); path = Config; sourceTree = "<group>"; };
 STGRHLTH0000000000000011 /* Health */ = { isa = PBXGroup; children = ( STNP0120000000000000012 /* StreetnavHealthSync.swift */, STNP0290000000000000029 /* StreetnavServerAccess.swift */, ); path = Health; sourceTree = "<group>"; };
-STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP0130000000000000013 /* StreetnavHealthSyncView.swift */, ); path = Health; sourceTree = "<group>"; };
+STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP0130000000000000013 /* StreetnavHealthSyncView.swift */, STNP0310000000000000031 /* StreetnavServerSettingsView.swift */, ); path = Health; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -260,6 +262,7 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 				STNB0120000000000000012 /* StreetnavHealthSync.swift in Sources */,
 				STNB0290000000000000029 /* StreetnavServerAccess.swift in Sources */,
 				STNB0130000000000000013 /* StreetnavHealthSyncView.swift in Sources */,
+				STNB0310000000000000031 /* StreetnavServerSettingsView.swift in Sources */,
 				STNB0180000000000000018 /* StreetnavMapBenchmark.swift in Sources */,
 				STNB0170000000000000017 /* StreetnavExplorePanel.swift in Sources */,
 				STNB0160000000000000016 /* StreetnavExplorationMap.swift in Sources */,
