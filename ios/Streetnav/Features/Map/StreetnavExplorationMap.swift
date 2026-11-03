@@ -83,6 +83,10 @@ struct StreetnavExplorationMap: View {
 
     private var map: Map {
         Map(viewport: $viewport) {
+            // The real relief at every zoom (Standard flattens it beyond 13.7), lifted a little: Paris's hills are only
+            // about 100 m high.
+            Self.reliefSource
+            Terrain(sourceId: "relief").exaggeration(Self.reliefExaggeration)
             if let streets {
                 Self.streetsLayerSource(streets)
                 // Each colour twice: over the buildings, blended with them, then in its own colour where it is in sight.
@@ -100,11 +104,11 @@ struct StreetnavExplorationMap: View {
                 }
             } else if let rides, streetFilter.showsRidden {
                 Self.ridesSource(rides)
-                // Where the rider has already been: the accent, quiet, under the streets still to discover.
+                // Where the rider has already been: the colour of the streets ridden, quiet.
                 LineLayer(id: "sorties", source: "sorties")
                     .slot(.middle)
                     .lineCap(.round).lineJoin(.round)
-                    .lineColor(accent)
+                    .lineColor(Self.riddenColour(dark: colorScheme == .dark))
                     .lineOpacity(colorScheme == .dark ? 0.55 : 0.45)
                     .lineWidth(Self.zoomed(1.2, 3, 6))
                     .lineEmissiveStrength(1)
@@ -416,13 +420,29 @@ extension StreetnavExplorationMap {
             .padding(.bottom, bottomInset)
     }
 
+    /// Blue, as routes are in every navigation app: the way to ride.
     static func accent(dark: Bool) -> UIColor {
         dark ? UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1) : UIColor(red: 0, green: 0.48, blue: 1, alpha: 1)
     }
 
+    /// The system green, for what is done: the streets ridden, against the red of those still to ride.
+    static func riddenColour(dark: Bool) -> UIColor {
+        dark ? UIColor(red: 0.19, green: 0.82, blue: 0.35, alpha: 1) : UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
+    }
+
+    static let reliefExaggeration = 1.5
+
+    static var reliefSource: RasterDemSource {
+        var source = RasterDemSource(id: "relief")
+        source.url = "mapbox://mapbox.mapbox-terrain-dem-v1"
+        source.tileSize = 514
+        source.maxzoom = 14
+        return source
+    }
+
     // The streets of `streetsLayerSource`, here and under the route of the navigation map: every street not ridden yet
-    // in red (the system red, lighter by day), those already ridden in the accent, as Wandrer colours them, as wide as
-    // their road. Opaque everywhere: where parts or streets overlap (the round ends of two parts, a crossing), translucent
+    // in red (the system red, lighter by day), those already ridden in green, apart from the blue of the routes, as
+    // wide as their road. Opaque everywhere: where parts or streets overlap (the round ends of two parts, a crossing), translucent
     // lines add up into darker knots. So each colour comes twice: `behind` the buildings, drawn over them in its colour
     // already blended with theirs under that light, then above it in its own colour, hidden where a building is in front.
 
@@ -435,7 +455,7 @@ extension StreetnavExplorationMap {
     static func streetsRidden(dark: Bool, behind light: StandardLightPreset? = nil, id: String? = nil,
                               source: String = "rues-osm") -> LineLayer {
         streets(id: id ?? (light == nil ? "rues-faites" : "rues-faites-derriere"), source: source, ridden: 1,
-                colour: accent(dark: dark), behind: light, share: 0.4)
+                colour: riddenColour(dark: dark), behind: light, share: 0.4)
     }
 
     private static func streets(id: String, source: String, ridden: Int, colour: UIColor, behind light: StandardLightPreset?,

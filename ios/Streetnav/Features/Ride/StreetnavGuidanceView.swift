@@ -309,6 +309,9 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         context.coordinator.styleObserver = view.mapView.mapboxMap.onStyleLoaded.observe { [weak view, weak coordinator = context.coordinator] _ in
             guard let map = view?.mapView.mapboxMap, let coordinator else { return }
             try? map.localizeLabels(into: Locale(identifier: "fr"))
+            // The relief of the exploration map.
+            try? map.addSource(StreetnavExplorationMap.reliefSource)
+            try? map.setTerrain(Terrain(sourceId: "relief").exaggeration(StreetnavExplorationMap.reliefExaggeration))
             // A new style has none of them.
             Self.show(streets: coordinator.streets, live: coordinator.live, filter: coordinator.filter, dark: coordinator.dark,
                       light: coordinator.light ?? .day, in: map, reload: true)
