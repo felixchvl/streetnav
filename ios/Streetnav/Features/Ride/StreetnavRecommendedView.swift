@@ -43,6 +43,7 @@ struct StreetnavRecommendedView: View {
                 rides: history.tracks,
                 streets: history.streets,
                 live: live.ridden,
+                outside: history.tracksOutside,
                 routeProgress: model.flowState.isNavigationLike ? model.rideProgress.routeProgress : 0,
                 panelOverlap: panelTop.map { max(0, safeAreaBottom - $0) } ?? cameraInset,
                 viewport: $viewport,

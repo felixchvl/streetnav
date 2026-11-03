@@ -14,6 +14,8 @@ final class StreetnavRideHistory: ObservableObject {
     /// Streets around Paris cut into ridden (`r` = 1) and not ridden (`r` = 0) parts, GeoJSON (GET /streets).
     @Published private(set) var streets: String?
     @Published private(set) var stats: Stats?
+    /// The rides beyond Paris and the inner suburbs, where no street is measured (GET /tracks/outside), GeoJSON.
+    @Published private(set) var tracksOutside: String?
     /// Each arrondissement's and commune's outline (GET /zones): its code, then its rings of (longitude, latitude).
     @Published private(set) var zoneShapes: [String: [[CGPoint]]] = [:]
     @Published private(set) var isOffline = false
@@ -93,6 +95,7 @@ final class StreetnavRideHistory: ObservableObject {
     private var streetsFile: URL { folder.appending(path: "streets.geojson") }
     private var statsFile: URL { folder.appending(path: "stats.json") }
     private var zonesFile: URL { folder.appending(path: "zones.geojson") }
+    private var outsideFile: URL { folder.appending(path: "tracks-outside.geojson") }
     private var etagKey: String { "streetnav.tracks.etag" }
 
     private init() {
@@ -100,6 +103,7 @@ final class StreetnavRideHistory: ObservableObject {
         streets = try? String(contentsOf: streetsFile, encoding: .utf8)
         stats = (try? Data(contentsOf: statsFile)).flatMap { try? JSONDecoder().decode(Stats.self, from: $0) }
         zoneShapes = (try? Data(contentsOf: zonesFile)).map(Self.shapes) ?? [:]
+        tracksOutside = try? String(contentsOf: outsideFile, encoding: .utf8)
     }
 
     /// Asks the server for what changed; keeps what is cached when it cannot be reached.
@@ -122,6 +126,10 @@ final class StreetnavRideHistory: ObservableObject {
             // Absent from servers older than the zones: the maps of the statistics wait for it.
             if let fresh = try? await download("zones", token: token, baseURL: baseURL, cached: zoneShapes.isEmpty == false, to: zonesFile) {
                 zoneShapes = Self.shapes(Data(fresh.utf8))
+            }
+            if let fresh = try? await download("tracks/outside", token: token, baseURL: baseURL, cached: tracksOutside != nil,
+                                               to: outsideFile) {
+                tracksOutside = fresh
             }
             if let fresh = try await download("streets", token: token, baseURL: baseURL, cached: streets != nil, to: streetsFile) {
                 streets = fresh

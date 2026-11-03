@@ -24,6 +24,8 @@ struct StreetnavExplorationMap: View {
     var streets: String?
     /// The streets ridden on this ride, before the server knows (StreetnavLiveStreets), GeoJSON.
     var live: String?
+    /// The rides beyond Paris and the inner suburbs, where no street is measured (GET /tracks/outside), GeoJSON.
+    var outside: String?
     var routeProgress: Double = 0
     /// How far the panel rises above the bottom of the safe area, live while it is dragged: Mapbox's logo sits on it.
     var panelOverlap: CGFloat = 0
@@ -92,15 +94,15 @@ struct StreetnavExplorationMap: View {
                 // Each colour twice: over the buildings, blended with them, then in its own colour where it is in sight.
                 if streetFilter.showsNotRidden { Self.streetsNotRidden(dark: colorScheme == .dark, behind: lightPreset) }
                 if streetFilter.showsRidden { Self.streetsRidden(dark: colorScheme == .dark, behind: lightPreset) }
-                if let live, streetFilter.showsRidden {
-                    // The streets still to ride that this ride has just turned blue.
-                    Self.liveSource(live)
-                    Self.streetsRidden(dark: colorScheme == .dark, behind: lightPreset, id: "rues-direct-derriere", source: "rues-direct")
+                // The streets still to ride that this ride has just turned teal, and the rides beyond the zones.
+                ForEvery(extraRidden, id: \.source) { extra in
+                    Self.geoJSONSource(extra.source, extra.geojson)
+                    Self.streetsRidden(dark: colorScheme == .dark, behind: lightPreset, id: extra.source + "-derriere", source: extra.source)
                 }
                 if streetFilter.showsNotRidden { Self.streetsNotRidden(dark: colorScheme == .dark) }
                 if streetFilter.showsRidden { Self.streetsRidden(dark: colorScheme == .dark) }
-                if live != nil, streetFilter.showsRidden {
-                    Self.streetsRidden(dark: colorScheme == .dark, id: "rues-direct", source: "rues-direct")
+                ForEvery(extraRidden, id: \.source) { extra in
+                    Self.streetsRidden(dark: colorScheme == .dark, id: extra.source, source: extra.source)
                 }
             } else if let rides, streetFilter.showsRidden {
                 Self.ridesSource(rides)
@@ -203,6 +205,12 @@ struct StreetnavExplorationMap: View {
 
     private var neutral: UIColor {
         colorScheme == .dark ? UIColor(white: 0.62, alpha: 1) : UIColor(white: 0.45, alpha: 1)
+    }
+
+    /// Drawn like the streets ridden, when the filter shows them.
+    private var extraRidden: [(source: String, geojson: String)] {
+        guard streetFilter.showsRidden else { return [] }
+        return [("rues-direct", live), ("sorties-ailleurs", outside)].compactMap { source, geojson in geojson.map { (source, $0) } }
     }
 
     private var lightPreset: StandardLightPreset {
@@ -544,8 +552,8 @@ extension StreetnavExplorationMap {
         return source
     }
 
-    static func liveSource(_ geojson: String) -> GeoJSONSource {
-        var source = GeoJSONSource(id: "rues-direct")
+    static func geoJSONSource(_ id: String, _ geojson: String) -> GeoJSONSource {
+        var source = GeoJSONSource(id: id)
         source.data = .string(geojson)
         return source
     }

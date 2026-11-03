@@ -20,7 +20,8 @@ struct StreetnavGuidanceView: View {
 
     var body: some View {
         StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview,
-                             streets: history.streets, live: live.ridden, filter: streetFilter, dark: colorScheme == .dark,
+                             streets: history.streets, live: live.ridden, outside: history.tracksOutside, filter: streetFilter,
+                             dark: colorScheme == .dark,
                              zoomOffset: zoomOffset)
             .ignoresSafeArea()
             .overlay(alignment: .top) {
@@ -279,6 +280,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     let streets: String?
     /// The streets this ride has just turned blue (StreetnavLiveStreets), above those still to ride.
     let live: String?
+    /// The rides beyond Paris and the inner suburbs, drawn like the streets ridden.
+    let outside: String?
     let filter: StreetnavStreetFilter
     let dark: Bool
     /// StreetnavMapZoom's offset: the following camera's zoom bounds move by it.
@@ -293,6 +296,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         /// The light the streets behind the buildings were blended for.
         var streetsLight: StandardLightPreset?
         var live: String?
+        var outside: String?
         var filter = StreetnavStreetFilter.all
         var dark = false
         var zoomOffset: Double?
@@ -313,11 +317,13 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
             try? map.addSource(StreetnavExplorationMap.reliefSource)
             try? map.setTerrain(Terrain(sourceId: "relief").exaggeration(StreetnavExplorationMap.reliefExaggeration))
             // A new style has none of them.
-            Self.show(streets: coordinator.streets, live: coordinator.live, filter: coordinator.filter, dark: coordinator.dark,
+            Self.show(streets: coordinator.streets, live: coordinator.live, outside: coordinator.outside, filter: coordinator.filter,
+                      dark: coordinator.dark,
                       light: coordinator.light ?? .day, in: map, reload: true)
         }
         context.coordinator.streets = streets
         context.coordinator.live = live
+        context.coordinator.outside = outside
         context.coordinator.filter = filter
         context.coordinator.dark = dark
         view.routeColor = .systemBlue
@@ -355,35 +361,38 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
             context.coordinator.light = light
         }
         let coordinator = context.coordinator
-        if coordinator.streets != streets || coordinator.live != live || coordinator.filter != filter || coordinator.dark != dark
+        if coordinator.streets != streets || coordinator.live != live || coordinator.outside != outside || coordinator.filter != filter
+            || coordinator.dark != dark
             || coordinator.streetsLight != light {
             let relayer = coordinator.filter != filter || coordinator.dark != dark || coordinator.streetsLight != light
             coordinator.streetsLight = light
             coordinator.streets = streets
             coordinator.live = live
+            coordinator.outside = outside
             coordinator.filter = filter
             coordinator.dark = dark
             if view.mapView.mapboxMap.isStyleLoaded {
-                Self.show(streets: streets, live: live, filter: filter, dark: dark, light: light, in: view.mapView.mapboxMap,
+                Self.show(streets: streets, live: live, outside: outside, filter: filter, dark: dark, light: light, in: view.mapView.mapboxMap,
                           reload: relayer)
             }
         }
     }
 
-    /// The streets this ride has just turned blue, just above the streets layers (behind the buildings, then in sight).
-    private static func show(live: String?, filter: StreetnavStreetFilter, dark: Bool, light: StandardLightPreset,
-                             in map: MapboxMap, reload: Bool) {
-        let shown = live != nil && filter.showsRidden
-        let layers = [StreetnavExplorationMap.streetsRidden(dark: dark, behind: light, id: "rues-direct-derriere", source: "rues-direct"),
-                      StreetnavExplorationMap.streetsRidden(dark: dark, id: "rues-direct", source: "rues-direct")]
+    /// Lines drawn like the streets ridden (this ride's, the rides beyond the zones), just above the streets layers
+    /// (behind the buildings, then in sight).
+    private static func show(ridden geojson: String?, source: String, filter: StreetnavStreetFilter, dark: Bool,
+                             light: StandardLightPreset, in map: MapboxMap, reload: Bool) {
+        let shown = geojson != nil && filter.showsRidden
+        let layers = [StreetnavExplorationMap.streetsRidden(dark: dark, behind: light, id: source + "-derriere", source: source),
+                      StreetnavExplorationMap.streetsRidden(dark: dark, id: source, source: source)]
         for layer in layers where reload || shown == false {
             if map.layerExists(withId: layer.id) { try? map.removeLayer(withId: layer.id) }
         }
-        guard let live, shown else { return }
-        if map.sourceExists(withId: "rues-direct") {
-            map.updateGeoJSONSource(withId: "rues-direct", data: .string(live))
+        guard let geojson, shown else { return }
+        if map.sourceExists(withId: source) {
+            map.updateGeoJSONSource(withId: source, data: .string(geojson))
         } else {
-            try? map.addSource(StreetnavExplorationMap.liveSource(live))
+            try? map.addSource(StreetnavExplorationMap.geoJSONSource(source, geojson))
         }
         var above = ["rues-faites", "rues-jamais"].first { map.layerExists(withId: $0) }
         for layer in layers {
@@ -403,9 +412,12 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
 
     /// The streets source and the layers the filter keeps, first of the layers added to the style so that they lie under
     /// the route (same slot); `reload` draws the layers again, for another filter or the other mode's colours.
-    private static func show(streets: String?, live: String?, filter: StreetnavStreetFilter, dark: Bool,
+    private static func show(streets: String?, live: String?, outside: String?, filter: StreetnavStreetFilter, dark: Bool,
                              light: StandardLightPreset, in map: MapboxMap, reload: Bool) {
-        defer { show(live: live, filter: filter, dark: dark, light: light, in: map, reload: reload) }
+        defer {
+            show(ridden: outside, source: "sorties-ailleurs", filter: filter, dark: dark, light: light, in: map, reload: reload)
+            show(ridden: live, source: "rues-direct", filter: filter, dark: dark, light: light, in: map, reload: reload)
+        }
         guard let streets else { return }
         if map.sourceExists(withId: "rues-osm") {
             map.updateGeoJSONSource(withId: "rues-osm", data: .string(streets))
