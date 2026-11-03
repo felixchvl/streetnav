@@ -445,7 +445,6 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     }
 
     private static func style(_ light: StandardLightPreset) -> MapStyle {
-        .standard(theme: .default, lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false,
-                  showPlaceLabels: true, showRoadLabels: true, showPedestrianRoads: true, show3dObjects: true)
+        StreetnavExplorationMap.standardStyle(light: light)
     }
 }

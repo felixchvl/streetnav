@@ -227,8 +227,7 @@ struct StreetnavExplorationMap: View {
         // Development: -mapTheme default|faded|monochrome to compare looks.
         if let forced = UserDefaults.standard.string(forKey: "mapTheme") { theme = StandardTheme(rawValue: forced) }
         #endif
-        return .standard(theme: theme, lightPreset: lightPreset, showPointOfInterestLabels: false, showTransitLabels: false,
-                         showPlaceLabels: true, showRoadLabels: true, showPedestrianRoads: true, show3dObjects: true)
+        return Self.standardStyle(light: lightPreset, theme: theme)
     }
 
     /// A soft halo under a route, as in Maps during navigation.
@@ -550,6 +549,21 @@ extension StreetnavExplorationMap {
         source.maxzoom = 14
         source.tolerance = 0.5
         return source
+    }
+
+    /// Mapbox Standard as set in Studio (mapbox://styles/felixchvl/cmkxx6roj006u01shagrg0bfo, 2026-11-03), with
+    /// Streetnav's own choices kept: the light of the hour and no transit labels. From Studio: a few points of interest,
+    /// without their circles nor fuel stations, no names of districts and towns, no footpaths (the streets layer draws
+    /// those a bike may ride), detailed façades, no indoor plans (billed apart). Its HD roads need a newer Standard than
+    /// this SDK loads.
+    static func standardStyle(light: StandardLightPreset, theme: StandardTheme = .default) -> MapStyle {
+        .standard(theme: theme, lightPreset: light, showPointOfInterestLabels: true, showTransitLabels: false,
+                  showPlaceLabels: false, showRoadLabels: true, showPedestrianRoads: false, show3dObjects: true,
+                  backgroundPointOfInterestLabels: .noBackground,
+                  colorModePointOfInterestLabels: StandardColorModePointOfInterestLabels.default,
+                  densityPointOfInterestLabels: 1,
+                  fuelingStationModePointOfInterestLabels: StandardFuelingStationModePointOfInterestLabels.none,
+                  show3dFacades: true, showIndoor: false)
     }
 
     static func geoJSONSource(_ id: String, _ geojson: String) -> GeoJSONSource {
