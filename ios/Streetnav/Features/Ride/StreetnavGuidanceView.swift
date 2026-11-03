@@ -19,7 +19,7 @@ struct StreetnavGuidanceView: View {
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @State private var showsOverview = false
     @State private var showsEnd = false
-    /// The height of the bike's cluster in the trip card, which the map keeps clear of.
+    /// The height of the bike's speed in the trip card, which the map keeps clear of.
     @State private var clusterHeight: CGFloat = 0
 
     var body: some View {
@@ -115,14 +115,15 @@ struct StreetnavGuidanceView: View {
             Capsule()
                 .fill(Color.secondary.opacity(0.5))
                 .frame(width: 36, height: 5)
-            // The bike above the trip, once connected, as CarPlay Ultra's instrument cluster.
-            StreetnavBikeCluster(location: guidance.location)
-                .padding(.top, 16)
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { clusterHeight = $0 > 16 ? $0 - 16 : 0 }
+            // The bike's speed leading, once connected, as the VanMoof app leads with one number.
+            StreetnavBikeSpeed(location: guidance.location)
+                .padding(.top, 14)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { clusterHeight = $0 > 14 ? $0 - 14 : 0 }
             HStack(spacing: 0) {
-                tripValue(arrivalTime, "arrivée")
-                tripValue(remainingTime.value, remainingTime.unit)
-                tripValue(remainingDistance.value, remainingDistance.unit)
+                StreetnavMetric(value: arrivalTime, label: "arrivée")
+                StreetnavMetric(value: remainingTime.value, label: remainingTime.unit)
+                StreetnavMetric(value: remainingDistance.value, label: remainingDistance.unit)
+                StreetnavBikeBatteryMetric()
             }
             .padding(.horizontal, 10)
             .padding(.top, 22)
@@ -155,18 +156,6 @@ struct StreetnavGuidanceView: View {
             if drag.translation.height < -20 { showsEnd = true }
             if drag.translation.height > 20 { showsEnd = false }
         })
-    }
-
-    private func tripValue(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 0) {
-            Text(value)
-                .font(.system(size: 27, weight: .semibold))
-                .monospacedDigit()
-            Text(label)
-                .font(.system(size: 17))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
     }
 
     private var arrivalCard: some View {
