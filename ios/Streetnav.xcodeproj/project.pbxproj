@@ -507,7 +507,7 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 			repositoryURL = "https://github.com/mapbox/mapbox-maps-ios.git";
 			requirement = {
 				kind = exactVersion;
-				version = 11.27.3;
+				version = 11.34.1;
 			};
 		};
 		NAVPKG00000000000000004 /* XCRemoteSwiftPackageReference "mapbox-navigation-ios" */ = {
@@ -515,7 +515,7 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 			repositoryURL = "https://github.com/mapbox/mapbox-navigation-ios.git";
 			requirement = {
 				kind = exactVersion;
-				version = 3.27.3;
+				version = 3.34.1;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
