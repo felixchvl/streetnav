@@ -14,6 +14,8 @@ final class StreetnavRideHistory: ObservableObject {
     /// Streets around Paris cut into ridden (`r` = 1) and not ridden (`r` = 0) parts, GeoJSON (GET /streets).
     @Published private(set) var streets: String?
     @Published private(set) var stats: Stats?
+    /// Each arrondissement's and commune's outline (GET /zones): its code, then its rings of (longitude, latitude).
+    @Published private(set) var zoneShapes: [String: [[CGPoint]]] = [:]
     @Published private(set) var isOffline = false
 
     struct Stats: Codable, Equatable {
@@ -90,12 +92,14 @@ final class StreetnavRideHistory: ObservableObject {
     private var tracksFile: URL { folder.appending(path: "tracks.geojson") }
     private var streetsFile: URL { folder.appending(path: "streets.geojson") }
     private var statsFile: URL { folder.appending(path: "stats.json") }
+    private var zonesFile: URL { folder.appending(path: "zones.geojson") }
     private var etagKey: String { "streetnav.tracks.etag" }
 
     private init() {
         tracks = try? String(contentsOf: tracksFile, encoding: .utf8)
         streets = try? String(contentsOf: streetsFile, encoding: .utf8)
         stats = (try? Data(contentsOf: statsFile)).flatMap { try? JSONDecoder().decode(Stats.self, from: $0) }
+        zoneShapes = (try? Data(contentsOf: zonesFile)).map(Self.shapes) ?? [:]
     }
 
     /// Asks the server for what changed; keeps what is cached when it cannot be reached.
@@ -115,6 +119,10 @@ final class StreetnavRideHistory: ObservableObject {
                 tracks = String(decoding: data, as: UTF8.self)
             }
 
+            // Absent from servers older than the zones: the maps of the statistics wait for it.
+            if let fresh = try? await download("zones", token: token, baseURL: baseURL, cached: zoneShapes.isEmpty == false, to: zonesFile) {
+                zoneShapes = Self.shapes(Data(fresh.utf8))
+            }
             if let fresh = try await download("streets", token: token, baseURL: baseURL, cached: streets != nil, to: streetsFile) {
                 streets = fresh
             }
@@ -131,6 +139,25 @@ final class StreetnavRideHistory: ObservableObject {
         } catch {
             isOffline = true
         }
+    }
+
+    /// Polygons and multipolygons of a FeatureCollection keyed by their `code`, holes kept as rings (filled even-odd).
+    private static func shapes(_ data: Data) -> [String: [[CGPoint]]] {
+        guard let collection = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = collection["features"] as? [[String: Any]] else { return [:] }
+        var shapes: [String: [[CGPoint]]] = [:]
+        for feature in features {
+            guard let code = (feature["properties"] as? [String: Any])?["code"] as? String,
+                  let geometry = feature["geometry"] as? [String: Any], let type = geometry["type"] as? String else { continue }
+            let polygons: [[[[Double]]]]
+            switch type {
+            case "Polygon": polygons = (geometry["coordinates"] as? [[[Double]]]).map { [$0] } ?? []
+            case "MultiPolygon": polygons = geometry["coordinates"] as? [[[[Double]]]] ?? []
+            default: polygons = []
+            }
+            shapes[code] = polygons.flatMap { $0 }.map { ring in ring.map { CGPoint(x: $0[0], y: $0[1]) } }
+        }
+        return shapes
     }
 
     /// GET path with its last ETag; the new body (also written to `file`), or nil when it has not changed.
