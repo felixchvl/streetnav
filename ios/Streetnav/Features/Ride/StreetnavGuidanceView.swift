@@ -13,6 +13,7 @@ struct StreetnavGuidanceView: View {
     @ObservedObject private var live = StreetnavLiveStreets.shared
     @AppStorage(StreetnavStreetFilter.key) private var streetFilter: StreetnavStreetFilter = .all
     @AppStorage(StreetnavMapZoom.key) private var zoomOffset = 0.0
+    @AppStorage(StreetnavMapTilt.key) private var tiltOffset = 0.0
     @Environment(\.colorScheme) private var colorScheme
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @State private var showsOverview = false
@@ -22,7 +23,7 @@ struct StreetnavGuidanceView: View {
         StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview,
                              streets: history.streets, live: live.ridden, outside: history.tracksOutside, filter: streetFilter,
                              dark: colorScheme == .dark,
-                             zoomOffset: zoomOffset)
+                             zoomOffset: zoomOffset, tiltOffset: tiltOffset)
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
@@ -36,6 +37,8 @@ struct StreetnavGuidanceView: View {
                         .padding(.trailing, 8)
                         if showsOverview == false {
                             zoomButtons
+                                .padding(.trailing, 8)
+                            tiltButtons
                                 .padding(.trailing, 8)
                         }
                     }
@@ -208,6 +211,27 @@ struct StreetnavGuidanceView: View {
         .streetnavGlass(in: Capsule(), interactive: true)
     }
 
+    /// More or less tilted, kept for the exploration map too.
+    private var tiltButtons: some View {
+        VStack(spacing: 0) {
+            Button { tiltOffset = StreetnavMapTilt.clamped(tiltOffset + StreetnavMapTilt.step) } label: {
+                Image(systemName: "chevron.up")
+                    .frame(width: 60, height: 50)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Incliner davantage")
+            Button { tiltOffset = StreetnavMapTilt.clamped(tiltOffset - StreetnavMapTilt.step) } label: {
+                Image(systemName: "chevron.down")
+                    .frame(width: 60, height: 50)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Redresser")
+        }
+        .font(.system(size: 20, weight: .semibold))
+        .foregroundStyle(.primary)
+        .streetnavGlass(in: Capsule(), interactive: true)
+    }
+
     private func roundButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
@@ -286,6 +310,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     let dark: Bool
     /// StreetnavMapZoom's offset: the following camera's zoom bounds move by it.
     let zoomOffset: Double
+    /// StreetnavMapTilt's offset: added to the following camera's pitch.
+    let tiltOffset: Double
 
     final class Coordinator {
         var shownRoute: String?
@@ -300,6 +326,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         var filter = StreetnavStreetFilter.all
         var dark = false
         var zoomOffset: Double?
+        var tiltOffset: Double?
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -339,8 +366,11 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         view.mapView.ornaments.options.logo.margins = CGPoint(x: 16, y: 142)
         view.mapView.ornaments.options.attributionButton.position = .bottomLeading
         view.mapView.ornaments.options.attributionButton.margins = CGPoint(x: 100, y: 140)
-        Self.follow(at: zoomOffset, in: view)
+        // Seen through the buildings, as the streets are.
+        view.routeLineOcclusionFactor = 0.1
+        Self.follow(at: zoomOffset, tilt: tiltOffset, in: view)
         context.coordinator.zoomOffset = zoomOffset
+        context.coordinator.tiltOffset = tiltOffset
         view.update(navigationCameraState: .following)
         show(guidance.routes, in: view, context: context)
         return view
@@ -348,9 +378,17 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
 
     func updateUIView(_ view: NavigationMapView, context: Context) {
         show(guidance.routes, in: view, context: context)
-        if context.coordinator.zoomOffset != zoomOffset {
+        if context.coordinator.zoomOffset != zoomOffset || context.coordinator.tiltOffset != tiltOffset {
+            let zoomChange = zoomOffset - (context.coordinator.zoomOffset ?? zoomOffset)
+            let tiltChange = tiltOffset - (context.coordinator.tiltOffset ?? tiltOffset)
             context.coordinator.zoomOffset = zoomOffset
-            Self.follow(at: zoomOffset, in: view)
+            context.coordinator.tiltOffset = tiltOffset
+            Self.follow(at: zoomOffset, tilt: tiltOffset, in: view)
+            // At once, without waiting for the camera's next update, which comes with the next position.
+            let state = view.mapView.mapboxMap.cameraState
+            view.mapView.camera.ease(to: CameraOptions(zoom: state.zoom + zoomChange,
+                                                       pitch: StreetnavMapTilt.pitch(state.pitch, offset: tiltChange)),
+                                     duration: 0.18)
         }
         if context.coordinator.showsOverview != showsOverview {
             context.coordinator.showsOverview = showsOverview
@@ -403,11 +441,13 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         }
     }
 
-    /// The camera keeps choosing its zoom to frame the turns ahead, between the SDK's bounds moved by the offset.
-    private static func follow(at zoomOffset: Double, in view: NavigationMapView) {
+    /// The camera keeps choosing its zoom to frame the turns ahead, between the SDK's bounds moved by the zoom offset, and
+    /// tilts as usual plus the tilt offset.
+    private static func follow(at zoomOffset: Double, tilt tiltOffset: Double, in view: NavigationMapView) {
         guard let source = view.navigationCamera.viewportDataSource as? MobileViewportDataSource else { return }
-        let bounds = FollowingCameraOptions().zoomRange
-        source.options.followingCameraOptions.zoomRange = (bounds.lowerBound + zoomOffset)...(bounds.upperBound + zoomOffset)
+        let usual = FollowingCameraOptions()
+        source.options.followingCameraOptions.zoomRange = (usual.zoomRange.lowerBound + zoomOffset)...(usual.zoomRange.upperBound + zoomOffset)
+        source.options.followingCameraOptions.defaultPitch = StreetnavMapTilt.pitch(usual.defaultPitch, offset: tiltOffset)
     }
 
     /// The streets source and the layers the filter keeps, first of the layers added to the style so that they lie under

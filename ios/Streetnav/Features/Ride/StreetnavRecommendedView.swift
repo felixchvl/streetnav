@@ -108,7 +108,7 @@ struct StreetnavRecommendedView: View {
         .onChange(of: model.route.id) {
             guard model.flowState.isRouteStep else { return }
             withViewportAnimation(.easeInOut(duration: 0.6)) {
-                viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? 50 : 0)
+                viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? StreetnavMapTilt.pitch(50) : 0)
             }
         }
         .alert("Terminer la sortie ?", isPresented: $showsEndConfirmation) {
@@ -161,13 +161,13 @@ struct StreetnavRecommendedView: View {
         if preferred != StreetnavExplorePanel.preferredDetent(for: oldState) { panelDetent = preferred }
         // The default animation is the one that keeps up with a moving position.
         withViewportAnimation(.default(maxDuration: 0.8)) {
-            viewport = StreetnavExplorationMap.viewport(for: newState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? 50 : 0)
+            viewport = StreetnavExplorationMap.viewport(for: newState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? StreetnavMapTilt.pitch(50) : 0)
         }
     }
 
     private func recenter() {
         withViewportAnimation(.default(maxDuration: 0.5)) {
-            viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? 50 : 0)
+            viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? StreetnavMapTilt.pitch(50) : 0)
         }
     }
 

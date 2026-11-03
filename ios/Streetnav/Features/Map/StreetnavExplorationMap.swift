@@ -70,6 +70,7 @@ struct StreetnavExplorationMap: View {
                         StreetnavCompass(bearing: bearing, action: pointNorth)
                             .transition(.scale.combined(with: .opacity))
                     }
+                    tiltButtons
                     threeDButton
                 }
                 .padding(.leading, 22)
@@ -344,6 +345,55 @@ struct StreetnavExplorationMap: View {
         }
     }
 
+    /// More or less tilted: while the map follows the rider, the new angle becomes the default one (StreetnavMapTilt),
+    /// kept between launches and followed by the navigation; a map moved by hand only tilts where it is. From 2D, the
+    /// first tilt goes back to 3D.
+    private var tiltButtons: some View {
+        VStack(spacing: 0) {
+            Button { tilt(more: true) } label: {
+                Image(systemName: "chevron.up")
+                    .frame(width: 48, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Incliner davantage")
+            Button { tilt(more: false) } label: {
+                Image(systemName: "chevron.down")
+                    .frame(width: 48, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Redresser")
+        }
+        .font(.system(size: 17, weight: .semibold))
+        .foregroundStyle(.primary)
+        .streetnavGlass(in: Capsule(), interactive: true)
+    }
+
+    private func tilt(more: Bool) {
+        guard isThreeD.wrappedValue else {
+            if more { isThreeD.wrappedValue = true }
+            return
+        }
+        let padding = viewport.padding
+        let step = more ? StreetnavMapTilt.step : -StreetnavMapTilt.step
+        if let following = viewport.followPuck {
+            let offset = StreetnavMapTilt.clamped(StreetnavMapTilt.offset + step)
+            let change = offset - StreetnavMapTilt.offset
+            guard change != 0 else { return }
+            StreetnavMapTilt.offset = offset
+            withViewportAnimation(.easeOut(duration: 0.18)) {
+                viewport = Viewport.followPuck(zoom: following.zoom, bearing: following.bearing,
+                                               pitch: min(StreetnavMapTilt.maxPitch, max(0, following.pitch + change)))
+                    .padding(padding)
+            }
+        } else if let state = camera.state {
+            withViewportAnimation(.easeOut(duration: 0.18)) {
+                viewport = Viewport.camera(center: state.center, zoom: state.zoom, bearing: state.bearing,
+                                           pitch: min(StreetnavMapTilt.maxPitch, max(0, state.pitch + step)))
+                    .padding(padding)
+            }
+        }
+    }
+
     /// Which streets the map shows, then the location button, stacked in one capsule like the Maps app (where the first
     /// one picks the map type: no satellite view here, it has no 3D).
     private var controls: some View {
@@ -403,7 +453,8 @@ extension StreetnavExplorationMap {
             return Viewport.followPuck(zoom: 16.6 + StreetnavMapZoom.offset, pitch: pitch).padding(.bottom, bottomInset)
         case _ where mode.isNavigationLike:
             // Tilted like Maps, turning with the ride: the route stays visible through the buildings (occlusion opacity).
-            return Viewport.followPuck(zoom: 17 + StreetnavMapZoom.offset, bearing: .course, pitch: 55).padding(.bottom, bottomInset)
+            return Viewport.followPuck(zoom: 17 + StreetnavMapZoom.offset, bearing: .course, pitch: StreetnavMapTilt.pitch(55))
+                .padding(.bottom, bottomInset)
         default:
             #if DEBUG
             // Development: -mapPitch 60 -mapZoom 16.2 [-mapBearing 60] to try other angles.
@@ -421,11 +472,14 @@ extension StreetnavExplorationMap {
 
     /// The location button tapped again while following: closer, tilted, turning with where the phone points.
     static func headingViewport(bottomInset: CGFloat) -> Viewport {
-        Viewport.followPuck(zoom: 17.6 + StreetnavMapZoom.offset, bearing: .heading, pitch: 60).padding(.bottom, bottomInset)
+        Viewport.followPuck(zoom: 17.6 + StreetnavMapZoom.offset, bearing: .heading, pitch: StreetnavMapTilt.pitch(60))
+            .padding(.bottom, bottomInset)
     }
 
+    /// The map runs under the status bar: the top keeps 60 more points clear, for the routes not to end under it.
     static func focus(on coordinates: [CLLocationCoordinate2D], padding: CGFloat = 60, bottomInset: CGFloat = 0) -> Viewport {
-        Viewport.overview(geometry: LineString(coordinates), geometryPadding: EdgeInsets(top: padding, leading: padding, bottom: padding, trailing: padding))
+        Viewport.overview(geometry: LineString(coordinates),
+                          geometryPadding: EdgeInsets(top: padding + 60, leading: padding, bottom: padding, trailing: padding))
             .padding(.bottom, bottomInset)
     }
 
@@ -629,6 +683,28 @@ enum StreetnavMapZoom {
 
     static func clamped(_ offset: Double) -> Double {
         min(range.upperBound, max(range.lowerBound, offset))
+    }
+}
+
+/// How much more tilted than usual the maps are, in degrees, set with their tilt buttons. Kept between launches.
+enum StreetnavMapTilt {
+    static let key = "streetnav.mapTiltOffset"
+    static let step = 10.0
+    static let maxPitch = 80.0
+    private static let range = -40.0...25.0
+
+    static var offset: Double {
+        get { UserDefaults.standard.double(forKey: key) }
+        set { UserDefaults.standard.set(clamped(newValue), forKey: key) }
+    }
+
+    static func clamped(_ offset: Double) -> Double {
+        min(range.upperBound, max(range.lowerBound, offset))
+    }
+
+    /// A view's usual pitch with the offset, within what Mapbox shows.
+    static func pitch(_ usual: Double, offset: Double = offset) -> Double {
+        min(maxPitch, max(0, usual + offset))
     }
 }
 
