@@ -93,8 +93,10 @@ struct StreetnavExplorationMap: View {
         Map(viewport: $viewport) {
             // The real relief at every zoom (Standard flattens it beyond 13.7), lifted a little: Paris's hills are only
             // about 100 m high.
-            Self.reliefSource
-            Terrain(sourceId: "relief").exaggeration(Self.reliefExaggeration)
+            if Self.showsRelief {
+                Self.reliefSource
+                Terrain(sourceId: "relief").exaggeration(Self.reliefExaggeration)
+            }
             if let streets {
                 Self.streetsLayerSource(streets)
                 // Each colour twice: over the buildings, blended with them, then in its own colour where it is in sight.
@@ -123,9 +125,11 @@ struct StreetnavExplorationMap: View {
                     .lineOcclusionOpacity(0.3)
             }
             // Standard's lane lines, crossings and arrows again, above the streets that would hide them.
-            Self.hdMarkingsSource
-            ForEvery(Self.hdMarkings.lines, id: \.id) { $0 }
-            ForEvery(Self.hdMarkings.symbols, id: \.id) { $0 }
+            if Self.showsMarkings {
+                Self.hdMarkingsSource
+                ForEvery(Self.hdMarkings.lines, id: \.id) { $0 }
+                ForEvery(Self.hdMarkings.symbols, id: \.id) { $0 }
+            }
             Self.streetsSource(segments)
             streetLayer("rues-parcourues", status: .traveled)
                 .lineColor(neutral)
@@ -567,6 +571,8 @@ extension StreetnavExplorationMap {
             .lineWidth(roadWidth(close: look.closeWidth, scale: ridden == 1 ? look.riddenScale : 1))
             .lineEmissiveStrength(streetGlow)
             .lineOcclusionOpacity(light == nil ? 0 : 1)
+            .lineElevationReference(StreetnavStreetLook.current.elevated ? .ground : .none)
+            .lineZOffset(StreetnavStreetLook.current.elevated ? 0.5 : 0)
     }
 
     /// In points, one curve that only grows with the zoom, as the traffic lines of Maps: never as wide as the road, so
@@ -610,6 +616,22 @@ extension StreetnavExplorationMap {
         colour.getRed(&r, green: &g, blue: &b, alpha: &a)
         base.getRed(&r0, green: &g0, blue: &b0, alpha: &a0)
         return UIColor(red: r0 + (r - r0) * share, green: g0 + (g - g0) * share, blue: b0 + (b - b0) * share, alpha: 1)
+    }
+
+    static var showsRelief: Bool {
+        #if DEBUG
+        // Development: -mapRelief NO to compare.
+        if UserDefaults.standard.object(forKey: "mapRelief") != nil { return UserDefaults.standard.bool(forKey: "mapRelief") }
+        #endif
+        return true
+    }
+
+    static var showsMarkings: Bool {
+        #if DEBUG
+        // Development: -mapMarkings NO to compare.
+        if UserDefaults.standard.object(forKey: "mapMarkings") != nil { return UserDefaults.standard.bool(forKey: "mapMarkings") }
+        #endif
+        return true
     }
 
     /// Standard's HD road markings (StreetnavHDMarkings), read once.
@@ -670,9 +692,16 @@ extension StreetnavExplorationMap {
     /// bike may ride), detailed façades, HD roads (lane markings, crossings, bridges and tunnels in 3D, from zoom 16
     /// where Mapbox has them), no indoor plans (billed apart).
     static func standardStyle(light: StandardLightPreset, theme: StandardTheme = .default) -> MapStyle {
-        .standard(theme: theme, lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false,
+        var facades = true
+        var hdRoads = true
+        #if DEBUG
+        // Development: -mapFacades NO and -mapHD NO to compare.
+        if UserDefaults.standard.object(forKey: "mapFacades") != nil { facades = UserDefaults.standard.bool(forKey: "mapFacades") }
+        if UserDefaults.standard.object(forKey: "mapHD") != nil { hdRoads = UserDefaults.standard.bool(forKey: "mapHD") }
+        #endif
+        return .standard(theme: theme, lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false,
                   showPlaceLabels: false, showRoadLabels: true, showPedestrianRoads: false, show3dObjects: true,
-                  show3dFacades: true, showHdRoads: true, showIndoor: false, showLandmarkIconLabels: false,
+                  show3dFacades: facades, showHdRoads: hdRoads, showIndoor: false, showLandmarkIconLabels: false,
                   showLandmarkIcons: false)
     }
 
@@ -756,6 +785,9 @@ struct StreetnavStreetLook {
     var closeWidth = 4.0
     var riddenScale = 0.8
     var glow = 0.9
+    /// Drawn in 3D just above the ground rather than draped on the relief: draped, they could not be seen through the
+    /// buildings any more.
+    var elevated = true
     var ridden = UIColor(red: 0.16, green: 0.62, blue: 0.56, alpha: 1)
     var riddenDark = UIColor(red: 0.25, green: 0.75, blue: 0.67, alpha: 1)
     var notRidden = UIColor(red: 0.91, green: 0.33, blue: 0.24, alpha: 1)
@@ -774,6 +806,7 @@ struct StreetnavStreetLook {
         look.closeWidth = number("lookClose") ?? look.closeWidth
         look.riddenScale = number("lookRiddenScale") ?? look.riddenScale
         look.glow = number("lookGlow") ?? look.glow
+        if defaults.object(forKey: "lookElevated") != nil { look.elevated = defaults.bool(forKey: "lookElevated") }
         look.ridden = colour("lookRidden") ?? look.ridden
         look.riddenDark = colour("lookRiddenDark") ?? look.riddenDark
         look.notRidden = colour("lookNotRidden") ?? look.notRidden
