@@ -86,11 +86,15 @@ struct StreetnavVanMoofView: View {
                     isUnlocking = false
                 }
             } label: {
-                Label(isUnlocking ? "Déverrouillage…" : "Déverrouiller", systemImage: "lock.open.fill")
+                // Text alone, centred: a padlock beside it pulled it off the middle.
+                Text(isUnlocking ? "Déverrouillage…" : "Déverrouiller")
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
             .controlSize(.large)
+            .frame(maxWidth: .infinity)
             .disabled(isUnlocking)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets())

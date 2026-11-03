@@ -154,7 +154,7 @@ struct StreetnavExplorationMap: View {
                     .lineBorderWidth(1.5)
                     .lineWidth(Self.zoomed(5, 8, 13))
                     .lineEmissiveStrength(1)
-                    .lineOcclusionOpacity(0.5)
+                    .lineOcclusionOpacity(0.8)
             }
             if let placeRoute {
                 Self.lineSource("trajet-lieu", placeRoute)
@@ -241,7 +241,7 @@ struct StreetnavExplorationMap: View {
             .lineBlur(Self.zoomed(4, 8, 14))
             .lineWidth(Self.zoomed(10, 20, 36))
             .lineEmissiveStrength(1)
-            .lineOcclusionOpacity(0.2)
+            .lineOcclusionOpacity(0.3)
     }
 
     /// Wider than any street, with a white edge (black at night): the streets ridden are blue too.
@@ -522,13 +522,13 @@ extension StreetnavExplorationMap {
     static func streetsNotRidden(dark: Bool, behind light: StandardLightPreset? = nil) -> LineLayer {
         streets(id: light == nil ? "rues-jamais" : "rues-jamais-derriere", source: "rues-osm", ridden: 0,
                 colour: notRiddenColour(dark: dark),
-                behind: light, share: 0.3)
+                behind: light, share: 0.6)
     }
 
     static func streetsRidden(dark: Bool, behind light: StandardLightPreset? = nil, id: String? = nil,
                               source: String = "rues-osm") -> LineLayer {
         streets(id: id ?? (light == nil ? "rues-faites" : "rues-faites-derriere"), source: source, ridden: 1,
-                colour: riddenColour(dark: dark), behind: light, share: 0.4)
+                colour: riddenColour(dark: dark), behind: light, share: 0.65)
     }
 
     private static func streets(id: String, source: String, ridden: Int, colour: UIColor, behind light: StandardLightPreset?,
