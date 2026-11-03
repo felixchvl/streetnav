@@ -578,19 +578,22 @@ extension StreetnavExplorationMap {
         return UIColor(red: r0 + (r - r0) * share, green: g0 + (g - g0) * share, blue: b0 + (b - b0) * share, alpha: 1)
     }
 
-    /// The width Mapbox Standard draws a road with (its "roads" and "road-path" layers, read from the style), from the
-    /// road class `k` of each street part (map_data.py), a street when there is none; never under 1.2 points zoomed out,
-    /// where Standard thins the small roads away.
+    /// Up to zoom 16, the width Mapbox Standard draws a road with (its "roads" and "road-path" layers, read from the
+    /// style), from the road class `k` of each street part (map_data.py), a street when there is none; never under 1.2
+    /// points zoomed out, where Standard thins the small roads away. Closer, where Standard draws the lanes, their
+    /// markings and crossings (HD roads), a ribbon down the middle of the road instead, so that both show.
     private static var roadWidth: Exp {
         Exp(.interpolate) {
             Exp(.exponential) { 1.5 }
             Exp(.zoom)
             12
             byRoadClass(motorway: 3.2, primary: 3, secondary: 2.2, street: 1.2, link: 1.2, service: 1.2, path: 1.2)
-            18
-            byRoadClass(motorway: 30, primary: 28, secondary: 26, street: 20, link: 18, service: 10, path: 6)
+            16
+            byRoadClass(motorway: 13.7, primary: 12.8, secondary: 11.5, street: 8.5, link: 7.8, service: 4.6, path: 3.1)
+            17
+            byRoadClass(motorway: 7, primary: 7, secondary: 6, street: 5, link: 4.5, service: 4, path: 3)
             22
-            byRoadClass(motorway: 300, primary: 280, secondary: 260, street: 200, link: 180, service: 100, path: 80)
+            byRoadClass(motorway: 12, primary: 12, secondary: 10, street: 9, link: 8, service: 7, path: 5)
         }
     }
 
