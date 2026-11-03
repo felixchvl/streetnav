@@ -5,6 +5,7 @@
 //  Created by Félix Chevalier on 14/06/2024.
 //
 
+import MapboxMaps
 import SwiftUI
 
 @main
@@ -15,6 +16,7 @@ struct StreetnavApp: App {
         // No Mapbox telemetry, for the map and the navigation alike: the switch of the map's (i) menu, turned off before
         // the first map is made.
         UserDefaults.standard.set(false, forKey: "MGLMapboxMetricsEnabled")
+        Self.clearMapboxCacheAfterUpdate()
         // iOS only hands new Apple Health workouts to an app in the background if it asks again at every launch.
         StreetnavHealthSync.shared.startObserving()
     }
@@ -39,6 +41,20 @@ struct StreetnavApp: App {
         .backgroundTask(.appRefresh(StreetnavHealthSync.refreshTask)) {
             await StreetnavHealthSync.shared.scheduleRefresh()
             await StreetnavHealthSync.shared.check()
+        }
+    }
+
+    /// The Mapbox SDK this build uses, to bump with it.
+    private static let mapboxVersion = "11.34.1"
+
+    /// Mapbox keeps the Standard style it was served for a day, and serves each SDK the style it can draw: after an SDK
+    /// update the cached one may lack what the new SDK brings (the HD roads of 11.33). The cache is cleared once after
+    /// each update, before the first map loads, so that the new style comes at once.
+    private static func clearMapboxCacheAfterUpdate() {
+        let key = "streetnav.mapboxCacheVersion"
+        guard UserDefaults.standard.string(forKey: key) != mapboxVersion else { return }
+        MapboxMap.clearData { error in
+            if error == nil { UserDefaults.standard.set(mapboxVersion, forKey: key) }
         }
     }
 }
