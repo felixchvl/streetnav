@@ -685,7 +685,8 @@ struct StreetnavExplorePanel: View {
 
     private func lastRideText(_ stats: StreetnavRideHistory.Stats) -> String {
         guard let date = stats.lastRideDate else { return "\(stats.total.rides) sorties" }
-        return "Dernière le \(date.formatted(.dateTime.day().month(.wide).locale(Self.french)))"
+        // With the hour, to tell at a glance that it is the very last one.
+        return "Dernière le \(date.formatted(.dateTime.day().month(.wide).locale(Self.french))) à \(date.formatted(.dateTime.hour().minute().locale(Self.french)))"
     }
 
     private static func day(_ iso: String) -> String {
