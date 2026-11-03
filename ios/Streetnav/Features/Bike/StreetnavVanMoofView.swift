@@ -233,8 +233,9 @@ struct StreetnavVanMoofView: View {
     }
 }
 
-/// The bike on the map, as Maps shows the weather: battery, lock and assistance in a glass chip, only while the bike is
-/// connected; a tap opens what can be done from there.
+/// The bike on the map, as Maps shows the weather: its battery in a glass chip, and a lock while it is locked, only
+/// while the bike is connected; a tap unlocks it or rings the bell. The assistance and the lights are left to the bike's
+/// settings.
 struct StreetnavBikeChip: View {
     @ObservedObject private var bike = StreetnavVanMoofBike.shared
 
@@ -244,27 +245,14 @@ struct StreetnavBikeChip: View {
                 if bike.isLocked != false {
                     Button("Déverrouiller", systemImage: "lock.open") { Task { await bike.unlock() } }
                 }
-                // Each a submenu that names its current value, as in Maps' own menus.
-                Picker(selection: Binding(get: { bike.assistLevel ?? 0 }, set: { bike.setAssistLevel($0) })) {
-                    ForEach(StreetnavBikeLabels.assistLevels, id: \.level) { Text($0.name).tag($0.level) }
-                } label: {
-                    Label("Assistance", systemImage: "bolt")
-                }
-                .pickerStyle(.menu)
-                Picker(selection: Binding(get: { bike.lightMode ?? 0 }, set: { bike.setLightMode($0) })) {
-                    ForEach(StreetnavBikeLabels.lightModes, id: \.mode) { Text($0.name).tag($0.mode) }
-                } label: {
-                    Label("Phares", systemImage: StreetnavBikeLabels.lightSymbol(bike.lightMode))
-                }
-                .pickerStyle(.menu)
                 Button("Sonner", systemImage: "bell") { bike.ringBell() }
             } label: {
                 HStack(spacing: 10) {
                     StreetnavBikeBattery(percent: bike.battery)
-                    Image(systemName: bike.isLocked == false ? "lock.open.fill" : "lock.fill")
-                        .foregroundStyle(.secondary)
-                    if let level = bike.assistLevel {
-                        Text(StreetnavBikeLabels.assistName(level))
+                    if bike.isLocked == true {
+                        Image(systemName: "lock.fill")
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel("verrouillé")
                     }
                 }
                 .font(.subheadline.weight(.semibold))
@@ -276,7 +264,7 @@ struct StreetnavBikeChip: View {
             // The menu would tint its label with the accent.
             .tint(.primary)
             .accessibilityLabel("Vélo")
-            // Battery, lock, assistance and lights now and then while it shows.
+            // Battery and lock now and then while it shows.
             .task {
                 while Task.isCancelled == false {
                     bike.refreshStatus()

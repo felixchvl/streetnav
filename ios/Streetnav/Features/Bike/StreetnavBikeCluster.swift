@@ -2,10 +2,10 @@ import CoreLocation
 import SwiftUI
 
 /// The bike in the navigation, laid out like the instrument cluster of CarPlay Ultra (WWDC24, « Say hello to the next
-/// generation of CarPlay design system »): the speed on a dial with the battery in its gap, as the speedometer always
-/// goes with the charge; the assistance as the drive mode, a row of modes with the current one lit; telltales for the
-/// lock and the lights; a trip computer for the odometer; and the unlocking as a notification, only while locked.
-/// The speed is the bike's once its unit is known, the GPS's until then.
+/// generation of CarPlay design system »), with only what counts while riding: the speed on a dial with the battery in
+/// its gap, as the speedometer always goes with the charge, and the distance of the trip and of the bike beside it; the
+/// unlocking as a notification, only while the bike is locked. The speed is the bike's once its unit is known, the
+/// GPS's until then.
 struct StreetnavBikeCluster: View {
     @ObservedObject private var bike = StreetnavVanMoofBike.shared
     /// The rider's position from the guidance, for its speed.
@@ -17,25 +17,18 @@ struct StreetnavBikeCluster: View {
 
     var body: some View {
         if bike.state == .ready {
-            HStack(alignment: .center, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
                 StreetnavSpeedDial(speed: speed, battery: bike.battery)
-                    .frame(width: 118, height: 118)
-                VStack(alignment: .leading, spacing: 16) {
+                    .frame(width: 112, height: 112)
+                VStack(spacing: 16) {
                     if bike.isLocked == true {
                         unlockNotice
                             .transition(.blurReplace)
-                    } else {
-                        StreetnavAssistModes(level: bike.assistLevel) { bike.setAssistLevel($0) }
-                            .transition(.blurReplace)
                     }
-                    HStack(alignment: .center, spacing: 0) {
-                        telltales
-                        Spacer(minLength: 12)
-                        // The trip computer: label on the left, value on the right, as in a car.
-                        Grid(alignment: .trailing, horizontalSpacing: 10, verticalSpacing: 3) {
-                            tripRow("Trajet", kilometres(trip, decimals: 1))
-                            tripRow("Total", kilometres(bike.odometerMeters, decimals: 0))
-                        }
+                    // The trip computer, laid out as the trip below it.
+                    HStack(spacing: 0) {
+                        tripValue(kilometres(trip, decimals: 1), "trajet")
+                        tripValue(kilometres(bike.odometerMeters, decimals: 0), "au compteur")
                     }
                 }
             }
@@ -90,59 +83,24 @@ struct StreetnavBikeCluster: View {
         .disabled(isUnlocking)
     }
 
-    /// Lit only when they matter, as in a car: the lock in amber while the bike is locked, the lights in green while
-    /// they are on (an A when automatic); a tap on the lights turns them automatic, on, off.
-    private var telltales: some View {
-        HStack(spacing: 14) {
-            Image(systemName: bike.isLocked == true ? "lock.fill" : "lock.open.fill")
-                .foregroundStyle(bike.isLocked == true ? Color.orange : Color.secondary.opacity(0.45))
-                .accessibilityLabel(bike.isLocked == true ? "Vélo verrouillé" : "Vélo déverrouillé")
-            Button {
-                let next = switch bike.lightMode {
-                case 3: 2
-                case 2: 0
-                default: 3
-                }
-                bike.setLightMode(next)
-            } label: {
-                Image(systemName: bike.lightMode == 0 ? "headlight.low.beam" : "headlight.low.beam.fill")
-                    .foregroundStyle(bike.lightMode == 0 ? Color.secondary.opacity(0.45) : Self.telltaleGreen)
-                    .overlay(alignment: .bottomTrailing) {
-                        if bike.lightMode == 3 {
-                            Text(verbatim: "A")
-                                .font(.system(size: 10, weight: .heavy))
-                                .foregroundStyle(Self.telltaleGreen)
-                                .offset(x: 6, y: 3)
-                        }
-                    }
-                    .frame(minWidth: 36, minHeight: 36)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Phares : \(StreetnavBikeLabels.lightName(bike.lightMode)), toucher pour changer")
-        }
-        .font(.system(size: 17, weight: .semibold))
-    }
-
-    private func tripRow(_ label: String, _ value: String) -> some View {
-        GridRow(alignment: .firstTextBaseline) {
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(.secondary)
-                .gridColumnAlignment(.leading)
+    private func tripValue(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 0) {
             Text(value)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .monospacedDigit()
                 .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .contentTransition(.numericText())
+            Text(label)
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
     }
 
     // MARK: Values
 
-    private static let telltaleGreen = Color(red: 0.2, green: 0.78, blue: 0.35)
     private static let french = Locale(identifier: "fr_FR")
 
     private var speed: Double? {
@@ -268,53 +226,5 @@ private struct DialArc: Shape {
         path.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: min(rect.width, rect.height) / 2 - inset,
                     startAngle: .degrees(start), endAngle: .degrees(end), clockwise: false)
         return path
-    }
-}
-
-/// The assistance as CarPlay shows the drive mode: every mode in a row, the current one lit; a tap chooses one. The
-/// names as large as the width allows, shortened on a narrow screen.
-struct StreetnavAssistModes: View {
-    let level: Int?
-    let choose: (Int) -> Void
-
-    private static let modes: [(level: Int, name: String, short: String)] = [
-        (0, "Off", "Off"), (1, "Éco", "Éco"), (2, "Normal", "Norm."), (3, "Sport", "Sport"), (4, "Turbo", "Turbo"),
-    ]
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            row(size: 13, padding: 7, short: false)
-            row(size: 12, padding: 5, short: false)
-            row(size: 12, padding: 4, short: true)
-            row(size: 11, padding: 3, short: true)
-        }
-        .animation(.snappy, value: level)
-    }
-
-    private func row(size: CGFloat, padding: CGFloat, short: Bool) -> some View {
-        HStack(spacing: 0) {
-            ForEach(Self.modes, id: \.level) { mode in
-                let current = mode.level == level
-                if mode.level > 0 { Spacer(minLength: 2) }
-                Button { choose(mode.level) } label: {
-                    Text(verbatim: short ? mode.short : mode.name)
-                        .font(.system(size: size, weight: current ? .bold : .medium))
-                        .lineLimit(1)
-                        .fixedSize()
-                        .foregroundStyle(current ? Color.primary : Color.secondary)
-                        .padding(.horizontal, padding)
-                        .frame(height: 30)
-                        .background {
-                            if current { Capsule().fill(Color.primary.opacity(0.14)) }
-                        }
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Assistance \(StreetnavBikeLabels.assistName(mode.level))")
-                .accessibilityAddTraits(current ? .isSelected : [])
-            }
-        }
-        .padding(3)
-        .background(Capsule().fill(Color.primary.opacity(0.06)))
     }
 }
