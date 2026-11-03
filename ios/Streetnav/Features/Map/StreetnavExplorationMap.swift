@@ -122,6 +122,10 @@ struct StreetnavExplorationMap: View {
                     .lineEmissiveStrength(1)
                     .lineOcclusionOpacity(0.3)
             }
+            // Standard's lane lines, crossings and arrows again, above the streets that would hide them.
+            Self.hdMarkingsSource
+            ForEvery(Self.hdMarkings.lines, id: \.id) { $0 }
+            ForEvery(Self.hdMarkings.symbols, id: \.id) { $0 }
             Self.streetsSource(segments)
             streetLayer("rues-parcourues", status: .traveled)
                 .lineColor(neutral)
@@ -556,6 +560,7 @@ extension StreetnavExplorationMap {
             .lineCap(.round).lineJoin(.round)
             .lineColor(light.map { blend(colour, over: buildingColour($0), share: share) } ?? colour)
             .lineWidth(roadWidth)
+            .lineWidthUnit(.meters)
             .lineEmissiveStrength(streetGlow)
             .lineOcclusionOpacity(light == nil ? 0 : 1)
     }
@@ -578,23 +583,42 @@ extension StreetnavExplorationMap {
         return UIColor(red: r0 + (r - r0) * share, green: g0 + (g - g0) * share, blue: b0 + (b - b0) * share, alpha: 1)
     }
 
-    /// Up to zoom 16, the width Mapbox Standard draws a road with (its "roads" and "road-path" layers, read from the
-    /// style), from the road class `k` of each street part (map_data.py), a street when there is none; never under 1.2
-    /// points zoomed out, where Standard thins the small roads away. Closer, where Standard draws the lanes, their
-    /// markings and crossings (HD roads), a ribbon down the middle of the road instead, so that both show.
+    /// In metres, so that a street stays as wide as its road from the foot of the screen to the horizon of a tilted
+    /// map: from zoom 16, about the width of the road for its class `k` (map_data.py), a street when there is none.
+    /// Farther out, wider than the road, so that a street stays about as wide on screen as Standard draws its roads
+    /// (1.2 points at zoom 12, where Standard thins the small roads away).
     private static var roadWidth: Exp {
         Exp(.interpolate) {
-            Exp(.exponential) { 1.5 }
+            Exp(.exponential) { 2 }
             Exp(.zoom)
             12
-            byRoadClass(motorway: 3.2, primary: 3, secondary: 2.2, street: 1.2, link: 1.2, service: 1.2, path: 1.2)
+            byRoadClass(motorway: 80, primary: 75, secondary: 55, street: 30, link: 30, service: 30, path: 30)
             16
-            byRoadClass(motorway: 13.7, primary: 12.8, secondary: 11.5, street: 8.5, link: 7.8, service: 4.6, path: 3.1)
-            17
-            byRoadClass(motorway: 7, primary: 7, secondary: 6, street: 5, link: 4.5, service: 4, path: 3)
-            22
-            byRoadClass(motorway: 12, primary: 12, secondary: 10, street: 9, link: 8, service: 7, path: 5)
+            byRoadClass(motorway: 24, primary: 16, secondary: 13, street: 9, link: 8, service: 5, path: 3)
         }
+    }
+
+    /// Standard's HD road markings (StreetnavHDMarkings), read once.
+    static let hdMarkings: (lines: [LineLayer], symbols: [SymbolLayer]) = {
+        guard let objects = try? JSONSerialization.jsonObject(with: Data(StreetnavHDMarkings.layersJSON.utf8)) as? [[String: Any]]
+        else { return ([], []) }
+        var lines: [LineLayer] = []
+        var symbols: [SymbolLayer] = []
+        for object in objects {
+            guard let data = try? JSONSerialization.data(withJSONObject: object) else { continue }
+            switch object["type"] as? String {
+            case "line": if let layer = try? JSONDecoder().decode(LineLayer.self, from: data) { lines.append(layer) }
+            case "symbol": if let layer = try? JSONDecoder().decode(SymbolLayer.self, from: data) { symbols.append(layer) }
+            default: break
+            }
+        }
+        return (lines, symbols)
+    }()
+
+    static var hdMarkingsSource: VectorSource {
+        var source = VectorSource(id: StreetnavHDMarkings.sourceID)
+        source.url = StreetnavHDMarkings.sourceURL
+        return source
     }
 
     private static func byRoadClass(motorway: Double, primary: Double, secondary: Double, street: Double, link: Double,

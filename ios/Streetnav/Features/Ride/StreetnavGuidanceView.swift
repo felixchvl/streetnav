@@ -441,6 +441,22 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         }
     }
 
+    /// Standard's HD road markings again, just above the streets layers, which would hide them; the lines added later
+    /// above the streets (this ride's) go between them.
+    private static func showMarkings(in map: MapboxMap) {
+        if map.sourceExists(withId: StreetnavHDMarkings.sourceID) == false {
+            try? map.addSource(StreetnavExplorationMap.hdMarkingsSource)
+        }
+        let layers: [Layer] = StreetnavExplorationMap.hdMarkings.lines + StreetnavExplorationMap.hdMarkings.symbols
+        var above = ["rues-faites", "rues-jamais"].first { map.layerExists(withId: $0) }
+        for layer in layers {
+            if map.layerExists(withId: layer.id) == false {
+                try? map.addLayer(layer, layerPosition: above.map { .above($0) } ?? .at(0))
+            }
+            above = layer.id
+        }
+    }
+
     /// The camera keeps choosing its zoom to frame the turns ahead, between the SDK's bounds moved by the zoom offset, and
     /// tilts as usual plus the tilt offset.
     private static func follow(at zoomOffset: Double, tilt tiltOffset: Double, in view: NavigationMapView) {
@@ -457,6 +473,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         defer {
             show(ridden: outside, source: "sorties-ailleurs", filter: filter, dark: dark, light: light, in: map, reload: reload)
             show(ridden: live, source: "rues-direct", filter: filter, dark: dark, light: light, in: map, reload: reload)
+            showMarkings(in: map)
         }
         guard let streets else { return }
         if map.sourceExists(withId: "rues-osm") {
