@@ -518,16 +518,14 @@ extension StreetnavExplorationMap {
     /// Teal for what is done, the streets ridden, and coral for what is left: a pair apart from the blue of the routes
     /// and the green of the parks, a little brighter at night.
     static func riddenColour(dark: Bool) -> UIColor {
-        dark ? UIColor(red: 0.20, green: 0.70, blue: 0.63, alpha: 1) : UIColor(red: 0.16, green: 0.62, blue: 0.56, alpha: 1)
+        dark ? StreetnavStreetLook.current.riddenDark : StreetnavStreetLook.current.ridden
     }
 
     static func notRiddenColour(dark: Bool) -> UIColor {
-        dark ? UIColor(red: 0.95, green: 0.50, blue: 0.38, alpha: 1) : UIColor(red: 0.91, green: 0.44, blue: 0.32, alpha: 1)
+        dark ? StreetnavStreetLook.current.notRiddenDark : StreetnavStreetLook.current.notRidden
     }
 
-    /// Lit by the hour like the rest of the map, only a little brighter: at full strength the lines glowed like neon at
-    /// night.
-    static let streetGlow = 0.75
+    static var streetGlow: Double { StreetnavStreetLook.current.glow }
 
     /// Mapbox's elevation at its real scale: lifted, the river sank into a ravine and the bridges dipped with it.
     static let reliefExaggeration = 1.0
@@ -560,15 +558,40 @@ extension StreetnavExplorationMap {
 
     private static func streets(id: String, source: String, ridden: Int, colour: UIColor, behind light: StandardLightPreset?,
                                 share: CGFloat) -> LineLayer {
-        LineLayer(id: id, source: source)
+        let look = StreetnavStreetLook.current
+        return LineLayer(id: id, source: source)
             .filter(Exp(.eq) { Exp(.get) { "r" }; ridden })
             .slot(.middle)
             .lineCap(.round).lineJoin(.round)
             .lineColor(light.map { blend(colour, over: buildingColour($0), share: share) } ?? colour)
-            .lineWidth(roadWidth)
-            .lineWidthUnit(.meters)
+            .lineWidth(roadWidth(close: look.closeWidth, scale: ridden == 1 ? look.riddenScale : 1))
             .lineEmissiveStrength(streetGlow)
             .lineOcclusionOpacity(light == nil ? 0 : 1)
+    }
+
+    /// In points: as wide as Standard draws the road for its class `k` (map_data.py) up to zoom 15, then narrowing into
+    /// a thin line `close` points wide from zoom 16.5, wider for the big roads, so that the road, its lanes and markings
+    /// show, as the traffic and routes of Maps. `scale` thins the streets ridden.
+    private static func roadWidth(close: Double, scale: Double) -> Exp {
+        Exp(.interpolate) {
+            Exp(.exponential) { 1.5 }
+            Exp(.zoom)
+            12
+            byRoadClass(motorway: 3.2 * scale, primary: 3 * scale, secondary: 2.2 * scale, street: 1.2 * scale,
+                        link: 1.2 * scale, service: 1.2 * scale, path: 1.2 * scale)
+            15
+            byRoadClass(motorway: 9.3 * scale, primary: 8.7 * scale, secondary: 7.6 * scale, street: 5.5 * scale,
+                        link: 5 * scale, service: 3.2 * scale, path: 2.3 * scale)
+            16.5
+            byRoadClass(motorway: (close + 1.5) * scale, primary: (close + 1) * scale, secondary: (close + 0.5) * scale,
+                        street: close * scale, link: (close - 0.5) * scale, service: (close - 1) * scale,
+                        path: max(1.5, close - 1.5) * scale)
+            22
+            byRoadClass(motorway: (close + 1.5) * 1.6 * scale, primary: (close + 1) * 1.6 * scale,
+                        secondary: (close + 0.5) * 1.6 * scale, street: close * 1.6 * scale,
+                        link: (close - 0.5) * 1.6 * scale, service: (close - 1) * 1.6 * scale,
+                        path: max(1.5, close - 1.5) * 1.6 * scale)
+        }
     }
 
     /// The face of Standard's buildings under each light, measured on its screens (between their roofs and their walls).
@@ -587,21 +610,6 @@ extension StreetnavExplorationMap {
         colour.getRed(&r, green: &g, blue: &b, alpha: &a)
         base.getRed(&r0, green: &g0, blue: &b0, alpha: &a0)
         return UIColor(red: r0 + (r - r0) * share, green: g0 + (g - g0) * share, blue: b0 + (b - b0) * share, alpha: 1)
-    }
-
-    /// In metres, so that a street stays as wide as its road from the foot of the screen to the horizon of a tilted
-    /// map: from zoom 16, about the width of the road for its class `k` (map_data.py), a street when there is none.
-    /// Farther out, wider than the road, so that a street stays about as wide on screen as Standard draws its roads
-    /// (1.2 points at zoom 12, where Standard thins the small roads away).
-    private static var roadWidth: Exp {
-        Exp(.interpolate) {
-            Exp(.exponential) { 2 }
-            Exp(.zoom)
-            12
-            byRoadClass(motorway: 80, primary: 75, secondary: 55, street: 30, link: 30, service: 30, path: 30)
-            16
-            byRoadClass(motorway: 24, primary: 16, secondary: 13, street: 9, link: 8, service: 5, path: 3)
-        }
     }
 
     /// Standard's HD road markings (StreetnavHDMarkings), read once.
@@ -734,6 +742,43 @@ enum StreetnavMapZoom {
     static func clamped(_ offset: Double) -> Double {
         min(range.upperBound, max(range.lowerBound, offset))
     }
+}
+
+/// How the streets ridden and still to ride are drawn, chosen side by side in the simulator on 2026-11-03 among seven
+/// looks (as wide as the road in metres, thin lines with or without an edge, lighter streets ridden…): a thin line on
+/// the road from zoom 16.5, as Maps draws its traffic, so that the road, its lanes and markings show; the streets
+/// ridden a little thinner, the coral of those still to ride brighter, both lit a little more at night. In debug builds,
+/// launch arguments override each value to compare looks again: -lookClose 4.5 -lookRiddenScale 0.8 -lookGlow 0.9, and
+/// colours as hex numbers, -lookRidden 2A9E8F -lookRiddenDark 3FBFAA -lookNotRidden E8553E -lookNotRiddenDark FF7A5C.
+struct StreetnavStreetLook {
+    var closeWidth = 4.5
+    var riddenScale = 0.8
+    var glow = 0.9
+    var ridden = UIColor(red: 0.16, green: 0.62, blue: 0.56, alpha: 1)
+    var riddenDark = UIColor(red: 0.25, green: 0.75, blue: 0.67, alpha: 1)
+    var notRidden = UIColor(red: 0.91, green: 0.33, blue: 0.24, alpha: 1)
+    var notRiddenDark = UIColor(red: 1, green: 0.48, blue: 0.36, alpha: 1)
+
+    static let current: StreetnavStreetLook = {
+        var look = StreetnavStreetLook()
+        #if DEBUG
+        let defaults = UserDefaults.standard
+        func number(_ key: String) -> Double? { defaults.object(forKey: key) != nil ? defaults.double(forKey: key) : nil }
+        func colour(_ key: String) -> UIColor? {
+            guard let hex = defaults.string(forKey: key), let value = UInt32(hex, radix: 16) else { return nil }
+            return UIColor(red: CGFloat(value >> 16 & 0xFF) / 255, green: CGFloat(value >> 8 & 0xFF) / 255,
+                           blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+        }
+        look.closeWidth = number("lookClose") ?? look.closeWidth
+        look.riddenScale = number("lookRiddenScale") ?? look.riddenScale
+        look.glow = number("lookGlow") ?? look.glow
+        look.ridden = colour("lookRidden") ?? look.ridden
+        look.riddenDark = colour("lookRiddenDark") ?? look.riddenDark
+        look.notRidden = colour("lookNotRidden") ?? look.notRidden
+        look.notRiddenDark = colour("lookNotRiddenDark") ?? look.notRiddenDark
+        #endif
+        return look
+    }()
 }
 
 /// How much more tilted than usual the maps are, in degrees, set with their tilt buttons. Kept between launches.
