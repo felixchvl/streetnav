@@ -253,7 +253,7 @@ struct StreetnavExplorationMap: View {
             .lineBorderWidth(3)
             .lineWidth(Self.zoomed(10, 14, 22))
             .lineEmissiveStrength(1)
-            .lineOcclusionOpacity(0.5)
+            .lineOcclusionOpacity(0.9)
     }
 
     private func streetLayer(_ id: String, status: StreetExplorationStatus) -> LineLayer {
@@ -330,12 +330,13 @@ struct StreetnavExplorationMap: View {
             let change = offset - StreetnavMapZoom.offset
             guard change != 0 else { return }
             StreetnavMapZoom.offset = offset
-            withViewportAnimation(.default(maxDuration: 0.3)) {
+            // Short and eased out, so that taps in a row keep up.
+            withViewportAnimation(.easeOut(duration: 0.18)) {
                 viewport = Viewport.followPuck(zoom: following.zoom + change, bearing: following.bearing, pitch: following.pitch)
                     .padding(padding)
             }
         } else if let state = camera.state {
-            withViewportAnimation(.default(maxDuration: 0.3)) {
+            withViewportAnimation(.easeOut(duration: 0.18)) {
                 viewport = Viewport.camera(center: state.center, zoom: state.zoom + (closer ? 1 : -1), bearing: state.bearing,
                                            pitch: state.pitch)
                     .padding(padding)
