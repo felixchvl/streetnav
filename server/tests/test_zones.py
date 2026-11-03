@@ -57,6 +57,16 @@ class ZonesTest(unittest.TestCase):
         parts = self.conn.execute("SELECT street_id, zone, bool_or(ridden) FROM street_part GROUP BY 1, 2 ORDER BY 1").fetchall()
         self.assertEqual(parts, [(1, "92001", True), (2, "92002", False), (3, "93001", False)])
 
+    def test_only_the_ways_within_the_zones_are_kept(self):
+        zones.load([square("75101", 2.33, 48.84, 2.35, 48.86)], self.conn)
+        kept = streets.load([street(1, 2.34, 48.85, 2.345, 48.85),        # inside
+                             street(2, 2.345, 48.85, 2.36, 48.85),        # across the edge
+                             street(3, 2.40, 48.85, 2.41, 48.85),         # outside
+                             street(1, 2.34, 48.85, 2.345, 48.85)],       # the first again, from another tile
+                            self.conn)
+        self.assertEqual(kept, 2)
+        self.assertEqual([r[0] for r in self.conn.execute("SELECT id FROM street ORDER BY id").fetchall()], [1, 2])
+
 
 if __name__ == "__main__":
     unittest.main()

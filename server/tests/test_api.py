@@ -81,7 +81,7 @@ if __name__ == "__main__":
         from streetnav_server import streets
         from test_streets import street
         with registry.connect() as conn:
-            conn.execute("TRUNCATE street CASCADE")
+            conn.execute("TRUNCATE street, zone CASCADE")
             streets.load([street(1, 2.36, 48.85, 2.37, 48.85, "primary"), street(2, 2.36, 48.86, 2.37, 48.86),
                           street(3, 2.36, 48.87, 2.37, 48.87, "service")], conn)
             streets.compute(conn)

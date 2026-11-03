@@ -30,7 +30,7 @@ class StreetsTest(unittest.TestCase):
         os.environ["STREETNAV_RAW_DIR"] = self.raw.name
         self.conn = registry.connect()
         self.conn.execute("TRUNCATE activity, activity_source, activity_heart_rate, sync_run, raw_file, ride_piece, "
-                          "street_part, street_run, street RESTART IDENTITY CASCADE")
+                          "street_part, street_run, street, zone RESTART IDENTITY CASCADE")
 
     def tearDown(self):
         self.conn.close()

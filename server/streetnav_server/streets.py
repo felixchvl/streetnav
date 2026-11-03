@@ -51,11 +51,13 @@ REACH_M = 12
 STEP_M = 10
 MIN_RIDDEN_SAMPLES = 5
 SIDE_M = 20
-# Paris and the inner suburbs: 96 % of the rides' distance on 2026-11-01.
-DEFAULT_BBOX = (48.75, 2.15, 48.95, 2.55)
-# Downloaded in TILES x TILES boxes: the whole box at once takes 900 MB to read, too much for the container.
-TILES = 3
-MIN_WAYS = 100_000  # 120,679 on 2026-11-02: fewer is a truncated answer, not half of Paris gone
+# Around Paris and the inner suburbs (75, 92, 93 and 94): only the ways within them are kept (zones.py), once their
+# outlines are loaded; until 2026-11-03 the box was (48.75, 2.15, 48.95, 2.55), a third of the 93 and of the 94 left out.
+DEFAULT_BBOX = (48.68, 2.14, 49.02, 2.62)
+# Downloaded in TILES x TILES boxes, each loaded as it comes: the whole box at once takes 900 MB to read, too much for
+# the container.
+TILES = 4
+MIN_WAYS = 100_000  # 120,679 in the smaller box on 2026-11-02: fewer is a truncated answer, not half of Paris gone
 HIGHWAYS = ("primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|"
             "living_street|pedestrian|cycleway")
 OPEN = {"yes", "designated", "permissive", "destination", "use_sidepath"}
@@ -181,7 +183,8 @@ def counted(tags: dict) -> bool:
 
 
 def load(rows, conn) -> int:
-    """Replaces every way with rows of (osm id, name, highway, tags as JSON, EWKT in WGS84); parts go with them."""
+    """Replaces every way with rows of (osm id, name, highway, tags as JSON, EWKT in WGS84), read as they come (a way
+    may come twice, from two tiles); parts go with them. With the zones loaded, only the ways within them are kept."""
     with conn.cursor() as cur:
         cur.execute("CREATE TEMP TABLE osm_in (id bigint, name text, highway text, tags jsonb, bike boolean, "
                     "bike_reason text, counted boolean, ewkt text) ON COMMIT DROP")
@@ -192,9 +195,12 @@ def load(rows, conn) -> int:
         cur.execute("TRUNCATE street, street_part")
         cur.execute(
             """INSERT INTO street (id, name, highway, tags, bike, bike_reason, counted, geom, length_m)
-               SELECT id, nullif(name, ''), highway, tags, bike, bike_reason, counted, g, ST_Length(g)
-               FROM (SELECT *, ST_Transform(ST_GeomFromEWKT(ewkt), 2154) g FROM osm_in) t""")
-        return cur.rowcount
+               SELECT DISTINCT ON (id) id, nullif(name, ''), highway, tags, bike, bike_reason, counted, g, ST_Length(g)
+               FROM (SELECT *, ST_Transform(ST_GeomFromEWKT(ewkt), 2154) g FROM osm_in) t ORDER BY id""")
+        cur.execute("""DELETE FROM street s WHERE EXISTS (SELECT FROM zone)
+                         AND NOT EXISTS (SELECT FROM zone z WHERE ST_Intersects(z.geom, s.geom))""")
+        cur.execute("SELECT count(*) FROM street")
+        return cur.fetchone()[0]
 
 
 def overpass(query: str) -> list[dict]:
@@ -212,11 +218,10 @@ def overpass(query: str) -> list[dict]:
             time.sleep(wait)
 
 
-def fetch(bbox=DEFAULT_BBOX) -> list[tuple]:
-    """The ways in the box (south, west, north, east) from the Overpass API, as load takes them, tile by tile (a way
-    across two tiles comes once)."""
+def fetch(bbox=DEFAULT_BBOX):
+    """The ways in the box (south, west, north, east) from the Overpass API, as load takes them, tile by tile as each
+    is read (a way across two tiles comes twice)."""
     south, west, north, east = bbox
-    ways = {}
     for i in range(TILES):
         for j in range(TILES):
             box = ",".join(str(round(v, 6)) for v in (south + (north - south) * i / TILES, west + (east - west) * j / TILES,
@@ -227,14 +232,9 @@ def fetch(bbox=DEFAULT_BBOX) -> list[tuple]:
             elements = overpass(query)
             for w in elements:
                 if w["type"] == "way" and len(w.get("geometry", [])) >= 2 and w["tags"]["highway"] not in NOT_WAYS:
-                    ways[w["id"]] = (w["id"], w["tags"].get("name") or "", w["tags"]["highway"],
-                                     json.dumps(w["tags"], ensure_ascii=False),
-                                     "SRID=4326;LINESTRING(" + ",".join(f'{p["lon"]:.7f} {p["lat"]:.7f}'
-                                                                        for p in w["geometry"]) + ")")
+                    yield (w["id"], w["tags"].get("name") or "", w["tags"]["highway"], json.dumps(w["tags"], ensure_ascii=False),
+                           "SRID=4326;LINESTRING(" + ",".join(f'{p["lon"]:.7f} {p["lat"]:.7f}' for p in w["geometry"]) + ")")
             del elements
-    if len(ways) < MIN_WAYS:
-        raise SystemExit(f"only {len(ways)} ways from Overpass, a truncated answer: nothing changed")
-    return list(ways.values())
 
 
 def compute(conn) -> None:
@@ -331,7 +331,11 @@ def main(argv=None) -> int:
             else:
                 with open(args.file, newline="", encoding="utf-8") as f:
                     rows = list(csv.reader(f, delimiter="\t", quoting=csv.QUOTE_NONE, escapechar="\\"))
-            print(f"{load(rows, conn)} ways loaded")
+            count = load(rows, conn)
+            if args.command == "fetch" and count < MIN_WAYS:
+                # Rolled back with the connection: the ways loaded before stay.
+                raise SystemExit(f"only {count} ways from Overpass, a truncated answer: nothing changed")
+            print(f"{count} ways loaded")
             compute(conn)
         elif args.command == "compute":
             compute(conn)
