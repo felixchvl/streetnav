@@ -14,6 +14,15 @@ struct StreetnavVanMoofView: View {
         Form {
             accountSection
             if account.isSignedIn { bikeSection }
+            Section {
+                NavigationLink {
+                    StreetnavVanMoofLogView()
+                } label: {
+                    LabeledContent("Journal Bluetooth", value: bike.log.isEmpty ? "Vide" : "\(bike.log.count) lignes")
+                }
+            } footer: {
+                Text("Chaque étape de la connexion et chaque message échangé avec le vélo, pour voir où ça bloque.")
+            }
         }
         .navigationTitle(account.bike?.name ?? "VanMoof S6")
         .navigationBarTitleDisplayMode(.inline)
@@ -398,6 +407,46 @@ enum StreetnavBikeLabels {
         case 2: "lightbulb.fill"
         case 0: "lightbulb.slash"
         default: "lightbulb.max"
+        }
+    }
+}
+
+/// The Bluetooth journal: each step of the connection and each message with the bike, newest at the bottom, to share.
+struct StreetnavVanMoofLogView: View {
+    @ObservedObject private var bike = StreetnavVanMoofBike.shared
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            List(bike.log) { entry in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.date.formatted(.dateTime.hour().minute().second().secondFraction(.fractional(3))))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Text(entry.text)
+                        .font(.footnote.monospaced())
+                        .textSelection(.enabled)
+                }
+                .id(entry.id)
+            }
+            .listStyle(.plain)
+            .overlay {
+                if bike.log.isEmpty {
+                    ContentUnavailableView("Journal vide", systemImage: "antenna.radiowaves.left.and.right",
+                                           description: Text("Il se remplit dès que Streetnav se connecte au vélo."))
+                }
+            }
+            .onAppear { if let last = bike.log.last { proxy.scrollTo(last.id, anchor: .bottom) } }
+            .onChange(of: bike.log.count) { if let last = bike.log.last { proxy.scrollTo(last.id, anchor: .bottom) } }
+        }
+        .navigationTitle("Journal Bluetooth")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                ShareLink(item: bike.logText) { Image(systemName: "square.and.arrow.up") }
+                    .disabled(bike.log.isEmpty)
+                Button("Effacer", systemImage: "trash") { bike.clearLog() }
+                    .disabled(bike.log.isEmpty)
+            }
         }
     }
 }

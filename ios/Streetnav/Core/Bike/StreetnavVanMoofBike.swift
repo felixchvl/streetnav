@@ -35,6 +35,16 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     @Published private(set) var speedKmh: Double?
     /// Diagnostic trouble codes: (device class << 8) | subcode.
     @Published private(set) var errorCodes: [Int]?
+    /// What happened on the Bluetooth link, step by step and message by message, to see where it stops (Réglages ›
+    /// VanMoof › Journal Bluetooth). The certificate and the signature are never written in it, only their size.
+    @Published private(set) var log: [LogEntry] = []
+
+    struct LogEntry: Identifiable {
+        let id = UUID()
+        let date: Date
+        let text: String
+    }
+
     /// Undocumented registers, as the bike sends them.
     @Published private(set) var motorState: String?
     @Published private(set) var wakeState: String?
@@ -74,12 +84,16 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     /// Connects and authenticates; `ready` once the bike accepted the certificate.
     func connect() async {
         guard state == .idle || state.isFailure else { return }
+        note("Connexion demandée")
         do {
             (certificate, key) = try await StreetnavVanMoofAccount.shared.credentials()
+            note("Certificat VanMoof prêt (\(certificate?.count ?? 0) octets)")
         } catch {
+            note("Certificat VanMoof indisponible : \(error.localizedDescription)")
             state = .failed(error.localizedDescription)
             return
         }
+        note("Recherche du vélo…")
         state = .searching
         if let central, central.state == .poweredOn {
             scan()
@@ -90,6 +104,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     }
 
     func disconnect() {
+        if state != .idle { note("Déconnexion demandée") }
         deadline?.cancel()
         central?.stopScan()
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
@@ -146,6 +161,12 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         chargeLimit = 80
         alarmOn = false
         alarmSensitivity = 2
+        for line in ["Exemple de journal (-sampleBike)", "Recherche du vélo…", "Vélo trouvé : « VANMOOF S6 », signal -58 dBm",
+                     "Connecté, recherche du service VanMoof", "Notifications activées", "Envoi du certificat (169 octets)",
+                     "Défi du vélo reçu, envoi de la signature", "Certificat accepté : vélo prêt",
+                     "→ get batteryLevel (0x022A)", "← publish batteryLevel (0x022A) : 78"] {
+            note(line)
+        }
     }
     #endif
 
@@ -197,6 +218,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     }
 
     private func found(_ peripheral: CBPeripheral) {
+        note("Connexion au vélo…")
         central?.stopScan()
         self.peripheral = peripheral
         peripheral.delegate = self
@@ -208,25 +230,33 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         self.characteristic = characteristic
         state = .authenticating
         guard let certificate else { return }
+        note("Envoi du certificat (\(certificate.count) octets)")
         send(.set, .auth, P.certificatePayload(certificate))
     }
 
     private func received(_ message: P.Message) {
+        let topic = P.Topic(rawValue: message.topic)
+        if topic != .auth, quiet(topic) == false {
+            note("← \(message.type) \(Self.name(message.topic)) : \(P.raw(message.payload))")
+        }
         guard message.type == .publish else { return }
-        switch P.Topic(rawValue: message.topic) {
+        switch topic {
         case .auth:
             switch P.authReply(message.payload) {
             case .challenge(let challenge)?:
+                note("Défi du vélo reçu, envoi de la signature")
                 guard let key, let signature = try? key.signature(for: challenge) else { return fail("Signature impossible.") }
                 send(.set, .auth, P.signaturePayload(signature))
             case .accepted?:
+                note("Certificat accepté : vélo prêt")
                 deadline?.cancel()
                 state = .ready
                 refresh()
             case .rejected?:
+                note("Certificat refusé par le vélo")
                 fail("Le vélo a refusé le certificat : reconnecte ton compte VanMoof.")
             case nil:
-                break
+                note("Réponse d'authentification illisible (\(message.payload.count) octets)")
             }
         case .lockState:
             let locked = firstInt(message.payload).map { $0 != 0 }
@@ -273,6 +303,9 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
 
     private func send(_ type: P.MessageType, _ topic: P.Topic, _ payload: Data) {
         guard let peripheral else { return }
+        if topic != .auth, quiet(topic) == false {
+            note("→ \(type) \(Self.name(topic.rawValue))\(payload.isEmpty ? "" : " " + payload.map { String(format: "%02X", $0) }.joined())")
+        }
         let message = P.encode(.init(type: type, topic: topic.rawValue, payload: payload, id: messageID))
         messageID &+= 1
         pendingWrites += P.fragments(of: message, maxWrite: peripheral.maximumWriteValueLength(for: .withoutResponse),
@@ -292,6 +325,33 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
             peripheral.writeValue(fragment, for: characteristic, type: .withoutResponse)
             writeNext()
         }
+    }
+
+    private func note(_ text: String) {
+        log.append(LogEntry(date: Date(), text: text))
+        if log.count > 400 { log.removeFirst(log.count - 400) }
+    }
+
+    func clearLog() { log.removeAll() }
+
+    /// The journal as text, to share.
+    var logText: String {
+        let format = Date.FormatStyle().hour(.twoDigits(amPM: .omitted)).minute().second().secondFraction(.fractional(3))
+        return log.map { "\($0.date.formatted(format))  \($0.text)" }.joined(separator: "\n")
+    }
+
+    /// The speed is asked for twice a second: only its first exchanges go in the journal.
+    private var speedNotes = 0
+
+    private func quiet(_ topic: P.Topic?) -> Bool {
+        guard topic == .speed else { return false }
+        speedNotes += 1
+        return speedNotes > 6
+    }
+
+    private static func name(_ topic: UInt16) -> String {
+        let hex = String(format: "0x%04X", topic)
+        return P.Topic(rawValue: topic).map { "\($0) (\(hex))" } ?? hex
     }
 
     private func firstInt(_ payload: Data) -> Int? {
@@ -317,6 +377,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     }
 
     private func fail(_ reason: String) {
+        note("Échec : \(reason)")
         central?.stopScan()
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
         reset(to: .failed(reason))
@@ -335,6 +396,19 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     }
 }
 
+extension StreetnavVanMoofBike {
+    fileprivate static func describe(_ state: CBManagerState) -> String {
+        switch state {
+        case .poweredOn: "allumé"
+        case .poweredOff: "éteint"
+        case .unauthorized: "non autorisé pour Streetnav"
+        case .unsupported: "indisponible sur cet appareil"
+        case .resetting: "redémarrage"
+        default: "état inconnu"
+        }
+    }
+}
+
 extension StreetnavVanMoofBike.State {
     var isFailure: Bool {
         if case .failed = self { return true }
@@ -346,6 +420,7 @@ extension StreetnavVanMoofBike.State {
 extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         MainActor.assumeIsolated {
+            note("Bluetooth : \(Self.describe(central.state))")
             switch central.state {
             case .poweredOn: if state == .searching { scan() }
             case .unauthorized: fail("Autorise Streetnav à utiliser le Bluetooth dans Réglages.")
@@ -361,25 +436,32 @@ extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
         let services = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []).map(\.uuidString)
         let isVanMoof = name.contains("VANMOOF") || services.contains { $0.hasPrefix("DF2861") }
         MainActor.assumeIsolated {
-            if isVanMoof, state == .searching { found(peripheral) }
+            if isVanMoof, state == .searching {
+                note("Vélo trouvé : « \(name.isEmpty ? "sans nom" : name) », signal \(RSSI) dBm")
+                found(peripheral)
+            }
         }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        MainActor.assumeIsolated { note("Connecté, recherche du service VanMoof") }
         peripheral.discoverServices(StreetnavVanMoofProtocol.serviceUUIDs.map { CBUUID(string: $0) })
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        MainActor.assumeIsolated { fail("Connexion au vélo impossible.") }
+        MainActor.assumeIsolated { fail("Connexion au vélo impossible\(error.map { " : \($0.localizedDescription)" } ?? ".")") }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         MainActor.assumeIsolated {
+            note("Vélo déconnecté\(error.map { " : \($0.localizedDescription)" } ?? "")")
             if state == .ready || state == .authenticating { reset(to: error == nil ? .idle : .failed("Le vélo s'est déconnecté.")) }
         }
     }
 
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        let services = (peripheral.services ?? []).map(\.uuid.uuidString)
+        MainActor.assumeIsolated { note("Services : \(services.isEmpty ? "aucun" : services.joined(separator: ", "))") }
         for service in peripheral.services ?? [] { peripheral.discoverCharacteristics(nil, for: service) }
         if peripheral.services?.isEmpty ?? true {
             MainActor.assumeIsolated { fail("Ce vélo ne présente pas le service VanMoof S6.") }
@@ -389,14 +471,22 @@ extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         guard let characteristic = service.characteristics?.first(where: {
             $0.uuid.uuidString.hasPrefix(StreetnavVanMoofProtocol.characteristicPrefix)
-        }) else { return }
+        }) else {
+            let found = (service.characteristics ?? []).map(\.uuid.uuidString).joined(separator: ", ")
+            MainActor.assumeIsolated { note("Pas de caractéristique VanMoof dans \(service.uuid.uuidString) (\(found))") }
+            return
+        }
+        MainActor.assumeIsolated { note("Caractéristique \(characteristic.uuid.uuidString), activation des notifications") }
         peripheral.setNotifyValue(true, for: characteristic)
     }
 
     nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic,
                                 error: Error?) {
         MainActor.assumeIsolated {
-            if error != nil || characteristic.isNotifying == false { return fail("Le vélo refuse les notifications.") }
+            if error != nil || characteristic.isNotifying == false {
+                return fail("Le vélo refuse les notifications\(error.map { " : \($0.localizedDescription)" } ?? ".")")
+            }
+            note("Notifications activées")
             ready(characteristic)
         }
     }
@@ -404,14 +494,19 @@ extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard let value = characteristic.value else { return }
         MainActor.assumeIsolated {
-            if let data = reassembler.feed(value), let message = StreetnavVanMoofProtocol.decode(data) { received(message) }
+            guard let data = reassembler.feed(value) else { return }
+            if let message = StreetnavVanMoofProtocol.decode(data) {
+                received(message)
+            } else {
+                note("← message illisible (\(data.count) octets) : \(data.prefix(24).map { String(format: "%02X", $0) }.joined())")
+            }
         }
     }
 
     nonisolated func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         MainActor.assumeIsolated {
             isWriting = false
-            if error != nil { return fail("Écriture refusée par le vélo.") }
+            if let error { return fail("Écriture refusée par le vélo : \(error.localizedDescription)") }
             writeNext()
         }
     }
