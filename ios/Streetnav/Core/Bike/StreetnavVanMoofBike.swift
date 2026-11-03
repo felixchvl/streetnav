@@ -153,8 +153,9 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     func showSampleIfAsked() {
         guard UserDefaults.standard.bool(forKey: "sampleBike") else { return }
         state = .ready
-        battery = 78
-        isLocked = false
+        battery = Int(UserDefaults.standard.string(forKey: "sampleBattery") ?? "") ?? 78
+        isLocked = UserDefaults.standard.bool(forKey: "sampleLocked")
+        odometerMeters = 2_345_600
         assistLevel = 1
         lightMode = 3
         speedKmh = 18.4

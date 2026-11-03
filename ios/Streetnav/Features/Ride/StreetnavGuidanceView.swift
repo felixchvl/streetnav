@@ -19,12 +19,14 @@ struct StreetnavGuidanceView: View {
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @State private var showsOverview = false
     @State private var showsEnd = false
+    /// The height of the bike's cluster in the trip card, which the map keeps clear of.
+    @State private var clusterHeight: CGFloat = 0
 
     var body: some View {
         StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview,
                              streets: history.streets, live: live.ridden, outside: history.tracksOutside, filter: streetFilter,
                              dark: colorScheme == .dark,
-                             zoomOffset: zoomOffset, tiltOffset: tiltOffset, tripCardLift: bike.state == .ready ? 58 : 0)
+                             zoomOffset: zoomOffset, tiltOffset: tiltOffset, tripCardLift: clusterHeight > 0 ? clusterHeight + 16 : 0)
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
@@ -113,10 +115,10 @@ struct StreetnavGuidanceView: View {
             Capsule()
                 .fill(Color.secondary.opacity(0.5))
                 .frame(width: 36, height: 5)
-            // The bike above the trip, once connected.
-            StreetnavBikeRideRow(location: guidance.location)
-                .padding(.horizontal, 10)
+            // The bike above the trip, once connected, as CarPlay Ultra's instrument cluster.
+            StreetnavBikeCluster(location: guidance.location)
                 .padding(.top, 16)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { clusterHeight = $0 > 16 ? $0 - 16 : 0 }
             HStack(spacing: 0) {
                 tripValue(arrivalTime, "arrivée")
                 tripValue(remainingTime.value, remainingTime.unit)

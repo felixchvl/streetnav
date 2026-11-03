@@ -287,82 +287,6 @@ struct StreetnavBikeChip: View {
     }
 }
 
-/// The bike while riding, in the trip card of the navigation: speed, battery, and assistance and lights, each changed
-/// with a tap. The speed is the bike's once its unit is known, the GPS's until then.
-struct StreetnavBikeRideRow: View {
-    @ObservedObject private var bike = StreetnavVanMoofBike.shared
-    /// The rider's position from the guidance, for its speed.
-    let location: CLLocation?
-
-    var body: some View {
-        if bike.state == .ready {
-            HStack(alignment: .center, spacing: 14) {
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(speed.map { "\(Int($0.rounded()))" } ?? "—")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                    Text("km/h")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 4)
-                StreetnavBikeBattery(percent: bike.battery)
-                    .font(.headline)
-                Button {
-                    // Eco, normal, sport, turbo and round again; off only from the bike's settings.
-                    bike.setAssistLevel((bike.assistLevel ?? 0) % 4 + 1)
-                } label: {
-                    Text(bike.assistLevel.map(StreetnavBikeLabels.assistName) ?? "—")
-                        .font(.headline)
-                        .padding(.horizontal, 12)
-                        .frame(height: 36)
-                        .background(Color.primary.opacity(0.1), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Assistance, toucher pour changer")
-                Button {
-                    // Automatic, on, off and round again.
-                    let next = switch bike.lightMode {
-                    case 3: 2
-                    case 2: 0
-                    default: 3
-                    }
-                    bike.setLightMode(next)
-                } label: {
-                    Image(systemName: StreetnavBikeLabels.lightSymbol(bike.lightMode))
-                        .font(.headline)
-                        .frame(width: 36, height: 36)
-                        .background(Color.primary.opacity(0.1), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Phares : \(StreetnavBikeLabels.lightName(bike.lightMode))")
-            }
-            .foregroundStyle(.primary)
-            .animation(.snappy, value: speed.map { Int($0.rounded()) })
-            .onChange(of: location) { _, location in
-                if let location, location.speed >= 0 { bike.noteGPS(speedKmh: location.speed * 3.6) }
-            }
-            // The speed twice a second, the rest every ten seconds.
-            .task {
-                var tick = 0
-                while Task.isCancelled == false {
-                    bike.refreshSpeed()
-                    if tick % 20 == 0 { bike.refreshStatus() }
-                    tick += 1
-                    try? await Task.sleep(for: .milliseconds(500))
-                }
-            }
-        }
-    }
-
-    private var speed: Double? {
-        if let kmh = bike.speedKmh { return kmh }
-        guard let location, location.speed >= 0 else { return nil }
-        return location.speed * 3.6
-    }
-}
-
 /// The battery as an icon filled to its level, and its percent.
 struct StreetnavBikeBattery: View {
     let percent: Int?
@@ -370,12 +294,21 @@ struct StreetnavBikeBattery: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: symbol)
-                .foregroundStyle((percent ?? 100) <= 15 ? Color.red : Color.secondary)
+                .foregroundStyle(colour)
             Text(percent.map { "\($0) %" } ?? "—")
                 .monospacedDigit()
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Batterie \(percent.map { "\($0) %" } ?? "inconnue")")
+    }
+
+    /// Amber when low, red when nearly empty, as in the navigation's dial.
+    private var colour: Color {
+        switch percent ?? 100 {
+        case ...10: .red
+        case ...20: .orange
+        default: .secondary
+        }
     }
 
     private var symbol: String {
