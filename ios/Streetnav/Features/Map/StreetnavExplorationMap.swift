@@ -569,28 +569,28 @@ extension StreetnavExplorationMap {
             .lineOcclusionOpacity(light == nil ? 0 : 1)
     }
 
-    /// In points: as wide as Standard draws the road for its class `k` (map_data.py) up to zoom 15, then narrowing into
-    /// a thin line `close` points wide from zoom 16.5, wider for the big roads, so that the road, its lanes and markings
-    /// show, as the traffic and routes of Maps. `scale` thins the streets ridden.
+    /// In points, one curve that only grows with the zoom, as the traffic lines of Maps: never as wide as the road, so
+    /// that the road, its lanes and markings always show. A street is `close` points wide at zoom 16 (1 at zoom 12, 7 at
+    /// 22), the big roads up to 1.5 points more, the service roads and paths less. `scale` thins the streets ridden.
     private static func roadWidth(close: Double, scale: Double) -> Exp {
-        Exp(.interpolate) {
-            Exp(.exponential) { 1.5 }
+        func widths(_ street: Double) -> Exp {
+            byRoadClass(motorway: (street + 1.5) * scale, primary: (street + 1) * scale, secondary: (street + 0.5) * scale,
+                        street: street * scale, link: (street - 0.3) * scale, service: street * 0.75 * scale,
+                        path: street * 0.6 * scale)
+        }
+        return Exp(.interpolate) {
+            Exp(.linear)
             Exp(.zoom)
             12
-            byRoadClass(motorway: 3.2 * scale, primary: 3 * scale, secondary: 2.2 * scale, street: 1.2 * scale,
-                        link: 1.2 * scale, service: 1.2 * scale, path: 1.2 * scale)
-            15
-            byRoadClass(motorway: 9.3 * scale, primary: 8.7 * scale, secondary: 7.6 * scale, street: 5.5 * scale,
-                        link: 5 * scale, service: 3.2 * scale, path: 2.3 * scale)
-            16.5
-            byRoadClass(motorway: (close + 1.5) * scale, primary: (close + 1) * scale, secondary: (close + 0.5) * scale,
-                        street: close * scale, link: (close - 0.5) * scale, service: (close - 1) * scale,
-                        path: max(1.5, close - 1.5) * scale)
+            widths(1)
+            14
+            widths(1 + (close - 1) * 0.5)
+            16
+            widths(close)
+            18
+            widths(close + 1)
             22
-            byRoadClass(motorway: (close + 1.5) * 1.6 * scale, primary: (close + 1) * 1.6 * scale,
-                        secondary: (close + 0.5) * 1.6 * scale, street: close * 1.6 * scale,
-                        link: (close - 0.5) * 1.6 * scale, service: (close - 1) * 1.6 * scale,
-                        path: max(1.5, close - 1.5) * 1.6 * scale)
+            widths(close + 3)
         }
     }
 
@@ -746,12 +746,14 @@ enum StreetnavMapZoom {
 
 /// How the streets ridden and still to ride are drawn, chosen side by side in the simulator on 2026-11-03 among seven
 /// looks (as wide as the road in metres, thin lines with or without an edge, lighter streets ridden…): a thin line on
-/// the road from zoom 16.5, as Maps draws its traffic, so that the road, its lanes and markings show; the streets
-/// ridden a little thinner, the coral of those still to ride brighter, both lit a little more at night. In debug builds,
-/// launch arguments override each value to compare looks again: -lookClose 4.5 -lookRiddenScale 0.8 -lookGlow 0.9, and
-/// colours as hex numbers, -lookRidden 2A9E8F -lookRiddenDark 3FBFAA -lookNotRidden E8553E -lookNotRiddenDark FF7A5C.
+/// the road that only grows with the zoom, as Maps draws its traffic, so that the road, its lanes and markings show;
+/// the streets ridden a little thinner, the coral of those still to ride brighter, both lit a little more at night. In
+/// debug builds, launch arguments override each value to compare looks again: -lookClose 4 -lookRiddenScale 0.8
+/// -lookGlow 0.9, and colours as hex numbers, -lookRidden 2A9E8F -lookRiddenDark 3FBFAA -lookNotRidden E8553E
+/// -lookNotRiddenDark FF7A5C.
 struct StreetnavStreetLook {
-    var closeWidth = 4.5
+    /// A street's width at zoom 16, in points.
+    var closeWidth = 4.0
     var riddenScale = 0.8
     var glow = 0.9
     var ridden = UIColor(red: 0.16, green: 0.62, blue: 0.56, alpha: 1)
