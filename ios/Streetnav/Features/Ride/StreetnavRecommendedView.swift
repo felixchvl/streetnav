@@ -49,7 +49,8 @@ struct StreetnavRecommendedView: View {
                 viewport: $viewport,
                 isThreeD: $isThreeD,
                 recenter: locationTapped,
-                chooseBuilding: model.flowState == .home ? { coordinate in Task { await places.choose(buildingAt: coordinate) } } : nil
+                choosePoint: model.flowState == .home
+                    ? { coordinate, building in Task { await places.choose(pointAt: coordinate, building: building) } } : nil
             )
 
             switch model.flowState {

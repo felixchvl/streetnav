@@ -33,10 +33,10 @@ struct StreetnavExplorationMap: View {
     /// Tilted city or map seen from above, switched by the « 3D » button as in Maps.
     var isThreeD: Binding<Bool> = .constant(true)
     var recenter: () -> Void = {}
-    /// A building tapped while exploring, to ride to.
-    var chooseBuilding: ((CLLocationCoordinate2D) -> Void)?
+    /// A point held while exploring, a building or not, to ride to.
+    var choosePoint: ((CLLocationCoordinate2D, _ building: Bool) -> Void)?
 
-    /// The building tapped, drawn selected while its place is shown.
+    /// The building held, drawn selected while its place is shown.
     @State private var building: StandardBuildingsFeature?
 
     /// The map's heading, rounded to the degree so that the view only redraws when the compass would change.
@@ -178,11 +178,17 @@ struct StreetnavExplorationMap: View {
                 .variableAnchors([ViewAnnotationAnchorConfig(anchor: .bottom)])
             }
 
-            // A building tapped becomes the place to ride to, as in Maps.
-            if let chooseBuilding {
-                TapInteraction(.standardBuildings) { tapped, context in
-                    building = tapped
-                    chooseBuilding(context.coordinate)
+            // A point held becomes the place to ride to, as in Maps: the building there, or a pin. A tap does nothing, so
+            // that moving the map never picks one by chance.
+            if let choosePoint {
+                LongPressInteraction(.standardBuildings) { held, context in
+                    building = held
+                    choosePoint(context.coordinate, true)
+                    return true
+                }
+                LongPressInteraction { context in
+                    building = nil
+                    choosePoint(context.coordinate, false)
                     return true
                 }
             }

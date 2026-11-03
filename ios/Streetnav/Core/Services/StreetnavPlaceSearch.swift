@@ -142,14 +142,14 @@ final class StreetnavPlaceSearch: NSObject, ObservableObject {
         await loadRoutes()
     }
 
-    /// A building tapped on the map, as a place to ride to: its address from Apple, then the ways there.
-    func choose(buildingAt coordinate: CLLocationCoordinate2D) async {
+    /// A point held on the map, a building or not, as a place to ride to: its address from Apple, then the ways there.
+    func choose(pointAt coordinate: CLLocationCoordinate2D, building: Bool) async {
         let placemark = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: coordinate.latitude,
                                                                                    longitude: coordinate.longitude)).first
         let street = [placemark?.subThoroughfare, placemark?.thoroughfare].compactMap { $0 }.joined(separator: " ")
         let town = [placemark?.postalCode, placemark?.locality].compactMap { $0 }.joined(separator: " ")
-        place = StreetnavPlace(name: street.isEmpty ? "Bâtiment" : street, address: town, coordinate: coordinate,
-                               symbol: "building.2.fill")
+        place = StreetnavPlace(name: street.isEmpty ? (building ? "Bâtiment" : "Point choisi") : street, address: town,
+                               coordinate: coordinate, symbol: building ? "building.2.fill" : "mappin")
         routes = []
         selected = .direct
         routeFailed = false
