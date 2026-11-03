@@ -398,10 +398,11 @@ extension StreetnavExplorationMap {
             return Viewport.followPuck(zoom: 17 + StreetnavMapZoom.offset, bearing: .course, pitch: 55).padding(.bottom, bottomInset)
         default:
             #if DEBUG
-            // Development: -mapPitch 60 -mapZoom 16.2 to try other angles.
+            // Development: -mapPitch 60 -mapZoom 16.2 [-mapBearing 60] to try other angles.
             let defaults = UserDefaults.standard
             if defaults.object(forKey: "mapPitch") != nil {
-                return Viewport.followPuck(zoom: defaults.double(forKey: "mapZoom"), bearing: .constant(-25), pitch: defaults.double(forKey: "mapPitch"))
+                let bearing = defaults.object(forKey: "mapBearing") != nil ? defaults.double(forKey: "mapBearing") : -25
+                return Viewport.followPuck(zoom: defaults.double(forKey: "mapZoom"), bearing: .constant(bearing), pitch: defaults.double(forKey: "mapPitch"))
                     .padding(.bottom, bottomInset)
             }
             #endif
@@ -425,12 +426,22 @@ extension StreetnavExplorationMap {
         dark ? UIColor(red: 0.04, green: 0.52, blue: 1, alpha: 1) : UIColor(red: 0, green: 0.48, blue: 1, alpha: 1)
     }
 
-    /// The system green, for what is done: the streets ridden, against the red of those still to ride.
+    /// Teal for what is done, the streets ridden, and coral for what is left: a pair apart from the blue of the routes
+    /// and the green of the parks, a little brighter at night.
     static func riddenColour(dark: Bool) -> UIColor {
-        dark ? UIColor(red: 0.19, green: 0.82, blue: 0.35, alpha: 1) : UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
+        dark ? UIColor(red: 0.20, green: 0.70, blue: 0.63, alpha: 1) : UIColor(red: 0.16, green: 0.62, blue: 0.56, alpha: 1)
     }
 
-    static let reliefExaggeration = 1.5
+    static func notRiddenColour(dark: Bool) -> UIColor {
+        dark ? UIColor(red: 0.95, green: 0.50, blue: 0.38, alpha: 1) : UIColor(red: 0.91, green: 0.44, blue: 0.32, alpha: 1)
+    }
+
+    /// Lit by the hour like the rest of the map, only a little brighter: at full strength the lines glowed like neon at
+    /// night.
+    static let streetGlow = 0.75
+
+    /// Mapbox's elevation at its real scale: lifted, the river sank into a ravine and the bridges dipped with it.
+    static let reliefExaggeration = 1.0
 
     static var reliefSource: RasterDemSource {
         var source = RasterDemSource(id: "relief")
@@ -448,7 +459,7 @@ extension StreetnavExplorationMap {
 
     static func streetsNotRidden(dark: Bool, behind light: StandardLightPreset? = nil) -> LineLayer {
         streets(id: light == nil ? "rues-jamais" : "rues-jamais-derriere", source: "rues-osm", ridden: 0,
-                colour: dark ? UIColor(red: 1, green: 0.27, blue: 0.23, alpha: 1) : UIColor(red: 1, green: 0.42, blue: 0.43, alpha: 1),
+                colour: notRiddenColour(dark: dark),
                 behind: light, share: 0.3)
     }
 
@@ -466,7 +477,7 @@ extension StreetnavExplorationMap {
             .lineCap(.round).lineJoin(.round)
             .lineColor(light.map { blend(colour, over: buildingColour($0), share: share) } ?? colour)
             .lineWidth(roadWidth)
-            .lineEmissiveStrength(1)
+            .lineEmissiveStrength(streetGlow)
             .lineOcclusionOpacity(light == nil ? 0 : 1)
     }
 

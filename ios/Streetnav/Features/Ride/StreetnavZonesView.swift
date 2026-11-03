@@ -54,7 +54,7 @@ struct StreetnavZoneGroup: Identifiable, Hashable {
     }
 }
 
-/// A map of zones, each filled darker the more of its streets were ridden, in the green of the streets ridden; the
+/// A map of zones, each filled darker the more of its streets were ridden, in the teal of the streets ridden; the
 /// others, when `highlighted` leaves them out, in grey. Fitted to the zones highlighted (all of them by default).
 struct StreetnavZoneMap: View {
     let shapes: [String: [[CGPoint]]]
@@ -86,13 +86,13 @@ struct StreetnavZoneMap: View {
         .accessibilityHidden(true)
     }
 
-    /// From a pale green for nothing ridden to a deep one for every street, the low shares spread out (most zones
+    /// From a pale teal for nothing ridden to a deep one for every street, the low shares spread out (most zones
     /// outside Paris are under a fifth).
     static func fill(share: Double, dark: Bool) -> Color {
         let t = pow(min(1, max(0, share)), 0.6)
         let (from, to): ((Double, Double, Double), (Double, Double, Double)) = dark
-            ? ((0.16, 0.22, 0.18), (0.24, 0.90, 0.42))
-            : ((0.89, 0.95, 0.90), (0.05, 0.44, 0.18))
+            ? ((0.15, 0.21, 0.21), (0.25, 0.78, 0.70))
+            : ((0.90, 0.95, 0.94), (0.07, 0.40, 0.36))
         return Color(red: from.0 + (to.0 - from.0) * t, green: from.1 + (to.1 - from.1) * t, blue: from.2 + (to.2 - from.2) * t)
     }
 

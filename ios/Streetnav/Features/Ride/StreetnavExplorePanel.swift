@@ -35,6 +35,7 @@ struct StreetnavExplorePanel: View {
     @State private var visibleHeight = CGFloat.greatestFiniteMagnitude
     @FocusState private var searchFocused: Bool
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Just the search bar, 65 points tall on screen like the one in Maps.
     static let collapsed = PresentationDetent.height(76)
@@ -380,7 +381,7 @@ struct StreetnavExplorePanel: View {
                         Text("\(kilometers(new / 1000)) km")
                             .font(.headline)
                             .monospacedDigit()
-                            .foregroundStyle(new > 0 ? Color.red : Color.secondary)
+                            .foregroundStyle(new > 0 ? Color(StreetnavExplorationMap.notRiddenColour(dark: colorScheme == .dark)) : Color.secondary)
                         Text("à découvrir")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
