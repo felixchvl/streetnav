@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 
 /// Réglages › VanMoof S6: the VanMoof account that issues the bike's certificate, then the bike itself over Bluetooth.
@@ -63,7 +64,7 @@ struct StreetnavVanMoofView: View {
             if bike.state == .ready {
                 LabeledContent("Batterie", value: bike.battery.map { "\($0) %" } ?? "—")
                 LabeledContent("Verrou", value: bike.isLocked.map { $0 ? "Verrouillé" : "Déverrouillé" } ?? "—")
-                LabeledContent("Vitesse", value: bike.speed ?? "—")
+                LabeledContent("Vitesse", value: bike.speedKmh.map { "\(Int($0.rounded())) km/h" } ?? bike.speed ?? "—")
                 LabeledContent("Compteur", value: bike.odometerMeters.map { "\(($0 / 1000).formatted()) km" } ?? "—")
                 if let firmware = bike.firmware { LabeledContent("Logiciel", value: firmware) }
                 Button("Actualiser") { bike.refresh() }
@@ -79,14 +80,16 @@ struct StreetnavVanMoofView: View {
             header("Vélo")
         } footer: {
             if bike.state == .ready {
-                Text("La vitesse est la valeur que le vélo envoie : son unité n'est pas documentée.")
+                Text(bike.speedKmh == nil
+                     ? "La vitesse est la valeur que le vélo envoie : son unité se règle toute seule à la première navigation, en la comparant au GPS."
+                     : "Vitesse du vélo, en km/h.")
             }
         }
-        // The speed again every two seconds while the screen is open.
+        // The speed again twice a second while the screen is open.
         .task(id: bike.state == .ready) {
             while bike.state == .ready, Task.isCancelled == false {
                 bike.refreshSpeed()
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .milliseconds(500))
             }
         }
 
@@ -217,6 +220,184 @@ struct StreetnavVanMoofView: View {
         case .authenticating: "Authentification…"
         case .ready: "Connecté"
         case .failed(let reason): reason
+        }
+    }
+}
+
+/// The bike on the map, as Maps shows the weather: battery, lock and assistance in a glass chip, only while the bike is
+/// connected; a tap opens what can be done from there.
+struct StreetnavBikeChip: View {
+    @ObservedObject private var bike = StreetnavVanMoofBike.shared
+
+    var body: some View {
+        if bike.state == .ready {
+            Menu {
+                if bike.isLocked != false {
+                    Button("Déverrouiller", systemImage: "lock.open") { Task { await bike.unlock() } }
+                }
+                // Each a submenu that names its current value, as in Maps' own menus.
+                Picker(selection: Binding(get: { bike.assistLevel ?? 0 }, set: { bike.setAssistLevel($0) })) {
+                    ForEach(StreetnavBikeLabels.assistLevels, id: \.level) { Text($0.name).tag($0.level) }
+                } label: {
+                    Label("Assistance", systemImage: "bolt")
+                }
+                .pickerStyle(.menu)
+                Picker(selection: Binding(get: { bike.lightMode ?? 0 }, set: { bike.setLightMode($0) })) {
+                    ForEach(StreetnavBikeLabels.lightModes, id: \.mode) { Text($0.name).tag($0.mode) }
+                } label: {
+                    Label("Phares", systemImage: StreetnavBikeLabels.lightSymbol(bike.lightMode))
+                }
+                .pickerStyle(.menu)
+                Button("Sonner", systemImage: "bell") { bike.ringBell() }
+            } label: {
+                HStack(spacing: 10) {
+                    StreetnavBikeBattery(percent: bike.battery)
+                    Image(systemName: bike.isLocked == false ? "lock.open.fill" : "lock.fill")
+                        .foregroundStyle(.secondary)
+                    if let level = bike.assistLevel {
+                        Text(StreetnavBikeLabels.assistName(level))
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .frame(height: 38)
+                .streetnavGlass(in: Capsule(), interactive: true)
+            }
+            // The menu would tint its label with the accent.
+            .tint(.primary)
+            .accessibilityLabel("Vélo")
+            // Battery, lock, assistance and lights now and then while it shows.
+            .task {
+                while Task.isCancelled == false {
+                    bike.refreshStatus()
+                    try? await Task.sleep(for: .seconds(20))
+                }
+            }
+        }
+    }
+}
+
+/// The bike while riding, in the trip card of the navigation: speed, battery, and assistance and lights, each changed
+/// with a tap. The speed is the bike's once its unit is known, the GPS's until then.
+struct StreetnavBikeRideRow: View {
+    @ObservedObject private var bike = StreetnavVanMoofBike.shared
+    /// The rider's position from the guidance, for its speed.
+    let location: CLLocation?
+
+    var body: some View {
+        if bike.state == .ready {
+            HStack(alignment: .center, spacing: 14) {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(speed.map { "\(Int($0.rounded()))" } ?? "—")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    Text("km/h")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 4)
+                StreetnavBikeBattery(percent: bike.battery)
+                    .font(.headline)
+                Button {
+                    // Eco, normal, sport, turbo and round again; off only from the bike's settings.
+                    bike.setAssistLevel((bike.assistLevel ?? 0) % 4 + 1)
+                } label: {
+                    Text(bike.assistLevel.map(StreetnavBikeLabels.assistName) ?? "—")
+                        .font(.headline)
+                        .padding(.horizontal, 12)
+                        .frame(height: 36)
+                        .background(Color.primary.opacity(0.1), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Assistance, toucher pour changer")
+                Button {
+                    // Automatic, on, off and round again.
+                    let next = switch bike.lightMode {
+                    case 3: 2
+                    case 2: 0
+                    default: 3
+                    }
+                    bike.setLightMode(next)
+                } label: {
+                    Image(systemName: StreetnavBikeLabels.lightSymbol(bike.lightMode))
+                        .font(.headline)
+                        .frame(width: 36, height: 36)
+                        .background(Color.primary.opacity(0.1), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Phares : \(StreetnavBikeLabels.lightName(bike.lightMode))")
+            }
+            .foregroundStyle(.primary)
+            .animation(.snappy, value: speed.map { Int($0.rounded()) })
+            .onChange(of: location) { _, location in
+                if let location, location.speed >= 0 { bike.noteGPS(speedKmh: location.speed * 3.6) }
+            }
+            // The speed twice a second, the rest every ten seconds.
+            .task {
+                var tick = 0
+                while Task.isCancelled == false {
+                    bike.refreshSpeed()
+                    if tick % 20 == 0 { bike.refreshStatus() }
+                    tick += 1
+                    try? await Task.sleep(for: .milliseconds(500))
+                }
+            }
+        }
+    }
+
+    private var speed: Double? {
+        if let kmh = bike.speedKmh { return kmh }
+        guard let location, location.speed >= 0 else { return nil }
+        return location.speed * 3.6
+    }
+}
+
+/// The battery as an icon filled to its level, and its percent.
+struct StreetnavBikeBattery: View {
+    let percent: Int?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .foregroundStyle((percent ?? 100) <= 15 ? Color.red : Color.secondary)
+            Text(percent.map { "\($0) %" } ?? "—")
+                .monospacedDigit()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Batterie \(percent.map { "\($0) %" } ?? "inconnue")")
+    }
+
+    private var symbol: String {
+        switch percent ?? 100 {
+        case ..<13: "battery.0percent"
+        case ..<38: "battery.25percent"
+        case ..<63: "battery.50percent"
+        case ..<88: "battery.75percent"
+        default: "battery.100percent"
+        }
+    }
+}
+
+/// The names Streetnav gives the bike's settings.
+enum StreetnavBikeLabels {
+    static let assistLevels: [(level: Int, name: String)] = [(0, "Désactivée"), (1, "Éco"), (2, "Normale"), (3, "Sport"), (4, "Turbo")]
+    static let lightModes: [(mode: Int, name: String)] = [(3, "Automatiques"), (2, "Allumés"), (0, "Éteints")]
+
+    static func assistName(_ level: Int) -> String {
+        assistLevels.first { $0.level == level }?.name ?? "—"
+    }
+
+    static func lightName(_ mode: Int?) -> String {
+        lightModes.first { $0.mode == mode }?.name ?? "inconnus"
+    }
+
+    static func lightSymbol(_ mode: Int?) -> String {
+        switch mode {
+        case 2: "lightbulb.fill"
+        case 0: "lightbulb.slash"
+        default: "lightbulb.max"
         }
     }
 }

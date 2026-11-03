@@ -11,6 +11,7 @@ struct StreetnavGuidanceView: View {
     @ObservedObject private var guidance = StreetnavGuidance.shared
     @ObservedObject private var history = StreetnavRideHistory.shared
     @ObservedObject private var live = StreetnavLiveStreets.shared
+    @ObservedObject private var bike = StreetnavVanMoofBike.shared
     @AppStorage(StreetnavStreetFilter.key) private var streetFilter: StreetnavStreetFilter = .all
     @AppStorage(StreetnavMapZoom.key) private var zoomOffset = 0.0
     @AppStorage(StreetnavMapTilt.key) private var tiltOffset = 0.0
@@ -23,7 +24,7 @@ struct StreetnavGuidanceView: View {
         StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview,
                              streets: history.streets, live: live.ridden, outside: history.tracksOutside, filter: streetFilter,
                              dark: colorScheme == .dark,
-                             zoomOffset: zoomOffset, tiltOffset: tiltOffset)
+                             zoomOffset: zoomOffset, tiltOffset: tiltOffset, tripCardLift: bike.state == .ready ? 58 : 0)
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
@@ -73,6 +74,7 @@ struct StreetnavGuidanceView: View {
             .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { sunLight = StreetnavSunlight.preset(at: $0) }
             // The screen stays on during the ride, as in Maps.
             .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+            .task { await StreetnavVanMoofBike.shared.connectIfSignedIn() }
             .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
     }
 
@@ -111,6 +113,10 @@ struct StreetnavGuidanceView: View {
             Capsule()
                 .fill(Color.secondary.opacity(0.5))
                 .frame(width: 36, height: 5)
+            // The bike above the trip, once connected.
+            StreetnavBikeRideRow(location: guidance.location)
+                .padding(.horizontal, 10)
+                .padding(.top, 16)
             HStack(spacing: 0) {
                 tripValue(arrivalTime, "arrivée")
                 tripValue(remainingTime.value, remainingTime.unit)
@@ -312,6 +318,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     let zoomOffset: Double
     /// StreetnavMapTilt's offset: added to the following camera's pitch.
     let tiltOffset: Double
+    /// How much taller the trip card is with the bike's row: the logo and the camera keep clear of it.
+    let tripCardLift: CGFloat
 
     final class Coordinator {
         var shownRoute: String?
@@ -327,6 +335,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         var dark = false
         var zoomOffset: Double?
         var tiltOffset: Double?
+        var tripCardLift: CGFloat?
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -359,13 +368,12 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         view.showsTrafficOnRouteLine = false
         view.showsAlternatives = false
         // Clear of the manoeuvre card at the top and the trip card at the bottom.
-        view.viewportPadding = UIEdgeInsets(top: 230, left: 40, bottom: 170, right: 40)
+        Self.clearTripCard(by: tripCardLift, in: view)
+        context.coordinator.tripCardLift = tripCardLift
         view.mapView.ornaments.options.scaleBar.visibility = .hidden
         view.mapView.ornaments.options.compass.visibility = .hidden
         // Above the street being ridden.
-        view.mapView.ornaments.options.logo.margins = CGPoint(x: 16, y: 142)
         view.mapView.ornaments.options.attributionButton.position = .bottomLeading
-        view.mapView.ornaments.options.attributionButton.margins = CGPoint(x: 100, y: 140)
         // Seen through the buildings, as the streets are.
         view.routeLineOcclusionFactor = 0.1
         Self.follow(at: zoomOffset, tilt: tiltOffset, in: view)
@@ -378,6 +386,10 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
 
     func updateUIView(_ view: NavigationMapView, context: Context) {
         show(guidance.routes, in: view, context: context)
+        if context.coordinator.tripCardLift != tripCardLift {
+            context.coordinator.tripCardLift = tripCardLift
+            Self.clearTripCard(by: tripCardLift, in: view)
+        }
         if context.coordinator.zoomOffset != zoomOffset || context.coordinator.tiltOffset != tiltOffset {
             let zoomChange = zoomOffset - (context.coordinator.zoomOffset ?? zoomOffset)
             let tiltChange = tiltOffset - (context.coordinator.tiltOffset ?? tiltOffset)
@@ -439,6 +451,14 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
             }
             above = layer.id
         }
+    }
+
+    /// Clear of the manoeuvre card at the top and the trip card at the bottom, `lift` points taller with the bike's row:
+    /// the camera's padding, and Mapbox's logo and credits above the street being ridden.
+    private static func clearTripCard(by lift: CGFloat, in view: NavigationMapView) {
+        view.viewportPadding = UIEdgeInsets(top: 230, left: 40, bottom: 170 + lift, right: 40)
+        view.mapView.ornaments.options.logo.margins = CGPoint(x: 16, y: 142 + lift)
+        view.mapView.ornaments.options.attributionButton.margins = CGPoint(x: 100, y: 140 + lift)
     }
 
     /// Standard's HD road markings again, just above the streets layers, which would hide them; the lines added later

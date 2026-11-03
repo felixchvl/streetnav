@@ -62,6 +62,15 @@ struct StreetnavRecommendedView: View {
                 if embedded { embeddedPanel }
             }
         }
+        // The bike, as Maps shows the weather: top left, while exploring.
+        .overlay(alignment: .topLeading) {
+            if [.home, .planner, .routePreview, .readiness].contains(model.flowState), panelDetent != .large {
+                StreetnavBikeChip()
+                    .padding(.leading, 16)
+                    .padding(.top, 6)
+                    .transition(.opacity)
+            }
+        }
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { safeAreaBottom = $0 }
         .task {
             recenter()

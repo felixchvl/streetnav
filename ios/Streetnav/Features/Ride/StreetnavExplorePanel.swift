@@ -24,6 +24,8 @@ struct StreetnavExplorePanel: View {
     @ObservedObject private var guidance = StreetnavGuidance.shared
     @ObservedObject private var history = StreetnavRideHistory.shared
     @ObservedObject private var healthSync = StreetnavHealthSync.shared
+    @ObservedObject private var vanMoof = StreetnavVanMoofAccount.shared
+    @ObservedObject private var vanMoofBike = StreetnavVanMoofBike.shared
     @Binding var presentedSheet: StreetnavSheet?
     @Binding var detent: PresentationDetent
     var embedded = false
@@ -707,14 +709,24 @@ struct StreetnavExplorePanel: View {
                 row(symbol: "applewatch", title: model.watch.name,
                     detail: model.watch.workoutReady ? "Entraînement vélo prêt" : "Tu peux partir sans montre")
                 separator
-                row(symbol: "bicycle", title: model.bike.name,
-                    detail: model.bike.state == .ready ? "Détecté · déverrouillage manuel" : "Facultatif pour cette sortie",
-                    value: model.bike.batteryPercent > 0 ? model.bike.batteryPercent.formatted(.percent) : nil)
+                row(symbol: "bicycle", title: vanMoof.bike?.name ?? "Vélo",
+                    detail: bikeDetail,
+                    value: vanMoofBike.state == .ready ? vanMoofBike.battery.map { "\($0) %" } : nil)
                 separator
                 row(symbol: "server.rack", title: "Serveur Streetnav", detail: "Envoi automatique après la sortie")
             }
 
             primaryButton("Lancer la navigation", symbol: "location.north.line.fill") { model.startNavigation() }
+        }
+    }
+
+    /// The VanMoof as it is now, for « Prêt à partir ».
+    private var bikeDetail: String {
+        guard vanMoof.isSignedIn else { return "Facultatif pour cette sortie" }
+        switch vanMoofBike.state {
+        case .ready: return vanMoofBike.isLocked == false ? "Connecté · déverrouillé" : "Connecté · verrouillé"
+        case .searching, .connecting, .authenticating: return "Connexion…"
+        case .idle, .failed: return "Pas connecté : il se connectera au départ"
         }
     }
 
