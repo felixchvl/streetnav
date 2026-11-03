@@ -38,6 +38,8 @@ struct StreetnavRecommendedView: View {
                 mode: model.flowState,
                 place: model.flowState == .home ? places.place : nil,
                 placeRoute: model.flowState == .home ? places.route?.coordinates : nil,
+                placeAlternatives: model.flowState == .home
+                    ? places.routes.filter { $0.kind != places.route?.kind }.map(\.coordinates) : [],
                 rides: history.tracks,
                 streets: history.streets,
                 live: live.ridden,
@@ -70,7 +72,8 @@ struct StreetnavRecommendedView: View {
         .sheet(isPresented: panelIsPresented) {
             StreetnavExplorePanel(model: model, places: places, presentedSheet: $presentedSheet, detent: $panelDetent, focus: focus(on:))
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { panelTop = $0 }
-                .presentationDetents(StreetnavExplorePanel.detents(for: model.flowState), selection: $panelDetent)
+                .presentationDetents(StreetnavExplorePanel.detents(for: model.flowState, place: places.place != nil),
+                                     selection: $panelDetent)
                 .presentationBackgroundInteraction(.enabled(upThrough: StreetnavExplorePanel.preferredDetent(for: model.flowState)))
                 .presentationDragIndicator(.visible)
                 .interactiveDismissDisabled()
@@ -88,14 +91,17 @@ struct StreetnavRecommendedView: View {
         }
         .onChange(of: places.place) { _, place in
             guard let place else { return recenter() }
+            // Tall enough for the ways there and the button to leave.
+            panelDetent = StreetnavExplorePanel.place
             withViewportAnimation(.default(maxDuration: 0.8)) {
                 viewport = Viewport.camera(center: place.coordinate, zoom: 16, pitch: 50).padding(.bottom, cameraInset)
             }
         }
-        .onChange(of: places.route) { _, route in
-            guard let route else { return }
+        // Every way there in sight, as each comes.
+        .onChange(of: places.routes) { _, routes in
+            guard routes.isEmpty == false else { return }
             withViewportAnimation(.easeInOut(duration: 0.8)) {
-                viewport = StreetnavExplorationMap.focus(on: route.coordinates, padding: 50, bottomInset: cameraInset)
+                viewport = StreetnavExplorationMap.focus(on: routes.flatMap(\.coordinates), padding: 50, bottomInset: cameraInset)
             }
         }
         .onChange(of: model.route.id) {
@@ -139,6 +145,7 @@ struct StreetnavRecommendedView: View {
         if model.flowState.isNavigationLike { return 0 }
         if embedded { return 300 }
         if panelDetent == StreetnavExplorePanel.collapsed { return 76 }
+        if panelDetent == StreetnavExplorePanel.place { return 440 }
         switch model.flowState {
         case .routePreview: return 452
         case .readiness: return 386

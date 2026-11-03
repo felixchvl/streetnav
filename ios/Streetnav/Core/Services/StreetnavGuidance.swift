@@ -28,7 +28,8 @@ final class StreetnavGuidance: ObservableObject {
         core?.navigation().routeRefreshing ?? Empty().eraseToAnyPublisher()
     }
 
-    func start(to place: StreetnavPlace, from here: CLLocation?) async {
+    /// Guidance to `place`, through the silent waypoints `via` of the way chosen (a detour along streets still to ride).
+    func start(to place: StreetnavPlace, from here: CLLocation?, via: [CLLocationCoordinate2D] = []) async {
         let core = engine()
         isStarting = true
         failure = nil
@@ -39,7 +40,12 @@ final class StreetnavGuidance: ObservableObject {
             start.heading = origin.course
             start.headingAccuracy = 90
         }
-        let options = NavigationRouteOptions(waypoints: [start, Waypoint(coordinate: place.coordinate, name: place.name)],
+        let passed = via.map { coordinate in
+            var waypoint = Waypoint(coordinate: coordinate)
+            waypoint.separatesLegs = false
+            return waypoint
+        }
+        let options = NavigationRouteOptions(waypoints: [start] + passed + [Waypoint(coordinate: place.coordinate, name: place.name)],
                                              profileIdentifier: .cycling, locale: Locale(identifier: "fr_FR"),
                                              distanceUnit: .kilometer)
         do {

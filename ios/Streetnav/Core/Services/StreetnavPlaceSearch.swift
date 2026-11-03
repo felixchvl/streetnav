@@ -16,13 +16,35 @@ struct StreetnavPlace: Identifiable, Equatable {
     static func == (lhs: StreetnavPlace, rhs: StreetnavPlace) -> Bool { lhs.id == rhs.id }
 }
 
-struct StreetnavBikeRoute: Equatable {
+/// One way there by bike: the most direct, or one going out of its way along streets still to ride.
+struct StreetnavBikeRoute: Equatable, Identifiable {
+    enum Kind: String, CaseIterable {
+        case direct
+        case discovery
+        case wideDiscovery
+
+        var title: String {
+            switch self {
+            case .direct: "Direct"
+            case .discovery: "Découverte"
+            case .wideDiscovery: "Grande découverte"
+            }
+        }
+    }
+
+    let kind: Kind
     let coordinates: [CLLocationCoordinate2D]
     let distanceMeters: Double
     let durationSeconds: Double
+    /// The silent waypoints it goes through, for the guidance to ride the same way.
+    let via: [CLLocationCoordinate2D]
+    /// Metres along streets still to ride (StreetnavLiveStreets), nil before the streets are known.
+    let newMeters: Double?
+
+    var id: Kind { kind }
 
     static func == (lhs: StreetnavBikeRoute, rhs: StreetnavBikeRoute) -> Bool {
-        lhs.distanceMeters == rhs.distanceMeters && lhs.durationSeconds == rhs.durationSeconds
+        lhs.kind == rhs.kind && lhs.distanceMeters == rhs.distanceMeters && lhs.durationSeconds == rhs.durationSeconds
     }
 }
 
@@ -39,7 +61,9 @@ struct StreetnavSuggestion: Identifiable {
     let source: Source
 }
 
-/// Place search for the search bar, then the bike route to the chosen place from Mapbox Directions' cycling profile.
+/// Place search for the search bar, then the bike routes to the chosen place from Mapbox Directions' cycling profile:
+/// the most direct one, and up to two going out of their way along streets still to ride (StreetnavLiveStreets.detours,
+/// as silent waypoints), each with its metres of new streets; a detour that brings none is left out.
 ///
 /// With a Google key (`GOOGLE_PLACES_API_KEY` in the git-ignored `Config/Secrets.xcconfig`), suggestions come from
 /// Google Places (New). Google's terms for Europe only allow a place's latitude, longitude and id next to a map that is
@@ -52,8 +76,13 @@ final class StreetnavPlaceSearch: NSObject, ObservableObject {
     @Published private(set) var isLooking = false
     @Published private(set) var problem: String?
     @Published private(set) var place: StreetnavPlace?
-    @Published private(set) var route: StreetnavBikeRoute?
+    /// The ways there, the most direct first.
+    @Published private(set) var routes: [StreetnavBikeRoute] = []
+    @Published var selected: StreetnavBikeRoute.Kind = .direct
     @Published private(set) var routeFailed = false
+
+    /// The way chosen among `routes`.
+    var route: StreetnavBikeRoute? { routes.first { $0.kind == selected } ?? routes.first }
 
     private let completer = MKLocalSearchCompleter()
     private let location = CLLocationManager()
@@ -107,14 +136,16 @@ final class StreetnavPlaceSearch: NSObject, ObservableObject {
             guard let item = try? await MKLocalSearch(request: MKLocalSearch.Request(completion: completion)).start().mapItems.first else { return }
             place = Self.place(from: item, fallbackName: completion.title, fallbackAddress: completion.subtitle)
         }
-        route = nil
+        routes = []
+        selected = .direct
         routeFailed = false
-        await loadRoute()
+        await loadRoutes()
     }
 
     func clear() {
         place = nil
-        route = nil
+        routes = []
+        selected = .direct
         routeFailed = false
     }
 
@@ -246,29 +277,50 @@ final class StreetnavPlaceSearch: NSObject, ObservableObject {
 
     // MARK: Route
 
-    private func loadRoute() async {
+    /// How far from the direct way each detour looks for streets still to ride, and in how many stretches of it.
+    private static let detours: [(kind: StreetnavBikeRoute.Kind, corridor: Double, count: Int)] =
+        [(.discovery, 300, 2), (.wideDiscovery, 700, 4)]
+
+    private func loadRoutes() async {
         guard let place else { return }
         let from = here
+        guard let direct = await bikeRoute(.direct, from: from, via: [], to: place.coordinate) else {
+            if self.place == place { routeFailed = true }
+            return
+        }
+        guard self.place == place else { return }
+        routes = [direct]
+        let live = StreetnavLiveStreets.shared
+        for detour in Self.detours {
+            let via = live.detours(along: direct.coordinates, corridor: detour.corridor, count: detour.count)
+            guard via.isEmpty == false, let route = await bikeRoute(detour.kind, from: from, via: via, to: place.coordinate),
+                  self.place == place else { continue }
+            // Worth showing only for new streets the routes before it do not ride, and when not the same way again.
+            let best = routes.compactMap(\.newMeters).max() ?? 0
+            let same = routes.contains { abs($0.distanceMeters - route.distanceMeters) < 0.03 * route.distanceMeters }
+            if (route.newMeters ?? 0) >= best + 200, same == false { routes.append(route) }
+        }
+    }
+
+    private func bikeRoute(_ kind: StreetnavBikeRoute.Kind, from: CLLocationCoordinate2D, via: [CLLocationCoordinate2D],
+                           to: CLLocationCoordinate2D) async -> StreetnavBikeRoute? {
+        let points = [from] + via + [to]
         var components = URLComponents(string: "https://api.mapbox.com/directions/v5/mapbox/cycling/"
-            + "\(from.longitude),\(from.latitude);\(place.coordinate.longitude),\(place.coordinate.latitude)")!
+            + points.map { "\($0.longitude),\($0.latitude)" }.joined(separator: ";"))!
         components.queryItems = [
             URLQueryItem(name: "geometries", value: "geojson"),
             URLQueryItem(name: "overview", value: "full"),
             URLQueryItem(name: "language", value: "fr"),
+            // Only the start and the place are stops: the detours' points are passed through, as one leg.
+            URLQueryItem(name: "waypoints", value: "0;\(points.count - 1)"),
             URLQueryItem(name: "access_token", value: MapboxOptions.accessToken),
         ]
-        do {
-            let (data, _) = try await URLSession.shared.data(from: components.url!)
-            let response = try JSONDecoder().decode(Directions.self, from: data)
-            guard self.place == place, let first = response.routes.first else {
-                routeFailed = self.place == place
-                return
-            }
-            route = StreetnavBikeRoute(coordinates: first.geometry.coordinates.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) },
-                                       distanceMeters: first.distance, durationSeconds: first.duration)
-        } catch {
-            if self.place == place { routeFailed = true }
-        }
+        guard let (data, _) = try? await URLSession.shared.data(from: components.url!),
+              let first = (try? JSONDecoder().decode(Directions.self, from: data))?.routes.first else { return nil }
+        let coordinates = first.geometry.coordinates.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }
+        return StreetnavBikeRoute(kind: kind, coordinates: coordinates, distanceMeters: first.distance,
+                                  durationSeconds: first.duration, via: via,
+                                  newMeters: StreetnavLiveStreets.shared.newMetres(along: coordinates))
     }
 
     private struct Directions: Decodable {

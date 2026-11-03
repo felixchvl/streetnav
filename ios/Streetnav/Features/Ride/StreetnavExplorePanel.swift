@@ -41,12 +41,14 @@ struct StreetnavExplorePanel: View {
     /// Just the search bar, 65 points tall on screen like the one in Maps.
     static let collapsed = PresentationDetent.height(76)
     static let summary = PresentationDetent.height(292)
+    /// A place's card with its ways there.
+    static let place = PresentationDetent.height(440)
     static let route = PresentationDetent.height(452)
     static let readiness = PresentationDetent.height(386)
 
-    static func detents(for state: PrototypeFlowState) -> Set<PresentationDetent> {
-        // Three positions, as in Maps: the search bar, half open and fully open.
-        [collapsed, middleDetent(for: state), .large]
+    static func detents(for state: PrototypeFlowState, place: Bool = false) -> Set<PresentationDetent> {
+        // Three positions, as in Maps: the search bar, half open (taller for a place) and fully open.
+        [collapsed, place && state == .home ? Self.place : middleDetent(for: state), .large]
     }
 
     /// Tall enough for the step's main button, no more, so that the map keeps most of the screen.
@@ -283,16 +285,13 @@ struct StreetnavExplorePanel: View {
 
     // MARK: Place
 
-    /// A place's card, laid out like the one in Maps: share and close around the name, then three buttons (the ride
-    /// by bike first) and the trip's figures.
+    /// A place's card: only a destination to ride to. Its name, then the ways there, the most direct one and those going
+    /// out of their way along streets still to ride, each with its new kilometres; the one chosen is drawn on the map.
     private func placeContent(_ place: StreetnavPlace) -> some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             HStack(alignment: .center, spacing: 8) {
-                ShareLink(item: Self.mapsLink(for: place)) {
-                    glassIcon("square.and.arrow.up")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Partager le lieu")
+                // As wide as the close button, so that the name stays centred.
+                Color.clear.frame(width: 44, height: 44)
                 VStack(spacing: 2) {
                     Text(place.name)
                         .font(.title2.weight(.bold))
@@ -311,28 +310,27 @@ struct StreetnavExplorePanel: View {
                     .accessibilityLabel("Fermer le lieu")
             }
 
-            HStack(spacing: 7) {
-                placeAction(symbol: "bicycle", title: rideTitle, prominent: true, enabled: guidance.isStarting == false) {
-                    Task { await guidance.start(to: place, from: places.hereLocation) }
+            if places.routes.isEmpty {
+                if places.routeFailed {
+                    Text("Itinéraire vélo indisponible")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ProgressView("Calcul des itinéraires…")
+                        .font(.subheadline)
+                        .frame(height: 60)
                 }
-                placeAction(symbol: "phone.fill", title: "Appeler", enabled: place.phone != nil) {
-                    let digits = (place.phone ?? "").filter { $0.isNumber || $0 == "+" }
-                    if let url = URL(string: "tel:\(digits)") { openURL(url) }
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(places.routes) { route in
+                        routeChoice(route, fastest: places.routes[0])
+                    }
                 }
-                placeAction(symbol: "safari.fill", title: "Site web", enabled: place.website != nil) {
-                    if let url = place.website { openURL(url) }
+                primaryButton(guidance.isStarting ? "Calcul…" : "Partir", symbol: "bicycle") {
+                    guard let route = places.route else { return }
+                    Task { await guidance.start(to: place, from: places.hereLocation, via: route.via) }
                 }
-            }
-
-            if let route = places.route {
-                HStack(spacing: 0) {
-                    placeFigure("Distance", kilometers(route.distanceMeters / 1000) + " km")
-                    placeFigure("Arrivée", Date.now.addingTimeInterval(route.durationSeconds).formatted(date: .omitted, time: .shortened))
-                }
-            } else if places.routeFailed {
-                Text("Itinéraire vélo indisponible")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                .disabled(guidance.isStarting)
             }
             if let failure = guidance.failure {
                 Text(failure)
@@ -343,44 +341,54 @@ struct StreetnavExplorePanel: View {
         .padding(.top, -4)
     }
 
-    private var rideTitle: String {
-        if guidance.isStarting { return "Calcul…" }
-        guard let route = places.route else { return "Vélo" }
-        return Duration.seconds(route.durationSeconds).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))
-    }
-
-    /// One of the three buttons under a place's name in Maps: symbol above label, the first one filled.
-    private func placeAction(symbol: String, title: String, prominent: Bool = false, enabled: Bool,
-                             action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: symbol)
-                    .font(.system(size: 17, weight: .semibold))
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
+    /// A way there, as Maps lists its routes: the time large, the distance and arrival under it, and what it brings.
+    private func routeChoice(_ route: StreetnavBikeRoute, fastest: StreetnavBikeRoute) -> some View {
+        let selected = places.route?.kind == route.kind
+        let minutes = Duration.seconds(route.durationSeconds).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))
+        let arrival = Date.now.addingTimeInterval(route.durationSeconds).formatted(date: .omitted, time: .shortened)
+        let extra = route.durationSeconds - fastest.durationSeconds
+        return Button {
+            places.selected = route.kind
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(minutes)
+                            .font(.title3.weight(.bold))
+                            .monospacedDigit()
+                        Text(route.kind.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Text([kilometers(route.distanceMeters / 1000) + " km", route.kind == .direct ? nil : "+\(Int((extra / 60).rounded())) min",
+                          "arrivée " + arrival].compactMap { $0 }.joined(separator: " · "))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                if let new = route.newMeters {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(kilometers(new / 1000)) km")
+                            .font(.headline)
+                            .monospacedDigit()
+                            .foregroundStyle(new > 0 ? Color.red : Color.secondary)
+                        Text("à découvrir")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            .foregroundStyle(prominent ? Color.white : Color.accentColor)
-            .frame(maxWidth: .infinity)
-            .frame(height: 51)
-            .background(prominent ? Color.accentColor : Color.accentColor.opacity(0.15),
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.tertiarySystemFill).opacity(selected ? 0 : 1), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(selected ? Color.accentColor : Color.clear, lineWidth: 2))
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
-        .disabled(enabled == false)
-        .opacity(enabled ? 1 : 0.4)
-    }
-
-    private func placeFigure(_ label: String, _ value: String) -> some View {
-        VStack(spacing: 2) {
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.title3.weight(.semibold))
-                .monospacedDigit()
-        }
-        .frame(maxWidth: .infinity)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func glassIcon(_ symbol: String) -> some View {
@@ -389,14 +397,6 @@ struct StreetnavExplorePanel: View {
             .foregroundStyle(.primary)
             .frame(width: 44, height: 44)
             .streetnavGlass(in: Circle(), interactive: true)
-    }
-
-    /// Opens in Maps or a browser on the other side, with the place's name.
-    private static func mapsLink(for place: StreetnavPlace) -> URL {
-        var components = URLComponents(string: "https://maps.apple.com/")!
-        components.queryItems = [URLQueryItem(name: "ll", value: "\(place.coordinate.latitude),\(place.coordinate.longitude)"),
-                                 URLQueryItem(name: "q", value: place.name)]
-        return components.url!
     }
 
     private func placeSubtitle(_ place: StreetnavPlace) -> String {

@@ -139,6 +139,63 @@ final class StreetnavLiveStreets: NSObject, ObservableObject {
         return runs
     }
 
+    // MARK: Routes
+
+    /// Metres of streets still to ride along `line`, counted as a ride along it would count them: its points every 10 m
+    /// within 12 m of one, in runs of five at least. Nil until the streets are indexed.
+    func newMetres(along line: [CLLocationCoordinate2D]) -> Double? {
+        guard let index else { return nil }
+        var run = 0
+        var total = 0
+        for position in index.sampled(line, every: Self.stepM) {
+            let near = index.samples(near: position, within: Self.reachM).contains { marked[$0.0]?.contains($0.1) != true }
+            if near {
+                run += 1
+            } else {
+                if run >= Self.minSamples { total += run }
+                run = 0
+            }
+        }
+        if run >= Self.minSamples { total += run }
+        return Double(total) * Self.stepM
+    }
+
+    /// Streets still to ride for a route to go along on its way: in each of `count` stretches of `line` (its ends left
+    /// out), the longest one of 60 to 400 m whose middle lies within `corridor` metres of it. Each comes as its first and
+    /// last point, in the order the line meets them, for silent waypoints.
+    func detours(along line: [CLLocationCoordinate2D], corridor: Double, count: Int) -> [CLLocationCoordinate2D] {
+        guard let index, line.count >= 2, count > 0 else { return [] }
+        let route = index.sampled(line, every: 50)
+        guard route.count >= 3 else { return [] }
+        let low = route.reduce(route[0]) { simd_min($0, $1) } - SIMD2(repeating: corridor)
+        let high = route.reduce(route[0]) { simd_max($0, $1) } + SIMD2(repeating: corridor)
+        func nearest(_ position: SIMD2<Double>) -> (at: Int, distance: Double) {
+            var best = (at: 0, distance: Double.infinity)
+            for (i, point) in route.enumerated() {
+                let distance = simd_distance(point, position)
+                if distance < best.distance { best = (i, distance) }
+            }
+            return best
+        }
+        var chosen: [Int: (part: Int, length: Int, at: Double)] = [:]
+        for (number, part) in index.parts.enumerated() {
+            let samples = part.metres.count
+            guard samples >= 7, samples <= 41, marked[number] == nil else { continue }
+            let middle = part.metres[samples / 2]
+            guard middle.x >= low.x, middle.y >= low.y, middle.x <= high.x, middle.y <= high.y else { continue }
+            let (at, distance) = nearest(middle)
+            let along = Double(at) / Double(route.count - 1)
+            guard distance <= corridor, along > 0.08, along < 0.92 else { continue }
+            let stretch = min(count - 1, Int(along * Double(count)))
+            if samples > chosen[stretch]?.length ?? 0 { chosen[stretch] = (number, samples, along) }
+        }
+        return chosen.values.sorted { $0.at < $1.at }.flatMap { choice -> [CLLocationCoordinate2D] in
+            let part = index.parts[choice.part]
+            let ends = [(part.lonLat[0], nearest(part.metres[0]).at), (part.lonLat[part.lonLat.count - 1], nearest(part.metres[part.metres.count - 1]).at)]
+            return ends.sorted { $0.1 < $1.1 }.map { CLLocationCoordinate2D(latitude: $0.0.y, longitude: $0.0.x) }
+        }
+    }
+
     private func publish() {
         guard let index else { return }
         let features = pieces.flatMap { part, lines in
@@ -198,6 +255,25 @@ final class StreetnavLiveStreets: NSObject, ObservableObject {
 
         func project(latitude: Double, longitude: Double) -> SIMD2<Double> {
             Self.project(latitude: latitude, longitude: longitude)
+        }
+
+        /// A line's points every `step` metres along it, in metres.
+        func sampled(_ line: [CLLocationCoordinate2D], every step: Double) -> [SIMD2<Double>] {
+            guard let first = line.first else { return [] }
+            var samples = [Self.project(latitude: first.latitude, longitude: first.longitude)]
+            var carried = 0.0
+            for (from, to) in zip(line, line.dropFirst()) {
+                let a = Self.project(latitude: from.latitude, longitude: from.longitude)
+                let b = Self.project(latitude: to.latitude, longitude: to.longitude)
+                let length = simd_distance(a, b)
+                var at = step - carried
+                while at < length {
+                    samples.append(a + (b - a) * (at / length))
+                    at += step
+                }
+                carried = length - (at - step)
+            }
+            return samples
         }
 
         /// (part, sample) of the samples within `reach` of `position`.

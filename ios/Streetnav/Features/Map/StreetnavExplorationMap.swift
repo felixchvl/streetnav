@@ -16,6 +16,8 @@ struct StreetnavExplorationMap: View {
     /// A place found by the search bar, and the bike route to it.
     var place: StreetnavPlace?
     var placeRoute: [CLLocationCoordinate2D]?
+    /// The other ways there, drawn thinner and grey under the one chosen, as Maps draws its other routes.
+    var placeAlternatives: [[CLLocationCoordinate2D]] = []
     /// Every bike ride kept on the server (GeoJSON): where the rider has already been, until the streets are known.
     var rides: String?
     /// The streets around Paris, ridden (`r` = 1) or not (`r` = 0), GeoJSON.
@@ -135,6 +137,18 @@ struct StreetnavExplorationMap: View {
                     .lineTrimColor(UIColor(white: 0.55, alpha: 0.5))
             }
 
+            ForEvery(Array(placeAlternatives.enumerated()), id: \.offset) { number, alternative in
+                Self.lineSource("trajet-autre-\(number)", alternative)
+                LineLayer(id: "trajet-autre-\(number)", source: "trajet-autre-\(number)")
+                    .slot(.middle)
+                    .lineCap(.round).lineJoin(.round)
+                    .lineColor(colorScheme == .dark ? UIColor(white: 0.55, alpha: 1) : UIColor(white: 0.62, alpha: 1))
+                    .lineBorderColor(colorScheme == .dark ? UIColor(white: 0, alpha: 0.45) : UIColor(white: 1, alpha: 0.9))
+                    .lineBorderWidth(1.5)
+                    .lineWidth(Self.zoomed(5, 8, 13))
+                    .lineEmissiveStrength(1)
+                    .lineOcclusionOpacity(0.5)
+            }
             if let placeRoute {
                 Self.lineSource("trajet-lieu", placeRoute)
                 routeHalo("trajet-lieu-halo", source: "trajet-lieu")
@@ -218,14 +232,15 @@ struct StreetnavExplorationMap: View {
             .lineOcclusionOpacity(0.2)
     }
 
+    /// Wider than any street, with a white edge (black at night): the streets ridden are blue too.
     private func routeLine(_ id: String, source: String) -> LineLayer {
         LineLayer(id: id, source: source)
             .slot(.middle)
             .lineCap(.round).lineJoin(.round)
             .lineColor(accent)
-            .lineBorderColor(colorScheme == .dark ? UIColor(white: 0, alpha: 0.45) : UIColor(white: 1, alpha: 0.9))
-            .lineBorderWidth(1.5)
-            .lineWidth(Self.zoomed(7, 11, 18))
+            .lineBorderColor(colorScheme == .dark ? UIColor(white: 0.05, alpha: 1) : UIColor(white: 1, alpha: 1))
+            .lineBorderWidth(3)
+            .lineWidth(Self.zoomed(10, 14, 22))
             .lineEmissiveStrength(1)
             .lineOcclusionOpacity(0.5)
     }
