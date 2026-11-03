@@ -3,8 +3,9 @@ import CryptoKit
 import Foundation
 
 /// The VanMoof S6 over Bluetooth: finds it, proves who we are with the account's certificate, reads its state and
-/// unlocks it. Streetnav only ever writes the certificate exchange and the wake command (which unlocks); everything
-/// else is read, so that nothing can change the bike's settings, alarm or firmware.
+/// settings, and changes them when asked: unlock, assistance, lights, bell, alarm and charge limit. Streetnav writes
+/// only the registers whose values both community references agree on, and only on a tap of the rider; the others
+/// (speed, motor and wake states, bell mode, notification interval) are read and shown as the bike sends them.
 @MainActor
 final class StreetnavVanMoofBike: NSObject, ObservableObject {
     static let shared = StreetnavVanMoofBike()
@@ -19,6 +20,24 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     @Published private(set) var isLocked: Bool?
     @Published private(set) var odometerMeters: Int?
     @Published private(set) var firmware: String?
+    /// 0 off, 1 eco, 2 normal, 3 sport, 4 turbo.
+    @Published private(set) var assistLevel: Int?
+    /// 0 off, 2 on, 3 automatic.
+    @Published private(set) var lightMode: Int?
+    @Published private(set) var alarmOn: Bool?
+    /// 1 high, 2 medium, 4 low.
+    @Published private(set) var alarmSensitivity: Int?
+    /// %: 80, 85, 90, 95 or 100.
+    @Published private(set) var chargeLimit: Int?
+    /// As the bike sends it: its unit is undocumented.
+    @Published private(set) var speed: String?
+    /// Diagnostic trouble codes: (device class << 8) | subcode.
+    @Published private(set) var errorCodes: [Int]?
+    /// Undocumented registers, as the bike sends them.
+    @Published private(set) var motorState: String?
+    @Published private(set) var wakeState: String?
+    @Published private(set) var bellMode: String?
+    @Published private(set) var notifyInterval: String?
 
     private typealias P = StreetnavVanMoofProtocol
 
@@ -85,7 +104,32 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     /// Asks the bike for the values Streetnav shows.
     func refresh() {
         guard state == .ready else { return }
-        for topic in [P.Topic.batteryLevel, .lockState, .distance, .firmware] { request(topic) }
+        let topics: [P.Topic] = [.batteryLevel, .lockState, .distance, .firmware, .assistLevel, .lightMode, .alarm,
+                                 .alarmSensitivity, .chargeLimit, .speed, .errors, .motorState, .wakeState, .bellMode,
+                                 .notifyInterval]
+        for topic in topics { request(topic) }
+    }
+
+    /// The speed again, while the rider watches it.
+    func refreshSpeed() {
+        if state == .ready { request(.speed) }
+    }
+
+    func setAssistLevel(_ level: Int) { set(.assistLevel, [level], allowed: 0...4) }
+    func setLightMode(_ mode: Int) { set(.lightMode, [mode, 1], allowed: [0, 2, 3]) }
+    func setAlarm(_ on: Bool) { set(.alarm, [on ? 1 : 0], allowed: 0...1) }
+    func setAlarmSensitivity(_ level: Int) { set(.alarmSensitivity, [level], allowed: [1, 2, 4]) }
+    func setChargeLimit(_ percent: Int) { set(.chargeLimit, [percent], allowed: [80, 85, 90, 95, 100]) }
+
+    func ringBell() {
+        if state == .ready { send(.set, .bell, P.valuePayload([1])) }
+    }
+
+    /// A documented value only, then the register read back so that the screen shows what the bike kept.
+    private func set(_ topic: P.Topic, _ fields: [Int], allowed: some Collection<Int>) {
+        guard state == .ready, let value = fields.first, allowed.contains(value) else { return }
+        send(.set, topic, P.valuePayload(fields))
+        request(topic)
     }
 
     // MARK: Flow
@@ -136,6 +180,24 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         case .distance: odometerMeters = firstInt(message.payload)
         case .firmware:
             if case .text(let version)? = P.fields(of: message.payload)?.first { firmware = version }
+        case .assistLevel: assistLevel = firstInt(message.payload)
+        case .lightMode: lightMode = firstInt(message.payload)
+        case .alarm: alarmOn = firstInt(message.payload).map { $0 != 0 }
+        case .alarmSensitivity: alarmSensitivity = firstInt(message.payload)
+        case .chargeLimit: chargeLimit = firstInt(message.payload)
+        case .speed: speed = P.raw(message.payload)
+        case .errors:
+            errorCodes = (P.fields(of: message.payload) ?? []).flatMap { field -> [Int] in
+                switch field {
+                case .int(let code): code == 0 ? [] : [code]
+                case .array(let items): items.compactMap { if case .int(let code) = $0, code != 0 { code } else { nil } }
+                default: []
+                }
+            }
+        case .motorState: motorState = P.raw(message.payload)
+        case .wakeState: wakeState = P.raw(message.payload)
+        case .bellMode: bellMode = P.raw(message.payload)
+        case .notifyInterval: notifyInterval = P.raw(message.payload)
         default: break
         }
     }

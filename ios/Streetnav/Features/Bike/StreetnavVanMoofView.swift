@@ -63,6 +63,7 @@ struct StreetnavVanMoofView: View {
             if bike.state == .ready {
                 LabeledContent("Batterie", value: bike.battery.map { "\($0) %" } ?? "—")
                 LabeledContent("Verrou", value: bike.isLocked.map { $0 ? "Verrouillé" : "Déverrouillé" } ?? "—")
+                LabeledContent("Vitesse", value: bike.speed ?? "—")
                 LabeledContent("Compteur", value: bike.odometerMeters.map { "\(($0 / 1000).formatted()) km" } ?? "—")
                 if let firmware = bike.firmware { LabeledContent("Logiciel", value: firmware) }
                 Button("Actualiser") { bike.refresh() }
@@ -76,7 +77,20 @@ struct StreetnavVanMoofView: View {
             }
         } header: {
             header("Vélo")
+        } footer: {
+            if bike.state == .ready {
+                Text("La vitesse est la valeur que le vélo envoie : son unité n'est pas documentée.")
+            }
         }
+        // The speed again every two seconds while the screen is open.
+        .task(id: bike.state == .ready) {
+            while bike.state == .ready, Task.isCancelled == false {
+                bike.refreshSpeed()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+
+        if bike.state == .ready { settingsSections }
 
         Section {
             Button {
@@ -104,8 +118,83 @@ struct StreetnavVanMoofView: View {
                     .foregroundStyle(.secondary)
             }
         } footer: {
-            Text("Streetnav ne fait que déverrouiller : le vélo se verrouille sur lui-même, avec la béquille. Ferme l'app VanMoof avant, le vélo n'accepte qu'une connexion à la fois.")
+            Text("Le vélo se verrouille sur lui-même, avec la béquille : il n'y a pas de commande pour le verrouiller. Ferme l'app VanMoof avant, le vélo n'accepte qu'une connexion à la fois.")
         }
+    }
+
+    /// What the bike lets Streetnav change, each read back from it once set.
+    @ViewBuilder
+    private var settingsSections: some View {
+        Section {
+            Picker("Assistance", selection: setting(bike.assistLevel, bike.setAssistLevel)) {
+                Text("Désactivée").tag(0)
+                Text("Éco").tag(1)
+                Text("Normale").tag(2)
+                Text("Sport").tag(3)
+                Text("Turbo").tag(4)
+            }
+            .disabled(bike.assistLevel == nil)
+            Picker("Phares", selection: setting(bike.lightMode, bike.setLightMode)) {
+                Text("Éteints").tag(0)
+                Text("Allumés").tag(2)
+                Text("Automatiques").tag(3)
+            }
+            .disabled(bike.lightMode == nil)
+            Button("Sonner") { bike.ringBell() }
+        } header: {
+            header("Conduite")
+        }
+
+        Section {
+            Toggle("Alarme", isOn: Binding(get: { bike.alarmOn ?? false }, set: { bike.setAlarm($0) }))
+                .disabled(bike.alarmOn == nil)
+            Picker("Sensibilité", selection: setting(bike.alarmSensitivity, bike.setAlarmSensitivity)) {
+                Text("Haute").tag(1)
+                Text("Moyenne").tag(2)
+                Text("Basse").tag(4)
+            }
+            .disabled(bike.alarmSensitivity == nil)
+        } header: {
+            header("Alarme")
+        }
+
+        Section {
+            Picker("Limite de charge", selection: setting(bike.chargeLimit, bike.setChargeLimit)) {
+                ForEach([80, 85, 90, 95, 100], id: \.self) { Text("\($0) %").tag($0) }
+            }
+            .disabled(bike.chargeLimit == nil)
+        } header: {
+            header("Batterie")
+        } footer: {
+            Text("Charger à 80 % ménage la batterie au quotidien ; 100 % pour une longue sortie.")
+        }
+
+        Section {
+            LabeledContent("Erreurs", value: errorsText)
+            LabeledContent("État du moteur", value: bike.motorState ?? "—")
+            LabeledContent("État de veille", value: bike.wakeState ?? "—")
+            LabeledContent("Mode de sonnette", value: bike.bellMode ?? "—")
+            LabeledContent("Intervalle des notifications", value: bike.notifyInterval ?? "—")
+        } header: {
+            header("Diagnostic")
+        } footer: {
+            Text("Valeurs telles que le vélo les envoie : leur sens n'est pas documenté, Streetnav ne les modifie pas.")
+        }
+    }
+
+    /// A setting the bike reported, written back when changed; 0 until the bike has answered (the control is off).
+    private func setting(_ value: Int?, _ write: @escaping (Int) -> Void) -> Binding<Int> {
+        Binding(get: { value ?? 0 }, set: { write($0) })
+    }
+
+    /// Each trouble code as its device and code, as the official app shows them by number.
+    private var errorsText: String {
+        guard let codes = bike.errorCodes else { return "—" }
+        guard codes.isEmpty == false else { return "Aucune" }
+        return codes.map { code in
+            let device = StreetnavVanMoofProtocol.errorDevices[code >> 8] ?? String(format: "appareil %02X", code >> 8)
+            return "\(device) \(String(format: "%04X", code))"
+        }.joined(separator: ", ")
     }
 
     private func header(_ title: String) -> some View {

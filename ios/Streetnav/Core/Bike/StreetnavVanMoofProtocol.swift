@@ -15,16 +15,35 @@ enum StreetnavVanMoofProtocol {
         case ack = 0, publish, subscribe, unsubscribe, get, set, own, sync
     }
 
-    /// Topics are ids in the bike's object dictionary. Streetnav only ever writes `auth` and `wake`.
+    /// Topics are ids in the bike's object dictionary, with their values as both community references give them
+    /// (captured from the official app or read in its S6 code). Streetnav writes only those whose values are known.
     enum Topic: UInt16 {
-        case wake = 0x010C          // write [1]: wakes the bike, which unlocks it
-        case lockState = 0x0112     // 0 unlocked, 1 locked
-        case distance = 0x0113      // odometer, metres
+        case wake = 0x010C              // write [1]: wakes the bike, which unlocks it
+        case assistLevel = 0x0110       // [level]: 0 off, 1 eco, 2 normal, 3 sport, 4 turbo
+        case lockState = 0x0112         // 0 unlocked, 1 locked
+        case distance = 0x0113          // odometer, metres
+        case errors = 0x011F            // diagnostic trouble codes: (device class << 8) | subcode
+        case lightMode = 0x0131         // [mode, 1]: 0 off, 2 on, 3 auto (1 is not on)
+        case bell = 0x0142              // write [1]: rings the bell (it does not unlock)
+        case wakeState = 0x0160         // read only, meaning undocumented
+        case notifyInterval = 0x0163    // read only here, unit undocumented
+        case speed = 0x0164             // unit undocumented
+        case alarmSensitivity = 0x0171  // [level]: 1 high, 2 medium, 4 low
+        case alarm = 0x0172             // [state]: 0 off, 1 on
         case firmware = 0x01B1
-        case speed = 0x0164
-        case batteryLevel = 0x022A  // %
-        case auth = 0xFF00          // certificate and challenge
+        case batteryLevel = 0x022A      // %
+        case chargeLimit = 0x022D       // [percent]: 80, 85, 90, 95 or 100
+        case motorState = 0x0260        // read only, meaning undocumented
+        case bellMode = 0x0281          // read only here, values undocumented
+        case auth = 0xFF00              // certificate and challenge
     }
+
+    /// The device classes of the S6's trouble codes (the high byte), as Knight1/vanmoof-ble read them in the firmware.
+    static let errorDevices: [Int: String] = [
+        0x08: "Bluetooth", 0x8D: "gestion de la batterie", 0x90: "alimentation", 0xA1: "capteur du moteur",
+        0xA2: "commande de puissance", 0xA3: "chargeur", 0xA4: "batterie", 0xA7: "chargeur", 0xC0: "guidon",
+        0xC1: "verrou", 0xC3: "porte-bagages", 0xC4: "phare",
+    ]
 
     struct Message: Equatable {
         var type: MessageType
@@ -114,6 +133,20 @@ enum StreetnavVanMoofProtocol {
     static func signaturePayload(_ signature: Data) -> Data { wrap(CBOR.bytes(signature).encoded) }
     /// A SET of a value made of integer fields, such as `[1]` for wake.
     static func valuePayload(_ fields: [Int]) -> Data { wrap(CBOR.array(fields.map(CBOR.int)).encoded) }
+
+    /// A value as the bike sent it, for registers whose meaning is undocumented: its numbers, text or bytes.
+    static func raw(_ payload: Data) -> String {
+        guard let fields = fields(of: payload), fields.isEmpty == false else { return "—" }
+        return fields.map { field -> String in
+            switch field {
+            case .int(let value): String(value)
+            case .text(let text): text
+            case .bytes(let data): data.map { String(format: "%02X", $0) }.joined()
+            case .array(let items): "[" + items.map { $0.encoded.map { String(format: "%02X", $0) }.joined() }.joined(separator: " ") + "]"
+            default: field.encoded.map { String(format: "%02X", $0) }.joined()
+            }
+        }.joined(separator: " · ")
+    }
 
     /// The fields of a value from the bike, which wraps them like a request.
     static func fields(of payload: Data) -> [CBOR]? {
