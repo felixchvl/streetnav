@@ -48,7 +48,8 @@ struct StreetnavRecommendedView: View {
                 panelOverlap: panelTop.map { max(0, safeAreaBottom - $0) } ?? cameraInset,
                 viewport: $viewport,
                 isThreeD: $isThreeD,
-                recenter: locationTapped
+                recenter: locationTapped,
+                chooseBuilding: model.flowState == .home ? { coordinate in Task { await places.choose(buildingAt: coordinate) } } : nil
             )
 
             switch model.flowState {

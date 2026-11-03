@@ -33,6 +33,11 @@ struct StreetnavExplorationMap: View {
     /// Tilted city or map seen from above, switched by the « 3D » button as in Maps.
     var isThreeD: Binding<Bool> = .constant(true)
     var recenter: () -> Void = {}
+    /// A building tapped while exploring, to ride to.
+    var chooseBuilding: ((CLLocationCoordinate2D) -> Void)?
+
+    /// The building tapped, drawn selected while its place is shown.
+    @State private var building: StandardBuildingsFeature?
 
     /// The map's heading, rounded to the degree so that the view only redraws when the compass would change.
     @State private var bearing: Double = 0
@@ -167,6 +172,18 @@ struct StreetnavExplorationMap: View {
                 }
                 .allowOverlap(true)
                 .variableAnchors([ViewAnnotationAnchorConfig(anchor: .bottom)])
+            }
+
+            // A building tapped becomes the place to ride to, as in Maps.
+            if let chooseBuilding {
+                TapInteraction(.standardBuildings) { tapped, context in
+                    building = tapped
+                    chooseBuilding(context.coordinate)
+                    return true
+                }
+            }
+            if place != nil, let id = building?.id {
+                FeatureState(.standardBuildings, id: id, state: .init(select: true))
             }
 
             // Where the phone points while exploring, where the bike goes while riding.
