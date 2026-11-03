@@ -7,6 +7,8 @@ with the class of their road for the map to draw them as wide as it; 2 MB gzippe
 GET /stats: totals, this year, this month, the last 30 days, records, kilometres by year and streets ridden, overall and
 in each arrondissement of Paris and commune of the inner suburbs, with its ring (zones.py).
 GET /zones: the outlines of those zones, simplified to about 25 m, for the app's maps of the streets ridden by zone.
+GET /tracks/outside: the parts of the bike rides' tracks outside those zones, where no street is measured, for the map
+to show where the rider has been there too.
 """
 from __future__ import annotations
 
@@ -73,6 +75,29 @@ def router(require_token) -> APIRouter:
                                                 'properties', json_build_object('r', {SHOWN_RIDDEN}::int, 'k', {ROAD_CLASS}))),
                               '[]'::json))::text
                    FROM street_part p JOIN street s ON s.id = p.street_id""").fetchone()[0]
+        return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
+
+    @api.get("/tracks/outside")
+    def tracks_outside(if_none_match: str | None = Header(default=None)) -> Response:
+        with connect() as conn:
+            count, changed = conn.execute(
+                "SELECT count(*), max(updated_at) FROM activity WHERE sport = 'cycling' AND track IS NOT NULL").fetchone()
+            zones = conn.execute("SELECT count(*), coalesce(sum(ST_NPoints(geom)), 0) FROM zone").fetchone()
+            etag = '"' + hashlib.sha256(f"outside:{count}:{changed}:{zones}:{SIMPLIFY_DEGREES}".encode()).hexdigest()[:16] + '"'
+            if if_none_match == etag:
+                return Response(status_code=304, headers={"ETag": etag})
+            # The zones a little wider, so that a ride along their edge stays theirs; `r` as for the streets ridden.
+            body = conn.execute(
+                """WITH area AS (SELECT ST_Transform(ST_Buffer(ST_SimplifyPreserveTopology(ST_Union(geom), 20), 15), 4326) AS g
+                               FROM zone HAVING count(*) > 0),
+                        cut AS (SELECT a.id, ST_Difference(ST_Simplify(ST_Force2D(a.track), %(tolerance)s), area.g) AS d
+                                FROM activity a, area
+                                WHERE a.sport = 'cycling' AND a.track IS NOT NULL AND NOT ST_Within(ST_Envelope(a.track), area.g))
+                   SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(
+                              json_build_object('type', 'Feature', 'id', id, 'geometry', ST_AsGeoJSON(d, 5)::json,
+                                                'properties', json_build_object('r', 1)) ORDER BY id)
+                              FILTER (WHERE NOT ST_IsEmpty(d)), '[]'::json))::text
+                   FROM cut""", {"tolerance": SIMPLIFY_DEGREES}).fetchone()[0]
         return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
     @api.get("/zones")

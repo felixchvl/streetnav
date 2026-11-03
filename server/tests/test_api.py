@@ -87,6 +87,26 @@ class ApiTest(unittest.TestCase):
         with registry.connect() as conn:
             conn.execute("TRUNCATE zone")
 
+    def test_tracks_outside_the_zones(self):
+        from streetnav_server import zones
+        from test_zones import square
+        # The ride runs east along latitude 48.85 from 2.35 to 2.41 (test_registry.workout): half of it in the zone.
+        self.client.post("/activities", content=json.dumps(workout()).encode(), headers={"Content-Type": "application/json"})
+        with registry.connect() as conn:
+            zones.load([square("75101", 2.34, 48.84, 2.38, 48.86)], conn)
+        response = self.client.get("/tracks/outside")
+        features = response.json()["features"]
+        self.assertEqual(len(features), 1)
+        longitudes = [point[0] for line in ([features[0]["geometry"]["coordinates"]] if features[0]["geometry"]["type"] == "LineString"
+                                            else features[0]["geometry"]["coordinates"]) for point in line]
+        self.assertGreaterEqual(min(longitudes), 2.38)
+        self.assertEqual(features[0]["properties"], {"r": 1})
+        self.assertEqual(self.client.get("/tracks/outside", headers={"If-None-Match": response.headers["ETag"]}).status_code, 304)
+        with registry.connect() as conn:
+            conn.execute("TRUNCATE zone")
+        # Without zones, nothing is outside them.
+        self.assertEqual(self.client.get("/tracks/outside").json()["features"], [])
+
     def test_streets_carry_their_road_class(self):
         from streetnav_server import streets
         from test_streets import street
