@@ -290,6 +290,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         var styleObserver: AnyCancelable?
         var showsOverview = false
         var streets: String?
+        /// The light the streets behind the buildings were blended for.
+        var streetsLight: StandardLightPreset?
         var live: String?
         var filter = StreetnavStreetFilter.all
         var dark = false
@@ -309,7 +311,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
             try? map.localizeLabels(into: Locale(identifier: "fr"))
             // A new style has none of them.
             Self.show(streets: coordinator.streets, live: coordinator.live, filter: coordinator.filter, dark: coordinator.dark,
-                      in: map, reload: true)
+                      light: coordinator.light ?? .day, in: map, reload: true)
         }
         context.coordinator.streets = streets
         context.coordinator.live = live
@@ -350,32 +352,42 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
             context.coordinator.light = light
         }
         let coordinator = context.coordinator
-        if coordinator.streets != streets || coordinator.live != live || coordinator.filter != filter || coordinator.dark != dark {
-            let relayer = coordinator.filter != filter || coordinator.dark != dark
+        if coordinator.streets != streets || coordinator.live != live || coordinator.filter != filter || coordinator.dark != dark
+            || coordinator.streetsLight != light {
+            let relayer = coordinator.filter != filter || coordinator.dark != dark || coordinator.streetsLight != light
+            coordinator.streetsLight = light
             coordinator.streets = streets
             coordinator.live = live
             coordinator.filter = filter
             coordinator.dark = dark
             if view.mapView.mapboxMap.isStyleLoaded {
-                Self.show(streets: streets, live: live, filter: filter, dark: dark, in: view.mapView.mapboxMap, reload: relayer)
+                Self.show(streets: streets, live: live, filter: filter, dark: dark, light: light, in: view.mapView.mapboxMap,
+                          reload: relayer)
             }
         }
     }
 
-    /// The streets this ride has just turned blue, just above the streets layers.
-    private static func show(live: String?, filter: StreetnavStreetFilter, dark: Bool, in map: MapboxMap, reload: Bool) {
+    /// The streets this ride has just turned blue, just above the streets layers (behind the buildings, then in sight).
+    private static func show(live: String?, filter: StreetnavStreetFilter, dark: Bool, light: StandardLightPreset,
+                             in map: MapboxMap, reload: Bool) {
         let shown = live != nil && filter.showsRidden
-        if reload || shown == false, map.layerExists(withId: "rues-direct") { try? map.removeLayer(withId: "rues-direct") }
+        let layers = [StreetnavExplorationMap.streetsRidden(dark: dark, behind: light, id: "rues-direct-derriere", source: "rues-direct"),
+                      StreetnavExplorationMap.streetsRidden(dark: dark, id: "rues-direct", source: "rues-direct")]
+        for layer in layers where reload || shown == false {
+            if map.layerExists(withId: layer.id) { try? map.removeLayer(withId: layer.id) }
+        }
         guard let live, shown else { return }
         if map.sourceExists(withId: "rues-direct") {
             map.updateGeoJSONSource(withId: "rues-direct", data: .string(live))
         } else {
             try? map.addSource(StreetnavExplorationMap.liveSource(live))
         }
-        if map.layerExists(withId: "rues-direct") == false {
-            let layer = StreetnavExplorationMap.streetsRidden(dark: dark, id: "rues-direct", source: "rues-direct")
-            let above = ["rues-faites", "rues-jamais"].first { map.layerExists(withId: $0) }
-            try? map.addLayer(layer, layerPosition: above.map { .above($0) } ?? .at(0))
+        var above = ["rues-faites", "rues-jamais"].first { map.layerExists(withId: $0) }
+        for layer in layers {
+            if map.layerExists(withId: layer.id) == false {
+                try? map.addLayer(layer, layerPosition: above.map { .above($0) } ?? .at(0))
+            }
+            above = layer.id
         }
     }
 
@@ -388,18 +400,21 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
 
     /// The streets source and the layers the filter keeps, first of the layers added to the style so that they lie under
     /// the route (same slot); `reload` draws the layers again, for another filter or the other mode's colours.
-    private static func show(streets: String?, live: String?, filter: StreetnavStreetFilter, dark: Bool, in map: MapboxMap,
-                             reload: Bool) {
-        defer { show(live: live, filter: filter, dark: dark, in: map, reload: reload) }
+    private static func show(streets: String?, live: String?, filter: StreetnavStreetFilter, dark: Bool,
+                             light: StandardLightPreset, in map: MapboxMap, reload: Bool) {
+        defer { show(live: live, filter: filter, dark: dark, light: light, in: map, reload: reload) }
         guard let streets else { return }
         if map.sourceExists(withId: "rues-osm") {
             map.updateGeoJSONSource(withId: "rues-osm", data: .string(streets))
         } else {
             try? map.addSource(StreetnavExplorationMap.streetsLayerSource(streets))
         }
-        // Inserted at the bottom one after the other: the streets ridden end up above those still to ride.
+        // Inserted at the bottom one after the other, from the top: both colours behind the buildings, then both in sight,
+        // the streets ridden above those still to ride each time.
         let layers = [(StreetnavExplorationMap.streetsRidden(dark: dark), filter.showsRidden),
-                      (StreetnavExplorationMap.streetsNotRidden(dark: dark), filter.showsNotRidden)]
+                      (StreetnavExplorationMap.streetsNotRidden(dark: dark), filter.showsNotRidden),
+                      (StreetnavExplorationMap.streetsRidden(dark: dark, behind: light), filter.showsRidden),
+                      (StreetnavExplorationMap.streetsNotRidden(dark: dark, behind: light), filter.showsNotRidden)]
         for (layer, shown) in layers {
             if reload || shown == false, map.layerExists(withId: layer.id) { try? map.removeLayer(withId: layer.id) }
             if shown, map.layerExists(withId: layer.id) == false { try? map.addLayer(layer, layerPosition: .at(0)) }

@@ -83,8 +83,19 @@ struct StreetnavExplorationMap: View {
         Map(viewport: $viewport) {
             if let streets {
                 Self.streetsLayerSource(streets)
+                // Each colour twice: over the buildings, blended with them, then in its own colour where it is in sight.
+                if streetFilter.showsNotRidden { Self.streetsNotRidden(dark: colorScheme == .dark, behind: lightPreset) }
+                if streetFilter.showsRidden { Self.streetsRidden(dark: colorScheme == .dark, behind: lightPreset) }
+                if let live, streetFilter.showsRidden {
+                    // The streets still to ride that this ride has just turned blue.
+                    Self.liveSource(live)
+                    Self.streetsRidden(dark: colorScheme == .dark, behind: lightPreset, id: "rues-direct-derriere", source: "rues-direct")
+                }
                 if streetFilter.showsNotRidden { Self.streetsNotRidden(dark: colorScheme == .dark) }
                 if streetFilter.showsRidden { Self.streetsRidden(dark: colorScheme == .dark) }
+                if live != nil, streetFilter.showsRidden {
+                    Self.streetsRidden(dark: colorScheme == .dark, id: "rues-direct", source: "rues-direct")
+                }
             } else if let rides, streetFilter.showsRidden {
                 Self.ridesSource(rides)
                 // Where the rider has already been: the accent, quiet, under the streets still to discover.
@@ -96,11 +107,6 @@ struct StreetnavExplorationMap: View {
                     .lineWidth(Self.zoomed(1.2, 3, 6))
                     .lineEmissiveStrength(1)
                     .lineOcclusionOpacity(0.3)
-            }
-            if let live, streetFilter.showsRidden {
-                // Above the streets still to ride that this ride has just turned blue.
-                Self.liveSource(live)
-                Self.streetsRidden(dark: colorScheme == .dark, id: "rues-direct", source: "rues-direct")
             }
             Self.streetsSource(segments)
             streetLayer("rues-parcourues", status: .traveled)
@@ -181,15 +187,21 @@ struct StreetnavExplorationMap: View {
         colorScheme == .dark ? UIColor(white: 0.62, alpha: 1) : UIColor(white: 0.45, alpha: 1)
     }
 
+    private var lightPreset: StandardLightPreset {
+        #if DEBUG
+        // Development: -mapLight dawn|day|dusk|night to compare looks.
+        if let forced = UserDefaults.standard.string(forKey: "mapLight") { return StandardLightPreset(rawValue: forced) }
+        #endif
+        return colorScheme == .dark ? .night : sunLight
+    }
+
     private var mapStyle: MapStyle {
-        var light: StandardLightPreset = colorScheme == .dark ? .night : sunLight
         var theme = StandardTheme.default
         #if DEBUG
-        // Development: -mapLight dawn|day|dusk|night and -mapTheme default|faded|monochrome to compare looks.
-        if let forced = UserDefaults.standard.string(forKey: "mapLight") { light = StandardLightPreset(rawValue: forced) }
+        // Development: -mapTheme default|faded|monochrome to compare looks.
         if let forced = UserDefaults.standard.string(forKey: "mapTheme") { theme = StandardTheme(rawValue: forced) }
         #endif
-        return .standard(theme: theme, lightPreset: light, showPointOfInterestLabels: false, showTransitLabels: false,
+        return .standard(theme: theme, lightPreset: lightPreset, showPointOfInterestLabels: false, showTransitLabels: false,
                          showPlaceLabels: true, showRoadLabels: true, showPedestrianRoads: true, show3dObjects: true)
     }
 
@@ -395,28 +407,50 @@ extension StreetnavExplorationMap {
 
     // The streets of `streetsLayerSource`, here and under the route of the navigation map: every street not ridden yet
     // in red (the system red, lighter by day), those already ridden in the accent, as Wandrer colours them, as wide as
-    // their road. Opaque: where two parts of a street meet, their round ends would otherwise show darker.
+    // their road. Opaque everywhere: where parts or streets overlap (the round ends of two parts, a crossing), translucent
+    // lines add up into darker knots. So each colour comes twice: `behind` the buildings, drawn over them in its colour
+    // already blended with theirs under that light, then above it in its own colour, hidden where a building is in front.
 
-    static func streetsNotRidden(dark: Bool) -> LineLayer {
-        LineLayer(id: "rues-jamais", source: "rues-osm")
-            .filter(Exp(.eq) { Exp(.get) { "r" }; 0 })
-            .slot(.middle)
-            .lineCap(.round).lineJoin(.round)
-            .lineColor(dark ? UIColor(red: 1, green: 0.27, blue: 0.23, alpha: 1) : UIColor(red: 1, green: 0.42, blue: 0.43, alpha: 1))
-            .lineWidth(roadWidth)
-            .lineEmissiveStrength(1)
-            .lineOcclusionOpacity(0.2)
+    static func streetsNotRidden(dark: Bool, behind light: StandardLightPreset? = nil) -> LineLayer {
+        streets(id: light == nil ? "rues-jamais" : "rues-jamais-derriere", source: "rues-osm", ridden: 0,
+                colour: dark ? UIColor(red: 1, green: 0.27, blue: 0.23, alpha: 1) : UIColor(red: 1, green: 0.42, blue: 0.43, alpha: 1),
+                behind: light, share: 0.3)
     }
 
-    static func streetsRidden(dark: Bool, id: String = "rues-faites", source: String = "rues-osm") -> LineLayer {
+    static func streetsRidden(dark: Bool, behind light: StandardLightPreset? = nil, id: String? = nil,
+                              source: String = "rues-osm") -> LineLayer {
+        streets(id: id ?? (light == nil ? "rues-faites" : "rues-faites-derriere"), source: source, ridden: 1,
+                colour: accent(dark: dark), behind: light, share: 0.4)
+    }
+
+    private static func streets(id: String, source: String, ridden: Int, colour: UIColor, behind light: StandardLightPreset?,
+                                share: CGFloat) -> LineLayer {
         LineLayer(id: id, source: source)
-            .filter(Exp(.eq) { Exp(.get) { "r" }; 1 })
+            .filter(Exp(.eq) { Exp(.get) { "r" }; ridden })
             .slot(.middle)
             .lineCap(.round).lineJoin(.round)
-            .lineColor(accent(dark: dark))
+            .lineColor(light.map { blend(colour, over: buildingColour($0), share: share) } ?? colour)
             .lineWidth(roadWidth)
             .lineEmissiveStrength(1)
-            .lineOcclusionOpacity(0.35)
+            .lineOcclusionOpacity(light == nil ? 0 : 1)
+    }
+
+    /// The face of Standard's buildings under each light, measured on its screens (between their roofs and their walls).
+    private static func buildingColour(_ light: StandardLightPreset) -> UIColor {
+        switch light {
+        case .night: UIColor(red: 0.17, green: 0.18, blue: 0.26, alpha: 1)
+        case .dusk: UIColor(red: 0.36, green: 0.35, blue: 0.47, alpha: 1)
+        case .dawn: UIColor(red: 0.91, green: 0.85, blue: 0.80, alpha: 1)
+        default: UIColor(red: 0.89, green: 0.87, blue: 0.84, alpha: 1)
+        }
+    }
+
+    private static func blend(_ colour: UIColor, over base: UIColor, share: CGFloat) -> UIColor {
+        var (r, g, b, a) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+        var (r0, g0, b0, a0) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+        colour.getRed(&r, green: &g, blue: &b, alpha: &a)
+        base.getRed(&r0, green: &g0, blue: &b0, alpha: &a0)
+        return UIColor(red: r0 + (r - r0) * share, green: g0 + (g - g0) * share, blue: b0 + (b - b0) * share, alpha: 1)
     }
 
     /// The width Mapbox Standard draws a road with (its "roads" and "road-path" layers, read from the style), from the
