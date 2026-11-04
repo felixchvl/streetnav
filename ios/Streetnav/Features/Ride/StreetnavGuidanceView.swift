@@ -19,14 +19,14 @@ struct StreetnavGuidanceView: View {
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @State private var showsOverview = false
     @State private var showsEnd = false
-    /// The height of the bike's speed in the trip card, which the map keeps clear of.
-    @State private var clusterHeight: CGFloat = 0
+    /// The height of the dashboard in the trip card, which the map keeps clear of.
+    @State private var dashboardHeight: CGFloat = 0
 
     var body: some View {
         StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview,
                              streets: history.streets, live: live.ridden, outside: history.tracksOutside, filter: streetFilter,
                              dark: colorScheme == .dark,
-                             zoomOffset: zoomOffset, tiltOffset: tiltOffset, tripCardLift: clusterHeight > 0 ? clusterHeight + 16 : 0)
+                             zoomOffset: zoomOffset, tiltOffset: tiltOffset, tripCardLift: max(0, dashboardHeight - 66))
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
@@ -115,18 +115,11 @@ struct StreetnavGuidanceView: View {
             Capsule()
                 .fill(Color.secondary.opacity(0.5))
                 .frame(width: 36, height: 5)
-            // The bike's speed leading, once connected, as the VanMoof app leads with one number.
-            StreetnavBikeSpeed(location: guidance.location)
-                .padding(.top, 14)
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { clusterHeight = $0 > 14 ? $0 - 14 : 0 }
-            HStack(spacing: 0) {
-                StreetnavMetric(value: arrivalTime, label: "arrivée")
-                StreetnavMetric(value: remainingTime.value, label: remainingTime.unit)
-                StreetnavMetric(value: remainingDistance.value, label: remainingDistance.unit)
-                StreetnavBikeBatteryMetric()
-            }
-            .padding(.horizontal, 10)
-            .padding(.top, 22)
+            // As the VanMoof app's ride dashboard: the bike, then the speed between the time and the distance left.
+            StreetnavRideDashboard(location: guidance.location, timeLeft: remainingTime, arrival: arrivalTime,
+                                   distanceLeft: remainingDistance)
+                .padding(.top, 12)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { dashboardHeight = $0 }
             if showsEnd {
                 Button(role: .destructive) {
                     showsEnd = false
