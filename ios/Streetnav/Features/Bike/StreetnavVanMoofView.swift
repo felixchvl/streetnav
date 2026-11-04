@@ -310,28 +310,6 @@ struct StreetnavBikeBattery: View {
     }
 }
 
-/// The names Streetnav gives the bike's settings.
-enum StreetnavBikeLabels {
-    static let assistLevels: [(level: Int, name: String)] = [(0, "Désactivée"), (1, "Éco"), (2, "Normale"), (3, "Sport"), (4, "Turbo")]
-    static let lightModes: [(mode: Int, name: String)] = [(3, "Automatiques"), (2, "Allumés"), (0, "Éteints")]
-
-    static func assistName(_ level: Int) -> String {
-        assistLevels.first { $0.level == level }?.name ?? "—"
-    }
-
-    static func lightName(_ mode: Int?) -> String {
-        lightModes.first { $0.mode == mode }?.name ?? "inconnus"
-    }
-
-    static func lightSymbol(_ mode: Int?) -> String {
-        switch mode {
-        case 2: "lightbulb.fill"
-        case 0: "lightbulb.slash"
-        default: "lightbulb.max"
-        }
-    }
-}
-
 /// The Bluetooth journal: each step of the connection and each message with the bike, newest at the bottom, to share.
 struct StreetnavVanMoofLogView: View {
     @ObservedObject private var bike = StreetnavVanMoofBike.shared

@@ -162,7 +162,7 @@ STGRSERV0000000000000008 /* Services */ = { isa = PBXGroup; children = ( STNP004
 STGRMOTN0000000000000009 /* Motion */ = { isa = PBXGroup; children = ( STNP0090000000000000009 /* StreetnavMotion.swift */, ); path = Motion; sourceTree = "<group>"; };
 STGRFEAT0000000000000003 /* Features */ = { isa = PBXGroup; children = ( STGRMAP000000000000000A /* Map */, STGRRIDE000000000000000B /* Ride */, STGRFHLT0000000000000012 /* Health */, STGRFBIK0000000000000014 /* Bike */, ); path = Features; sourceTree = "<group>"; };
 STGRMAP000000000000000A /* Map */ = { isa = PBXGroup; children = ( STNP0060000000000000006 /* StreetnavMapSurface.swift */, STNP0160000000000000016 /* StreetnavExplorationMap.swift */, STNP0330000000000000033 /* StreetnavHDMarkings.swift */, ); path = Map; sourceTree = "<group>"; };
-STGRRIDE000000000000000B /* Ride */ = { isa = PBXGroup; children = ( STNP0070000000000000007 /* StreetnavRecommendedView.swift */, STNP0170000000000000017 /* StreetnavExplorePanel.swift */, STNP0320000000000000032 /* StreetnavZonesView.swift */, STNP0270000000000000027 /* StreetnavGuidanceView.swift */, ); path = Ride; sourceTree = "<group>"; };
+STGRRIDE000000000000000B /* Ride */ = { isa = PBXGroup; children = ( STNP0070000000000000007 /* StreetnavRecommendedView.swift */, STNP0170000000000000017 /* StreetnavExplorePanel.swift */, STNP0320000000000000032 /* StreetnavZonesView.swift */, STNP0270000000000000027 /* StreetnavGuidanceView.swift */, STNP0340000000000000034 /* StreetnavRideDashboard.swift */, ); path = Ride; sourceTree = "<group>"; };
 STGRUI000000000000000004 /* UI */ = { isa = PBXGroup; children = ( STGRCOMP000000000000000C /* Components */, ); path = UI; sourceTree = "<group>"; };
 STGRCOMP000000000000000C /* Components */ = { isa = PBXGroup; children = ( STNP0050000000000000005 /* StreetnavComponents.swift */, ); path = Components; sourceTree = "<group>"; };
 STGRDEV00000000000000005 /* Development */ = { isa = PBXGroup; children = ( STGRLEGC000000000000000D /* Legacy */, STGRDEBG000000000000000E /* Debug */, STGRPREV000000000000000F /* Previews */, STGRVARI0000000000000010 /* Variations */, ); path = Development; sourceTree = "<group>"; };
@@ -171,7 +171,7 @@ STGRDEBG000000000000000E /* Debug */ = { isa = PBXGroup; children = ( STNP010000
 STGRPREV000000000000000F /* Previews */ = { isa = PBXGroup; children = ( STNP0110000000000000011 /* StreetnavPrototypePreviews.swift */, ); path = Previews; sourceTree = "<group>"; };
 STGRVARI0000000000000010 /* Variations */ = { isa = PBXGroup; children = ( STNP0080000000000000008 /* StreetnavPrototypeGallery.swift */, ); path = Variations; sourceTree = "<group>"; };
 STGRBIKE0000000000000013 /* Bike */ = { isa = PBXGroup; children = ( STNP0210000000000000021 /* StreetnavVanMoofProtocol.swift */, STNP0220000000000000022 /* StreetnavVanMoofAccount.swift */, STNP0230000000000000023 /* StreetnavVanMoofBike.swift */, ); path = Bike; sourceTree = "<group>"; };
-STGRFBIK0000000000000014 /* Bike */ = { isa = PBXGroup; children = ( STNP0250000000000000025 /* StreetnavVanMoofView.swift */, STNP0340000000000000034 /* StreetnavRideDashboard.swift */, ); path = Bike; sourceTree = "<group>"; };
+STGRFBIK0000000000000014 /* Bike */ = { isa = PBXGroup; children = ( STNP0250000000000000025 /* StreetnavVanMoofView.swift */, ); path = Bike; sourceTree = "<group>"; };
 STGRCONF0000000000000015 /* Config */ = { isa = PBXGroup; children = ( STNP0240000000000000024 /* Streetnav.xcconfig */, ); path = Config; sourceTree = "<group>"; };
 STGRHLTH0000000000000011 /* Health */ = { isa = PBXGroup; children = ( STNP0120000000000000012 /* StreetnavHealthSync.swift */, STNP0290000000000000029 /* StreetnavServerAccess.swift */, ); path = Health; sourceTree = "<group>"; };
 STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP0130000000000000013 /* StreetnavHealthSyncView.swift */, STNP0310000000000000031 /* StreetnavServerSettingsView.swift */, ); path = Health; sourceTree = "<group>"; };
@@ -434,7 +434,7 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -470,7 +470,7 @@ STGRFHLT0000000000000012 /* Health */ = { isa = PBXGroup; children = ( STNP01300
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
