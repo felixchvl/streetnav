@@ -1,6 +1,12 @@
 import SwiftUI
 
 extension View {
+    /// Text as large as the reader wants, up to the largest size the map's cards still hold. Set on the window and
+    /// again on each sheet, which takes the system's size otherwise.
+    func streetnavTextSize() -> some View {
+        dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+
     /// Liquid Glass, as on the controls of the system apps.
     func streetnavGlass<S: Shape>(in shape: S, interactive: Bool = false) -> some View {
         glassEffect(interactive ? .regular.interactive() : .regular, in: shape)

@@ -6,12 +6,12 @@ import SwiftUI
 
 /// The ride to a place, laid out like Maps: Mapbox's navigation map (position snapped to the street, camera that
 /// anticipates the turns, route that fades behind the rider, arrows at the turns) under a dark manoeuvre card, the
-/// street being ridden and a card with the arrival, which slides up to end the route.
+/// street being ridden and the trip card, which slides up to end the route. The camera and Mapbox's logo keep clear of
+/// the cards, however tall they are.
 struct StreetnavGuidanceView: View {
     @ObservedObject private var guidance = StreetnavGuidance.shared
     @ObservedObject private var history = StreetnavRideHistory.shared
     @ObservedObject private var live = StreetnavLiveStreets.shared
-    @ObservedObject private var bike = StreetnavVanMoofBike.shared
     @AppStorage(StreetnavStreetFilter.key) private var streetFilter: StreetnavStreetFilter = .all
     @AppStorage(StreetnavMapZoom.key) private var zoomOffset = 0.0
     @AppStorage(StreetnavMapTilt.key) private var tiltOffset = 0.0
@@ -19,56 +19,46 @@ struct StreetnavGuidanceView: View {
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @State private var showsOverview = false
     @State private var showsEnd = false
-    /// The height of the dashboard in the trip card, which the map keeps clear of.
-    @State private var dashboardHeight: CGFloat = 0
+    /// Where the cards lie within the safe area, and its height: the map keeps clear of them.
+    @State private var safeHeight: CGFloat = 0
+    @State private var maneuverFrame = CGRect.zero
+    @State private var bottomFrame = CGRect.zero
+
+    /// Measured on Maps (iOS 27): cards 8 points from the edges, round buttons 16, 11 points between them.
+    private static let margin: CGFloat = 8
+    private static let spacing: CGFloat = 11
 
     var body: some View {
         StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview,
                              streets: history.streets, live: live.ridden, outside: history.tracksOutside, filter: streetFilter,
-                             dark: colorScheme == .dark,
-                             zoomOffset: zoomOffset, tiltOffset: tiltOffset, tripCardLift: max(0, dashboardHeight - 66))
+                             dark: colorScheme == .dark, zoomOffset: zoomOffset, tiltOffset: tiltOffset, clearance: clearance)
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
-                    // Measured on Maps (iOS 27): card 8 points from the sides, round buttons 16 from the edge, 11 below it.
-                    VStack(alignment: .trailing, spacing: 11) {
+                    VStack(alignment: .trailing, spacing: Self.spacing) {
                         maneuverCard
-                        roundButton(showsOverview ? "location.north.line.fill" : "point.topleft.down.to.point.bottomright.curvepath",
-                                    label: showsOverview ? "Suivre ma position" : "Voir tout l'itinéraire") {
-                            showsOverview.toggle()
-                        }
-                        .padding(.trailing, 8)
-                        if showsOverview == false {
-                            zoomButtons
-                                .padding(.trailing, 8)
-                            tiltButtons
-                                .padding(.trailing, 8)
-                        }
+                            .reportsFrame(to: $maneuverFrame)
+                        mapButtons
+                            .padding(.trailing, Self.margin)
                     }
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, Self.margin)
                     .padding(.top, 2)
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
             .overlay(alignment: .bottom) {
-                // Down to the bottom edge, as in Maps: 8 points from the sides and 11 from the bottom of the screen.
+                // Down to the bottom edge, as in Maps, 11 points from it.
                 VStack(spacing: 9) {
                     if guidance.hasArrived {
                         arrivalCard
                     } else {
-                        if let street = currentStreet {
-                            Text(street)
-                                .font(.headline)
-                                .padding(.horizontal, 13)
-                                .padding(.vertical, 6)
-                                .streetnavGlass(in: Capsule())
-                                .transition(.opacity)
-                        }
+                        streetLabel
                         tripCard
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.bottom, 11)
+                .padding(.horizontal, Self.margin)
+                .padding(.bottom, Self.spacing)
+                .reportsFrame(to: $bottomFrame)
                 .ignoresSafeArea(edges: .bottom)
             }
             .animation(.snappy, value: guidance.hasArrived)
@@ -78,6 +68,19 @@ struct StreetnavGuidanceView: View {
             .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
             .task { await StreetnavVanMoofBike.shared.connectIfSignedIn() }
             .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+            .coordinateSpace(.named(Self.safeArea))
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { safeHeight = $0 }
+    }
+
+    /// The safe area, where the cards are measured: Mapbox adds it to the camera's padding and to the logo's margins.
+    fileprivate static let safeArea = "guidance"
+
+    /// What the camera and Mapbox's logo keep clear of, within the safe area: the camera keeps 40 points from the
+    /// manoeuvre card and from the street's name, the logo sits just above the street's name.
+    private var clearance: StreetnavMapClearance {
+        let bottom = max(0, safeHeight - bottomFrame.minY)
+        return StreetnavMapClearance(padding: UIEdgeInsets(top: maneuverFrame.maxY + 40, left: 40, bottom: bottom + 40, right: 40),
+                                     logo: CGPoint(x: 16, y: bottom + 8))
     }
 
     // MARK: Cards
@@ -109,17 +112,15 @@ struct StreetnavGuidanceView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Arrival, time and distance left; pulled up (or tapped), it offers to end the route, as in Maps.
+    /// The speed, the time and distance left, the battery; pulled up (or tapped), it offers to end the route, as in Maps.
     private var tripCard: some View {
         VStack(spacing: 0) {
             Capsule()
                 .fill(Color.secondary.opacity(0.5))
                 .frame(width: 36, height: 5)
-            // As the VanMoof app's ride dashboard: the bike, then the speed between the time and the distance left.
             StreetnavRideDashboard(location: guidance.location, timeLeft: remainingTime, arrival: arrivalTime,
                                    distanceLeft: remainingDistance)
                 .padding(.top, 12)
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { dashboardHeight = $0 }
             if showsEnd {
                 Button(role: .destructive) {
                     showsEnd = false
@@ -177,6 +178,32 @@ struct StreetnavGuidanceView: View {
         .padding(.horizontal, 22)
         .padding(.bottom, 26)
         .streetnavGlass(in: RoundedRectangle(cornerRadius: 48, style: .continuous))
+    }
+
+    /// The overview, then the zoom and the tilt while the camera follows the rider.
+    private var mapButtons: some View {
+        VStack(spacing: Self.spacing) {
+            roundButton(showsOverview ? "location.north.line.fill" : "point.topleft.down.to.point.bottomright.curvepath",
+                        label: showsOverview ? "Suivre ma position" : "Voir tout l'itinéraire") {
+                showsOverview.toggle()
+            }
+            if showsOverview == false {
+                zoomButtons
+                tiltButtons
+            }
+        }
+    }
+
+    @ViewBuilder private var streetLabel: some View {
+        if let street = currentStreet {
+            Text(street)
+                .font(.headline)
+                .lineLimit(1)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 6)
+                .streetnavGlass(in: Capsule())
+                .transition(.opacity)
+        }
     }
 
     /// Closer or farther, as in Waze: the camera still frames the turns ahead, a step closer or farther than before, and
@@ -302,8 +329,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     let zoomOffset: Double
     /// StreetnavMapTilt's offset: added to the following camera's pitch.
     let tiltOffset: Double
-    /// How much taller the trip card is with the bike's row: the logo and the camera keep clear of it.
-    let tripCardLift: CGFloat
+    /// What the camera and Mapbox's logo keep clear of.
+    let clearance: StreetnavMapClearance
 
     final class Coordinator {
         var shownRoute: String?
@@ -319,7 +346,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         var dark = false
         var zoomOffset: Double?
         var tiltOffset: Double?
-        var tripCardLift: CGFloat?
+        var clearance: StreetnavMapClearance?
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -351,9 +378,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         view.traversedRouteColor = UIColor(white: 0.55, alpha: 0.5)
         view.showsTrafficOnRouteLine = false
         view.showsAlternatives = false
-        // Clear of the manoeuvre card at the top and the trip card at the bottom.
-        Self.clearTripCard(by: tripCardLift, in: view)
-        context.coordinator.tripCardLift = tripCardLift
+        Self.keepClear(clearance, in: view)
+        context.coordinator.clearance = clearance
         view.mapView.ornaments.options.scaleBar.visibility = .hidden
         view.mapView.ornaments.options.compass.visibility = .hidden
         // Above the street being ridden.
@@ -370,9 +396,9 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
 
     func updateUIView(_ view: NavigationMapView, context: Context) {
         show(guidance.routes, in: view, context: context)
-        if context.coordinator.tripCardLift != tripCardLift {
-            context.coordinator.tripCardLift = tripCardLift
-            Self.clearTripCard(by: tripCardLift, in: view)
+        if context.coordinator.clearance != clearance {
+            context.coordinator.clearance = clearance
+            Self.keepClear(clearance, in: view)
         }
         if context.coordinator.zoomOffset != zoomOffset || context.coordinator.tiltOffset != tiltOffset {
             let zoomChange = zoomOffset - (context.coordinator.zoomOffset ?? zoomOffset)
@@ -437,12 +463,11 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         }
     }
 
-    /// Clear of the manoeuvre card at the top and the trip card at the bottom, `lift` points taller with the bike's row:
-    /// the camera's padding, and Mapbox's logo and credits above the street being ridden.
-    private static func clearTripCard(by lift: CGFloat, in view: NavigationMapView) {
-        view.viewportPadding = UIEdgeInsets(top: 230, left: 40, bottom: 170 + lift, right: 40)
-        view.mapView.ornaments.options.logo.margins = CGPoint(x: 16, y: 142 + lift)
-        view.mapView.ornaments.options.attributionButton.margins = CGPoint(x: 100, y: 140 + lift)
+    /// The camera's padding, and Mapbox's logo with its credits button just after it.
+    private static func keepClear(_ clearance: StreetnavMapClearance, in view: NavigationMapView) {
+        view.viewportPadding = clearance.padding
+        view.mapView.ornaments.options.logo.margins = clearance.logo
+        view.mapView.ornaments.options.attributionButton.margins = CGPoint(x: clearance.logo.x + 84, y: clearance.logo.y - 2)
     }
 
     /// Standard's HD road markings again, just above the streets layers, which would hide them; the lines added later
@@ -507,5 +532,19 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
 
     private static func style(_ light: StandardLightPreset) -> MapStyle {
         StreetnavExplorationMap.standardStyle(light: light)
+    }
+}
+
+/// Where the map's camera and Mapbox's logo keep clear of the cards: the padding of the camera, the margins of the logo
+/// from the bottom left corner, both within the safe area (Mapbox adds it).
+struct StreetnavMapClearance: Equatable {
+    var padding: UIEdgeInsets
+    var logo: CGPoint
+}
+
+private extension View {
+    /// Keeps `frame` up to date with where the view lies in the guidance's safe area.
+    func reportsFrame(to frame: Binding<CGRect>) -> some View {
+        onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(StreetnavGuidanceView.safeArea)) }) { frame.wrappedValue = $0 }
     }
 }

@@ -83,6 +83,7 @@ struct StreetnavRecommendedView: View {
         }
         .sheet(isPresented: panelIsPresented) {
             StreetnavExplorePanel(model: model, places: places, presentedSheet: $presentedSheet, detent: $panelDetent, focus: focus(on:))
+                .streetnavTextSize()
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { panelTop = $0 }
                 .presentationDetents(StreetnavExplorePanel.detents(for: model.flowState, place: places.place != nil),
                                      selection: $panelDetent)

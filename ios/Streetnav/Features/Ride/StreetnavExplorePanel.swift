@@ -93,6 +93,7 @@ struct StreetnavExplorePanel: View {
         }
         .fullScreenCover(isPresented: Binding(get: { guidance.isActive }, set: { if $0 == false { guidance.stop() } })) {
             StreetnavGuidanceView()
+                .streetnavTextSize()
         }
         .sheet(item: $presentedSheet, onDismiss: sheetDismissed) { sheet in
             switch sheet {

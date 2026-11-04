@@ -24,6 +24,7 @@ struct StreetnavApp: App {
     var body: some Scene {
         WindowGroup {
             StreetnavRootView()
+                .streetnavTextSize()
         }
         // Apple Health checked again whenever the app opens; leaving it books the next check in the background. The
         // streets ridden right now are followed, and the bike connected, while the app is on screen.
