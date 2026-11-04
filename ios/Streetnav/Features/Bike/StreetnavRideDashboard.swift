@@ -1,45 +1,50 @@
 import CoreLocation
 import SwiftUI
 
-/// The navigation's trip card, laid out as the VanMoof app's ride dashboard: the bike above (its name, a green dot while
-/// connected, its battery; the unlock button instead while it is locked), then the speed large under a dotted arc that
-/// fills as it rises and turns red past 25 km/h, between the time and the distance left. The speed is the bike's once
-/// its unit is known, the GPS's otherwise.
+/// The navigation's trip card: the speed on a gauge in the middle, as the VanMoof app's ride dashboard leads with it,
+/// the time left and the arrival on its left, the distance left and the bike's battery on its right. The speed is the
+/// bike's once its unit is known, the GPS's otherwise; the battery only while the bike is connected.
 struct StreetnavRideDashboard: View {
     @ObservedObject private var bike = StreetnavVanMoofBike.shared
-    @ObservedObject private var account = StreetnavVanMoofAccount.shared
     /// The rider's position from the guidance, for its speed.
     let location: CLLocation?
     let timeLeft: (value: String, unit: String)
     let arrival: String
     let distanceLeft: (value: String, unit: String)
-    @State private var isUnlocking = false
-    @State private var unlockFailed = false
+
+    /// The top of the gauge, and where the motor stops helping.
+    private static let top = 30.0
+    private static let limit = 25.0
 
     var body: some View {
-        VStack(spacing: 10) {
-            if bike.state == .ready {
-                if bike.isLocked == true {
-                    unlockButton
-                        .transition(.blurReplace)
-                } else {
-                    header
+        HStack(alignment: .center, spacing: 4) {
+            VStack(alignment: .leading, spacing: 12) {
+                metric(timeLeft.value, unit: timeLeft.unit, label: "restantes")
+                metric(arrival, label: "arrivée")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Gauge(value: min(speed ?? 0, Self.top), in: 0...Self.top) {
+                Text("km/h")
+            } currentValueLabel: {
+                Text(speed.map { "\(Int($0.rounded()))" } ?? "—")
+            }
+            .gaugeStyle(StreetnavSpeedGaugeStyle(limit: Self.limit / Self.top))
+            .frame(width: 128, height: 128)
+            VStack(alignment: .trailing, spacing: 12) {
+                metric(distanceLeft.value, unit: distanceLeft.unit, label: "restants", alignment: .trailing)
+                if bike.state == .ready {
+                    metric(bike.battery.map { "\($0)" } ?? "—", unit: "%", label: "batterie", alignment: .trailing, tint: batteryTint)
                         .transition(.blurReplace)
                 }
             }
-            HStack(alignment: .bottom, spacing: 0) {
-                side(timeLeft.value, unit: timeLeft.unit, label: "arrivée \(arrival)")
-                StreetnavSpeedGauge(speed: speed)
-                    .frame(width: 172)
-                side(distanceLeft.value, unit: distanceLeft.unit, label: "restants")
-            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .animation(.snappy, value: bike.isLocked)
+        .padding(.horizontal, 6)
         .animation(.snappy, value: bike.state == .ready)
         .onChange(of: location) { _, location in
             if bike.state == .ready, let location, location.speed >= 0 { bike.noteGPS(speedKmh: location.speed * 3.6) }
         }
-        // While the bike is connected: its speed twice a second, its battery and lock every ten seconds.
+        // While the bike is connected: its speed twice a second, its battery every ten seconds.
         .task(id: bike.state == .ready) {
             var tick = 0
             while Task.isCancelled == false, bike.state == .ready {
@@ -51,72 +56,30 @@ struct StreetnavRideDashboard: View {
         }
     }
 
-    // MARK: Parts
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bicycle")
-                .font(.system(size: 15, weight: .semibold))
-                .overlay(alignment: .topLeading) {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 7, height: 7)
-                        .offset(x: -3, y: -4)
-                }
-            Text(account.bike?.name ?? "VanMoof")
-                .font(.system(size: 15, weight: .medium))
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            StreetnavBikeBattery(percent: bike.battery)
-                .font(.system(size: 15, weight: .semibold))
-        }
-        .padding(.horizontal, 6)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var unlockButton: some View {
-        Button {
-            isUnlocking = true
-            unlockFailed = false
-            Task {
-                unlockFailed = await bike.unlock() == false
-                isUnlocking = false
-            }
-        } label: {
-            HStack(spacing: 8) {
-                if isUnlocking {
-                    ProgressView()
-                        .tint(.white)
-                } else {
-                    Image(systemName: "lock.open.fill")
-                }
-                Text(unlockFailed ? "Réessayer de déverrouiller" : "Déverrouiller le vélo")
-            }
-            .font(.headline)
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.capsule)
-        .disabled(isUnlocking)
-    }
-
-    /// A value with its unit set small after it, and what it is beneath, as the VanMoof app's « 0.3 km / trip ».
-    private func side(_ value: String, unit: String, label: String) -> some View {
-        VStack(spacing: 1) {
-            (Text(value).font(.system(size: 26, weight: .bold))
-                + Text(verbatim: " \(unit)").font(.system(size: 16, weight: .semibold)))
+    /// A value with its unit, and what it is beneath.
+    private func metric(_ value: String, unit: String? = nil, label: String, alignment: HorizontalAlignment = .leading,
+                        tint: Color = .primary) -> some View {
+        VStack(alignment: alignment, spacing: 0) {
+            Text("\(Text(value).font(.title.weight(.semibold)))\(Text(unit.map { " \($0)" } ?? "").font(.title3.weight(.semibold)))")
                 .monospacedDigit()
+                .foregroundStyle(tint)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .contentTransition(.numericText())
             Text(label)
-                .font(.system(size: 14))
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.bottom, 2)
         .accessibilityElement(children: .combine)
+    }
+
+    private var batteryTint: Color {
+        switch bike.battery ?? 100 {
+        case ...10: .red
+        case ...20: .orange
+        default: .primary
+        }
     }
 
     private var speed: Double? {
@@ -126,88 +89,61 @@ struct StreetnavRideDashboard: View {
     }
 }
 
-/// The speed, large, under an arc of dots from 0 to 32 km/h: solid up to the speed, the dots past 25 km/h (where the
-/// motor stops helping) in red, as on the VanMoof dashboard.
-struct StreetnavSpeedGauge: View {
-    let speed: Double?
+/// A gauge drawn as an open ring, gap at the bottom, filled up to its value as Apple's capacity gauges are: in the blue
+/// of the route, turning orange then red past `limit` (a share of the range); its current value large in the middle,
+/// its label beneath.
+struct StreetnavSpeedGaugeStyle: GaugeStyle {
+    var limit: Double
 
-    private static let range = 32.0
-    private static let limit = 25.0
-    private static let arcHeight: CGFloat = 32
+    private static let start = 135.0
+    private static let sweep = 270.0
+    private static let width: CGFloat = 10
 
-    var body: some View {
-        let reached = min(1, max(0, (speed ?? 0) / Self.range))
-        let limit = Self.limit / Self.range
-        VStack(spacing: -14) {
-            ZStack {
-                Canvas { context, size in
-                    let arc = GaugeArc(from: 0, to: 1)
-                    let count = 27
-                    for index in 0..<count {
-                        let t = Double(index) / Double(count - 1)
-                        let point = arc.point(at: t, in: CGRect(origin: .zero, size: size))
-                        let dot = Path(ellipseIn: CGRect(x: point.x - 1.6, y: point.y - 1.6, width: 3.2, height: 3.2))
-                        context.fill(dot, with: .color(t > limit + 0.001 ? Color.red.opacity(0.8) : Color.secondary.opacity(0.45)))
-                    }
-                }
-                GaugeArc(from: 0, to: min(reached, limit))
-                    .stroke(Color.primary, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .opacity(reached > 0 ? 1 : 0)
-                GaugeArc(from: limit, to: max(reached, limit))
-                    .stroke(Color.red, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .opacity(reached > limit ? 1 : 0)
-            }
-            .frame(height: Self.arcHeight)
-            VStack(spacing: -8) {
-                Text(speed.map { "\(Int($0.rounded()))" } ?? "—")
-                    .font(.system(size: 64, weight: .bold))
+    func makeBody(configuration: Configuration) -> some View {
+        ZStack {
+            RingArc(from: 0, to: 1)
+                .stroke(Color.primary.opacity(0.12), style: StrokeStyle(lineWidth: Self.width, lineCap: .round))
+            RingArc(from: 0, to: configuration.value)
+                .stroke(AngularGradient(stops: stops, center: .center, startAngle: .degrees(Self.start),
+                                        endAngle: .degrees(Self.start + Self.sweep)),
+                        style: StrokeStyle(lineWidth: Self.width, lineCap: .round))
+                .opacity(configuration.value > 0 ? 1 : 0)
+            VStack(spacing: -6) {
+                configuration.currentValueLabel
+                    .font(.system(size: 46, weight: .semibold))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                Text("km/h")
-                    .font(.system(size: 14))
+                configuration.label
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+            .offset(y: 2)
         }
-        .animation(.easeOut(duration: 0.45), value: reached)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Vitesse \(speed.map { "\(Int($0.rounded())) km/h" } ?? "inconnue")")
-    }
-}
-
-/// A part of the gauge's arc, `from` and `to` between 0 (its left end) and 1 (its right end): a shallow arc of a circle,
-/// its ends low at the sides, its middle at the top, inset for the line's width.
-private struct GaugeArc: Shape {
-    var from: Double
-    var to: Double
-
-    var animatableData: AnimatablePair<Double, Double> {
-        get { AnimatablePair(from, to) }
-        set { (from, to) = (newValue.first, newValue.second) }
+        .animation(.easeOut(duration: 0.45), value: configuration.value)
     }
 
-    private static let inset: CGFloat = 3
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        guard to > from else { return path }
-        let (centre, radius, half) = Self.circle(in: rect)
-        path.addArc(center: centre, radius: radius, startAngle: .degrees(270 - half + 2 * half * from),
-                    endAngle: .degrees(270 - half + 2 * half * to), clockwise: false)
-        return path
+    private var stops: [Gradient.Stop] {
+        let blue = Color(red: 0.13, green: 0.47, blue: 1)
+        return [.init(color: blue.opacity(0.7), location: 0), .init(color: blue, location: limit - 0.04),
+                .init(color: .orange, location: limit + 0.02), .init(color: .red, location: 1)]
     }
 
-    func point(at t: Double, in rect: CGRect) -> CGPoint {
-        let (centre, radius, half) = Self.circle(in: rect)
-        let angle = (270 - half + 2 * half * t) * .pi / 180
-        return CGPoint(x: centre.x + radius * cos(angle), y: centre.y + radius * sin(angle))
-    }
+    /// A part of the ring, `from` and `to` between 0 (its start, bottom left) and 1 (its end, bottom right).
+    private struct RingArc: Shape {
+        var from: Double
+        var to: Double
 
-    /// The circle through the arc's two low ends and its top, and half the angle the arc spans, in degrees.
-    private static func circle(in rect: CGRect) -> (CGPoint, Double, Double) {
-        let chord = Double(rect.width - 2 * inset)
-        let sag = Double(rect.height - 2 * inset)
-        let radius = (chord * chord / 4 + sag * sag) / (2 * sag)
-        let half = asin(chord / 2 / radius) * 180 / .pi
-        return (CGPoint(x: rect.midX, y: rect.minY + inset + radius), radius, half)
+        var animatableData: AnimatablePair<Double, Double> {
+            get { AnimatablePair(from, to) }
+            set { (from, to) = (newValue.first, newValue.second) }
+        }
+
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            guard to > from else { return path }
+            path.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: min(rect.width, rect.height) / 2 - width / 2,
+                        startAngle: .degrees(start + sweep * from), endAngle: .degrees(start + sweep * to), clockwise: false)
+            return path
+        }
     }
 }
