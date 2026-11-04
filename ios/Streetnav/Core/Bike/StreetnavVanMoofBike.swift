@@ -62,6 +62,12 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     private var isWriting = false
     private var reassembler = P.Reassembler()
     private var messageID: UInt8 = 0
+    /// When each value was last asked for and not yet answered, so that it is not asked again within a second.
+    private var pendingReads: [UInt16: Date] = [:]
+    /// The bike's first notifications of a connection go raw into the journal, to see what it sends as it sends it.
+    private var rawNotes = 0
+    /// A refused certificate is tried once more, on a new connection, before giving up.
+    private var authRetried = false
     private var fragmentID: UInt8 = 0
     private var deadline: Task<Void, Never>?
     private var lockWaiters: [CheckedContinuation<Bool?, Never>] = []
@@ -105,6 +111,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
 
     func disconnect() {
         if state != .idle { note("Déconnexion demandée") }
+        authRetried = false
         deadline?.cancel()
         central?.stopScan()
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
@@ -218,8 +225,10 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         central?.scanForPeripherals(withServices: nil)
     }
 
-    private func found(_ peripheral: CBPeripheral) {
+    private func found(_ peripheral: CBPeripheral, signal: Int) {
         note("Connexion au vélo…")
+        expire(after: 15, signal < -85 ? "Signal trop faible (\(signal) dBm) : rapproche-toi du vélo."
+                                       : "Le vélo ne répond pas à la connexion : réveille-le et réessaie.")
         central?.stopScan()
         self.peripheral = peripheral
         peripheral.delegate = self
@@ -238,9 +247,14 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     private func received(_ message: P.Message) {
         let topic = P.Topic(rawValue: message.topic)
         if topic != .auth, quiet(topic) == false {
-            note("← \(message.type) \(Self.name(message.topic)) : \(P.raw(message.payload))")
+            note("← \(message.type) \(Self.name(message.topic)) #\(message.id) qos \(message.qos) : \(P.raw(message.payload))")
+        }
+        // QoS 0 is "at least once" in this protocol: the bike waits for its acknowledgement before it goes on.
+        if message.qos == 0, message.type != .ack {
+            write(.init(type: .ack, topic: message.topic, id: message.id), label: "ack \(Self.name(message.topic)) #\(message.id)")
         }
         guard message.type == .publish else { return }
+        pendingReads[message.topic] = nil
         switch topic {
         case .auth:
             switch P.authReply(message.payload) {
@@ -250,12 +264,25 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
                 send(.set, .auth, P.signaturePayload(signature))
             case .accepted?:
                 note("Certificat accepté : vélo prêt")
+                authRetried = false
                 deadline?.cancel()
                 state = .ready
                 refresh()
             case .rejected?:
                 note("Certificat refusé par le vélo")
-                fail("Le vélo a refusé le certificat : reconnecte ton compte VanMoof.")
+                guard authRetried == false else {
+                    return fail("Le vélo a refusé le certificat : reconnecte ton compte VanMoof.")
+                }
+                // It was refused once and taken on the next connection: try again before giving up.
+                authRetried = true
+                note("Nouvel essai sur une nouvelle connexion")
+                deadline?.cancel()
+                if let peripheral { central?.cancelPeripheralConnection(peripheral) }
+                reset(to: .idle)
+                Task {
+                    try? await Task.sleep(for: .seconds(1))
+                    await connect()
+                }
             case nil:
                 note("Réponse d'authentification illisible (\(message.payload.count) octets)")
             }
@@ -300,16 +327,25 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         }
     }
 
-    private func request(_ topic: P.Topic) { send(.get, topic, Data()) }
+    /// A GET, unless the same value was asked for less than a second ago and is still awaited.
+    private func request(_ topic: P.Topic) {
+        if let asked = pendingReads[topic.rawValue], Date().timeIntervalSince(asked) < 1 { return }
+        pendingReads[topic.rawValue] = Date()
+        send(.get, topic, Data())
+    }
 
     private func send(_ type: P.MessageType, _ topic: P.Topic, _ payload: Data) {
-        guard let peripheral else { return }
-        if topic != .auth, quiet(topic) == false {
-            note("→ \(type) \(Self.name(topic.rawValue))\(payload.isEmpty ? "" : " " + payload.map { String(format: "%02X", $0) }.joined())")
-        }
-        let message = P.encode(.init(type: type, topic: topic.rawValue, payload: payload, id: messageID))
+        let label = topic == .auth || quiet(topic) ? nil
+            : "\(type) \(Self.name(topic.rawValue))\(payload.isEmpty ? "" : " " + payload.map { String(format: "%02X", $0) }.joined())"
+        write(.init(type: type, topic: topic.rawValue, payload: payload, id: messageID), label: label)
         messageID &+= 1
-        pendingWrites += P.fragments(of: message, maxWrite: peripheral.maximumWriteValueLength(for: .withoutResponse),
+    }
+
+    /// Encodes a message, cuts it into fragments and queues them; `label` goes in the journal.
+    private func write(_ message: P.Message, label: String?) {
+        guard let peripheral else { return }
+        if let label { note("→ \(label)") }
+        pendingWrites += P.fragments(of: P.encode(message), maxWrite: peripheral.maximumWriteValueLength(for: .withoutResponse),
                                      fragmentID: fragmentID)
         fragmentID = fragmentID >= 127 ? 1 : fragmentID + 1
         writeNext()
@@ -379,6 +415,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
 
     private func fail(_ reason: String) {
         note("Échec : \(reason)")
+        authRetried = false
         central?.stopScan()
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
         reset(to: .failed(reason))
@@ -391,6 +428,8 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         isWriting = false
         reassembler = P.Reassembler()
         messageID = 0
+        pendingReads.removeAll()
+        rawNotes = 0
         lockWaiters.forEach { $0.resume(returning: nil) }
         lockWaiters.removeAll()
         self.state = state
@@ -439,7 +478,7 @@ extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
         MainActor.assumeIsolated {
             if isVanMoof, state == .searching {
                 note("Vélo trouvé : « \(name.isEmpty ? "sans nom" : name) », signal \(RSSI) dBm")
-                found(peripheral)
+                found(peripheral, signal: RSSI.intValue)
             }
         }
     }
@@ -495,6 +534,10 @@ extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard let value = characteristic.value else { return }
         MainActor.assumeIsolated {
+            if rawNotes < 40 {
+                rawNotes += 1
+                note("⇠ \(value.prefix(32).map { String(format: "%02X", $0) }.joined())\(value.count > 32 ? "…" : "")")
+            }
             guard let data = reassembler.feed(value) else { return }
             if let message = StreetnavVanMoofProtocol.decode(data) {
                 received(message)
