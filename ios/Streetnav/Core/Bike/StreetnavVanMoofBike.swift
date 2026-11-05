@@ -66,6 +66,8 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     private var pendingReads: [UInt16: Date] = [:]
     /// The bike's first notifications of a connection go raw into the journal, to see what it sends as it sends it.
     private var rawNotes = 0
+    /// The other ways of asking for a value, tried once per connection (`probeReads`).
+    private var probe: Task<Void, Never>?
     /// A refused certificate is tried once more, on a new connection, before giving up.
     private var authRetried = false
     private var fragmentID: UInt8 = 0
@@ -147,6 +149,36 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
                                  .alarmSensitivity, .chargeLimit, .speed, .errors, .motorState, .wakeState, .bellMode,
                                  .notifyInterval]
         for topic in topics { request(topic) }
+    }
+
+    /// The bike answers none of the plain GETs, not even the firmware version its own firmware serves (journal of
+    /// 5 Nov 2026): tries the other ways a value can be asked for, one topic per way, so that the journal shows which
+    /// one it answers. The plain GETs follow.
+    private func probeReads() {
+        let wrappedEmpty = P.wrap(CBOR.array([]).encoded)
+        let tries: [(String, P.Message)] = [
+            ("subscribe qos 1", P.Message(type: .subscribe, topic: P.Topic.batteryLevel.rawValue)),
+            ("subscribe qos 0", P.Message(type: .subscribe, topic: P.Topic.chargeLimit.rawValue, qos: 0)),
+            ("get qos 0", P.Message(type: .get, topic: P.Topic.distance.rawValue, qos: 0)),
+            ("get enveloppé", P.Message(type: .get, topic: P.Topic.alarm.rawValue, payload: wrappedEmpty)),
+            ("get numéro de cadre", P.Message(type: .get, topic: 0x0031)),
+            ("subscribe allow_all", P.Message(type: .subscribe, topic: 0xFFFF)),
+        ]
+        probe?.cancel()
+        probe = Task { [weak self] in
+            for (label, message) in tries {
+                try? await Task.sleep(for: .seconds(1.5))
+                guard Task.isCancelled == false, let self, self.state == .ready else { return }
+                var message = message
+                message.id = self.messageID
+                self.messageID &+= 1
+                let payload = message.payload.isEmpty ? "" : " " + message.payload.map { String(format: "%02X", $0) }.joined()
+                self.write(message, label: "essai \(label) \(Self.name(message.topic))\(payload)")
+            }
+            try? await Task.sleep(for: .seconds(1.5))
+            guard Task.isCancelled == false, let self else { return }
+            self.refresh()
+        }
     }
 
     /// The speed again, while the rider watches it: the S6 sends nothing unasked, so twice a second, as the official
@@ -267,7 +299,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
                 authRetried = false
                 deadline?.cancel()
                 state = .ready
-                refresh()
+                probeReads()
             case .rejected?:
                 note("Certificat refusé par le vélo")
                 guard authRetried == false else {
@@ -430,6 +462,8 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         messageID = 0
         pendingReads.removeAll()
         rawNotes = 0
+        probe?.cancel()
+        probe = nil
         lockWaiters.forEach { $0.resume(returning: nil) }
         lockWaiters.removeAll()
         self.state = state
@@ -534,7 +568,7 @@ extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard let value = characteristic.value else { return }
         MainActor.assumeIsolated {
-            if rawNotes < 40 {
+            if rawNotes < 80 {
                 rawNotes += 1
                 note("⇠ \(value.prefix(32).map { String(format: "%02X", $0) }.joined())\(value.count > 32 ? "…" : "")")
             }
