@@ -15,6 +15,8 @@
 		<key>UIBackgroundModes</key>
 		<array>
 			<string>fetch</string>
+			<string>workout-processing</string>
+			<string>bluetooth-central</string>
 		</array>
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>Streetnav utilise ta position pour afficher ta progression sur la carte et préparer des boucles autour de toi.</string>

@@ -1,6 +1,7 @@
 import CoreBluetooth
 import CryptoKit
 import Foundation
+import UIKit
 
 /// The VanMoof S6 over Bluetooth: finds it, proves who we are with the account's certificate, reads its state and
 /// settings, and changes them when asked: unlock, assistance, lights, bell, alarm and charge limit. Streetnav writes
@@ -253,9 +254,21 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     // MARK: Flow
 
     private func scan() {
+        // In the background (a ride started on the Watch), iOS runs no scan without a service, which the S6 may not
+        // advertise: the bike met before is reached directly instead.
+        if UIApplication.shared.applicationState == .background,
+           let known = UserDefaults.standard.string(forKey: Self.knownBikeKey).flatMap(UUID.init(uuidString:)),
+           let peripheral = central?.retrievePeripherals(withIdentifiers: [known]).first {
+            note("Vélo déjà connu, connexion directe")
+            found(peripheral, signal: 0)
+            return
+        }
         // Unfiltered: the S6 may not advertise its service, so match its name or its service below.
         central?.scanForPeripherals(withServices: nil)
     }
+
+    /// The bike's Bluetooth identifier on this iPhone, kept from its last connection.
+    private static let knownBikeKey = "streetnav.vanmoof.peripheral"
 
     private func found(_ peripheral: CBPeripheral, signal: Int) {
         note("Connexion au vélo…")
@@ -518,7 +531,10 @@ extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        MainActor.assumeIsolated { note("Connecté, recherche du service VanMoof") }
+        MainActor.assumeIsolated {
+            note("Connecté, recherche du service VanMoof")
+            UserDefaults.standard.set(peripheral.identifier.uuidString, forKey: Self.knownBikeKey)
+        }
         peripheral.discoverServices(StreetnavVanMoofProtocol.serviceUUIDs.map { CBUUID(string: $0) })
     }
 

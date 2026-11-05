@@ -19,6 +19,8 @@ struct StreetnavApp: App {
         Self.clearMapboxCacheAfterUpdate()
         // iOS only hands new Apple Health workouts to an app in the background if it asks again at every launch.
         StreetnavHealthSync.shared.startObserving()
+        // A ride started on the Watch may be what launched the app, in the background: it unlocks the bike.
+        StreetnavMirroredRide.shared.listen()
     }
 
     var body: some Scene {
@@ -38,6 +40,7 @@ struct StreetnavApp: App {
                 StreetnavVanMoofBike.shared.showSampleIfAsked()
                 #endif
                 Task { await StreetnavVanMoofBike.shared.connectIfSignedIn() }
+                StreetnavMirroredRide.shared.askForNotifications()
             case .background:
                 StreetnavHealthSync.shared.scheduleRefresh()
                 StreetnavLiveStreets.shared.stop()
