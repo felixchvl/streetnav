@@ -91,12 +91,9 @@ struct StreetnavExplorationMap: View {
 
     private var map: Map {
         Map(viewport: $viewport) {
-            // The real relief at every zoom (Standard flattens it beyond 13.7), lifted a little: Paris's hills are only
-            // about 100 m high.
-            if Self.showsRelief {
-                Self.reliefSource
-                Terrain(sourceId: "relief").exaggeration(Self.reliefExaggeration)
-            }
+            // Standard's own relief, as Mapbox sets it: seen from afar, flattened from zoom 12 to 13.7. Its elevation stops
+            // at zoom 14, about ten metres a pixel: kept closer, it buried the buildings on the slopes, hid the roads and
+            // sank the bridges, under a city drawn to the metre.
             if let streets {
                 Self.streetsLayerSource(streets)
                 // Each colour twice: over the buildings, blended with them, then in its own colour where it is in sight.
@@ -550,17 +547,6 @@ extension StreetnavExplorationMap {
 
     static var streetGlow: Double { StreetnavStreetLook.current.glow }
 
-    /// Mapbox's elevation at its real scale: lifted, the river sank into a ravine and the bridges dipped with it.
-    static let reliefExaggeration = 1.0
-
-    static var reliefSource: RasterDemSource {
-        var source = RasterDemSource(id: "relief")
-        source.url = "mapbox://mapbox.mapbox-terrain-dem-v1"
-        source.tileSize = 514
-        source.maxzoom = 14
-        return source
-    }
-
     // The streets of `streetsLayerSource`, here and under the route of the navigation map: every street not ridden yet
     // in red (the system red, lighter by day), those already ridden in green, apart from the blue of the routes, as
     // wide as their road. Opaque everywhere: where parts or streets overlap (the round ends of two parts, a crossing), translucent
@@ -635,14 +621,6 @@ extension StreetnavExplorationMap {
         colour.getRed(&r, green: &g, blue: &b, alpha: &a)
         base.getRed(&r0, green: &g0, blue: &b0, alpha: &a0)
         return UIColor(red: r0 + (r - r0) * share, green: g0 + (g - g0) * share, blue: b0 + (b - b0) * share, alpha: 1)
-    }
-
-    static var showsRelief: Bool {
-        #if DEBUG
-        // Development: -mapRelief NO to compare.
-        if UserDefaults.standard.object(forKey: "mapRelief") != nil { return UserDefaults.standard.bool(forKey: "mapRelief") }
-        #endif
-        return true
     }
 
     static var showsMarkings: Bool {

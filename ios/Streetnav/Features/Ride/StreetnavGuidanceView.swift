@@ -373,11 +373,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         context.coordinator.styleObserver = view.mapView.mapboxMap.onStyleLoaded.observe { [weak view, weak coordinator = context.coordinator] _ in
             guard let map = view?.mapView.mapboxMap, let coordinator else { return }
             try? map.localizeLabels(into: Locale(identifier: "fr"))
-            // The relief of the exploration map.
-            if StreetnavExplorationMap.showsRelief {
-                try? map.addSource(StreetnavExplorationMap.reliefSource)
-                try? map.setTerrain(Terrain(sourceId: "relief").exaggeration(StreetnavExplorationMap.reliefExaggeration))
-            }
+            // Standard's own relief, as on the exploration map: flattened from zoom 12 to 13.7.
             // A new style has none of them.
             Self.show(streets: coordinator.streets, live: coordinator.live, outside: coordinator.outside, filter: coordinator.filter,
                       dark: coordinator.dark,
