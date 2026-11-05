@@ -19,6 +19,8 @@ struct StreetnavGuidanceView: View {
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @State private var showsOverview = false
     @State private var showsEnd = false
+    /// The overview, zoom and tilt buttons: a tap on the map hides them, another brings them back.
+    @State private var showsButtons = true
     /// Where the cards lie within the safe area, and its height: the map keeps clear of them.
     @State private var safeHeight: CGFloat = 0
     @State private var maneuverFrame = CGRect.zero
@@ -32,15 +34,19 @@ struct StreetnavGuidanceView: View {
         StreetnavGuidanceMap(guidance: guidance, light: StreetnavExplorationMap.light(dark: colorScheme == .dark, sun: sunLight),
                              showsOverview: showsOverview,
                              streets: history.streets, live: live.ridden, outside: history.tracksOutside, filter: streetFilter,
-                             dark: colorScheme == .dark, zoomOffset: zoomOffset, tiltOffset: tiltOffset, clearance: clearance)
+                             dark: colorScheme == .dark, zoomOffset: zoomOffset, tiltOffset: tiltOffset, clearance: clearance,
+                             onTap: { showsButtons.toggle() })
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
                     VStack(alignment: .trailing, spacing: Self.spacing) {
                         maneuverCard
                             .reportsFrame(to: $maneuverFrame)
-                        mapButtons
-                            .padding(.trailing, Self.margin)
+                        if showsButtons {
+                            mapButtons
+                                .padding(.trailing, Self.margin)
+                                .transition(.opacity)
+                        }
                     }
                     .padding(.horizontal, Self.margin)
                     .padding(.top, 2)
@@ -64,6 +70,7 @@ struct StreetnavGuidanceView: View {
             }
             .animation(.snappy, value: guidance.hasArrived)
             .animation(.snappy, value: showsEnd)
+            .animation(.easeInOut(duration: 0.2), value: showsButtons)
             .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { sunLight = StreetnavSunlight.preset(at: $0) }
             // The screen stays on during the ride, as in Maps.
             .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
@@ -332,8 +339,11 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     let tiltOffset: Double
     /// What the camera and Mapbox's logo keep clear of.
     let clearance: StreetnavMapClearance
+    /// A tap on the map (not a double tap, which zooms).
+    let onTap: () -> Void
 
-    final class Coordinator: NavigationMapViewDelegate {
+    final class Coordinator: NSObject, NavigationMapViewDelegate {
+        var onTap: (() -> Void)?
         var shownRoute: String?
         var light: StandardLightPreset?
         var styleObserver: AnyCancelable?
@@ -348,6 +358,11 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         var zoomOffset: Double?
         var tiltOffset: Double?
         var clearance: StreetnavMapClearance?
+
+        /// The SDK's own single tap on the map, which waits for a double tap to fail: Mapbox's `onMapTap` never fires under it.
+        @objc func tapped(_ gesture: UITapGestureRecognizer) {
+            if gesture.state == .recognized { onTap?() }
+        }
 
         /// The SDK's lines lie flat on the ground, where the buildings simply cover them, and fade with
         /// `line-depth-occlusion-factor`, which the map no longer applies: the route vanished behind the buildings.
@@ -381,6 +396,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
                       dark: coordinator.dark,
                       light: coordinator.light ?? .day, in: map, reload: true)
         }
+        context.coordinator.onTap = onTap
+        view.mapViewTapGestureRecognizer.addTarget(context.coordinator, action: #selector(Coordinator.tapped(_:)))
         context.coordinator.streets = streets
         context.coordinator.live = live
         context.coordinator.outside = outside
@@ -406,6 +423,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     }
 
     func updateUIView(_ view: NavigationMapView, context: Context) {
+        context.coordinator.onTap = onTap
         show(guidance.routes, in: view, context: context)
         if context.coordinator.clearance != clearance {
             context.coordinator.clearance = clearance
@@ -442,6 +460,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
             || coordinator.dark != dark
             || coordinator.streetsLight != light {
             let relayer = coordinator.filter != filter || coordinator.dark != dark || coordinator.streetsLight != light
+            // The streets of the whole area (14 MB) cut again only when they change, not each time this ride turns one green.
+            let newStreets = coordinator.streets != streets
             coordinator.streetsLight = light
             coordinator.streets = streets
             coordinator.live = live
@@ -450,7 +470,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
             coordinator.dark = dark
             if view.mapView.mapboxMap.isStyleLoaded {
                 Self.show(streets: streets, live: live, outside: outside, filter: filter, dark: dark, light: light, in: view.mapView.mapboxMap,
-                          reload: relayer)
+                          reload: relayer, newStreets: newStreets)
             }
         }
     }
@@ -460,8 +480,10 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     private static func show(ridden geojson: String?, source: String, filter: StreetnavStreetFilter, dark: Bool,
                              light: StandardLightPreset, in map: MapboxMap, reload: Bool) {
         let shown = geojson != nil && filter.showsRidden
-        let layers = [StreetnavExplorationMap.streetsRidden(dark: dark, behind: light, id: source + "-derriere", source: source),
-                      StreetnavExplorationMap.streetsRidden(dark: dark, id: source, source: source)]
+        let covering = source == StreetnavExplorationMap.liveSource
+        let layers = [StreetnavExplorationMap.streetsRidden(dark: dark, behind: light, id: source + "-derriere", source: source,
+                                                            covering: covering),
+                      StreetnavExplorationMap.streetsRidden(dark: dark, id: source, source: source, covering: covering)]
         for layer in layers where reload || shown == false {
             if map.layerExists(withId: layer.id) { try? map.removeLayer(withId: layer.id) }
         }
@@ -522,15 +544,16 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     /// The streets source and the layers the filter keeps, first of the layers added to the style so that they lie under
     /// the route (same slot); `reload` draws the layers again, for another filter or the other mode's colours.
     private static func show(streets: String?, live: String?, outside: String?, filter: StreetnavStreetFilter, dark: Bool,
-                             light: StandardLightPreset, in map: MapboxMap, reload: Bool) {
+                             light: StandardLightPreset, in map: MapboxMap, reload: Bool, newStreets: Bool = true) {
         defer {
             show(ridden: outside, source: "sorties-ailleurs", filter: filter, dark: dark, light: light, in: map, reload: reload)
-            show(ridden: live, source: "rues-direct", filter: filter, dark: dark, light: light, in: map, reload: reload)
+            show(ridden: live, source: StreetnavExplorationMap.liveSource, filter: filter, dark: dark, light: light, in: map,
+                 reload: reload)
             showMarkings(in: map)
         }
         guard let streets else { return }
         if map.sourceExists(withId: "rues-osm") {
-            map.updateGeoJSONSource(withId: "rues-osm", data: .string(streets))
+            if newStreets { map.updateGeoJSONSource(withId: "rues-osm", data: .string(streets)) }
         } else {
             try? map.addSource(StreetnavExplorationMap.streetsLayerSource(streets))
         }

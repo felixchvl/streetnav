@@ -102,12 +102,14 @@ struct StreetnavExplorationMap: View {
                 // The streets still to ride that this ride has just turned teal, and the rides beyond the zones.
                 ForEvery(extraRidden, id: \.source) { extra in
                     Self.geoJSONSource(extra.source, extra.geojson)
-                    Self.streetsRidden(dark: colorScheme == .dark, behind: lightPreset, id: extra.source + "-derriere", source: extra.source)
+                    Self.streetsRidden(dark: colorScheme == .dark, behind: lightPreset, id: extra.source + "-derriere", source: extra.source,
+                                       covering: extra.source == Self.liveSource)
                 }
                 if streetFilter.showsNotRidden { Self.streetsNotRidden(dark: colorScheme == .dark) }
                 if streetFilter.showsRidden { Self.streetsRidden(dark: colorScheme == .dark) }
                 ForEvery(extraRidden, id: \.source) { extra in
-                    Self.streetsRidden(dark: colorScheme == .dark, id: extra.source, source: extra.source)
+                    Self.streetsRidden(dark: colorScheme == .dark, id: extra.source, source: extra.source,
+                                       covering: extra.source == Self.liveSource)
                 }
             } else if let rides, streetFilter.showsRidden {
                 Self.ridesSource(rides)
@@ -241,7 +243,7 @@ struct StreetnavExplorationMap: View {
     /// Drawn like the streets ridden, when the filter shows them.
     private var extraRidden: [(source: String, geojson: String)] {
         guard streetFilter.showsRidden else { return [] }
-        return [("rues-direct", live), ("sorties-ailleurs", outside)].compactMap { source, geojson in geojson.map { (source, $0) } }
+        return [(Self.liveSource, live), ("sorties-ailleurs", outside)].compactMap { source, geojson in geojson.map { (source, $0) } }
     }
 
     private var lightPreset: StandardLightPreset { Self.light(dark: colorScheme == .dark, sun: sunLight) }
@@ -577,25 +579,32 @@ extension StreetnavExplorationMap {
                 behind: light, share: 0.6)
     }
 
+    /// `covering`: this ride's streets (`liveSource`), drawn over the red ones they turn green, which stay beneath them
+    /// until the server knows. Lifted to the same height, the red ones hid them; so a little higher, and as wide as the red
+    /// ones, else their edges showed on both sides.
     static func streetsRidden(dark: Bool, behind light: StandardLightPreset? = nil, id: String? = nil,
-                              source: String = "rues-osm") -> LineLayer {
+                              source: String = "rues-osm", covering: Bool = false) -> LineLayer {
         streets(id: id ?? (light == nil ? "rues-faites" : "rues-faites-derriere"), source: source, ridden: 1,
-                colour: riddenColour(dark: dark), behind: light, share: 0.65)
+                colour: riddenColour(dark: dark), behind: light, share: 0.65, covering: covering)
     }
 
+    /// The streets ridden on this ride, before the server knows (StreetnavLiveStreets).
+    static let liveSource = "rues-direct"
+
     private static func streets(id: String, source: String, ridden: Int, colour: UIColor, behind light: StandardLightPreset?,
-                                share: CGFloat) -> LineLayer {
+                                share: CGFloat, covering: Bool = false) -> LineLayer {
         let look = StreetnavStreetLook.current
         return LineLayer(id: id, source: source)
             .filter(Exp(.eq) { Exp(.get) { "r" }; ridden })
             .slot(.middle)
             .lineCap(.round).lineJoin(.round)
             .lineColor(light.map { blend(colour, over: buildingColour($0), share: share) } ?? colour)
-            .lineWidth(roadWidth(close: look.closeWidth, scale: ridden == 1 ? look.riddenScale : 1))
+            .lineWidth(roadWidth(close: look.closeWidth, scale: ridden == 1 && covering == false ? look.riddenScale : 1))
             .lineEmissiveStrength(streetGlow)
             .lineOcclusionOpacity(light == nil ? 0 : 1)
-            .lineElevationReference(StreetnavStreetLook.current.elevated ? .ground : .none)
-            .lineZOffset(StreetnavStreetLook.current.elevated ? 0.5 : 0)
+            .lineElevationReference(look.elevated ? .ground : .none)
+            // Under the routes (`routeLift`).
+            .lineZOffset(look.elevated ? (covering ? 0.75 : 0.5) : 0)
     }
 
     /// In points, one curve that only grows with the zoom, as the traffic lines of Maps: never as wide as the road, so
