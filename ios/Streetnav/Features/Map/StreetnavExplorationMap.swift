@@ -168,6 +168,8 @@ struct StreetnavExplorationMap: View {
                     .lineWidth(Self.zoomed(5, 8, 13))
                     .lineEmissiveStrength(1)
                     .lineOcclusionOpacity(0.8)
+                    .lineElevationReference(.ground)
+                    .lineZOffset(Self.routeLift)
             }
             if let placeRoute {
                 Self.lineSource("trajet-lieu", placeRoute)
@@ -245,12 +247,15 @@ struct StreetnavExplorationMap: View {
         return [("rues-direct", live), ("sorties-ailleurs", outside)].compactMap { source, geojson in geojson.map { (source, $0) } }
     }
 
-    private var lightPreset: StandardLightPreset {
+    private var lightPreset: StandardLightPreset { Self.light(dark: colorScheme == .dark, sun: sunLight) }
+
+    /// The light of both maps: the sun's where the rider is, or night in dark mode.
+    static func light(dark: Bool, sun: StandardLightPreset) -> StandardLightPreset {
         #if DEBUG
         // Development: -mapLight dawn|day|dusk|night to compare looks.
         if let forced = UserDefaults.standard.string(forKey: "mapLight") { return StandardLightPreset(rawValue: forced) }
         #endif
-        return colorScheme == .dark ? .night : sunLight
+        return dark ? .night : sun
     }
 
     private var mapStyle: MapStyle {
@@ -273,6 +278,8 @@ struct StreetnavExplorationMap: View {
             .lineWidth(Self.zoomed(10, 20, 36))
             .lineEmissiveStrength(1)
             .lineOcclusionOpacity(0.3)
+            .lineElevationReference(.ground)
+            .lineZOffset(Self.routeLift)
     }
 
     /// Wider than any street, with a white edge (black at night): the streets ridden are blue too.
@@ -281,12 +288,24 @@ struct StreetnavExplorationMap: View {
             .slot(.middle)
             .lineCap(.round).lineJoin(.round)
             .lineColor(accent)
-            .lineBorderColor(colorScheme == .dark ? UIColor(white: 0.05, alpha: 1) : UIColor(white: 1, alpha: 1))
+            .lineBorderColor(Self.routeEdge(dark: colorScheme == .dark))
             .lineBorderWidth(3)
             .lineWidth(Self.zoomed(10, 14, 22))
             .lineEmissiveStrength(1)
-            .lineOcclusionOpacity(0.9)
+            .lineOcclusionOpacity(Self.routeThroughBuildings)
+            .lineElevationReference(.ground)
+            .lineZOffset(Self.routeLift)
     }
+
+    /// The edge of the routes, on both maps.
+    static func routeEdge(dark: Bool) -> UIColor { dark ? UIColor(white: 0.05, alpha: 1) : UIColor(white: 1, alpha: 1) }
+
+    /// How much of a route still shows where a building stands in front of it, on both maps. Only lines lifted off
+    /// the ground are drawn among the buildings: a line flat on the ground is simply covered by them.
+    static let routeThroughBuildings = 0.9
+
+    /// How high the routes float, in metres: above the streets (half a metre), so that the buildings do not cover them.
+    static let routeLift = 1.0
 
     private func streetLayer(_ id: String, status: StreetExplorationStatus) -> LineLayer {
         LineLayer(id: id, source: "rues")

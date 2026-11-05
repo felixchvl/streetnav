@@ -29,7 +29,8 @@ struct StreetnavGuidanceView: View {
     private static let spacing: CGFloat = 11
 
     var body: some View {
-        StreetnavGuidanceMap(guidance: guidance, light: colorScheme == .dark ? .night : sunLight, showsOverview: showsOverview,
+        StreetnavGuidanceMap(guidance: guidance, light: StreetnavExplorationMap.light(dark: colorScheme == .dark, sun: sunLight),
+                             showsOverview: showsOverview,
                              streets: history.streets, live: live.ridden, outside: history.tracksOutside, filter: streetFilter,
                              dark: colorScheme == .dark, zoomOffset: zoomOffset, tiltOffset: tiltOffset, clearance: clearance)
             .ignoresSafeArea()
@@ -332,7 +333,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     /// What the camera and Mapbox's logo keep clear of.
     let clearance: StreetnavMapClearance
 
-    final class Coordinator {
+    final class Coordinator: NavigationMapViewDelegate {
         var shownRoute: String?
         var light: StandardLightPreset?
         var styleObserver: AnyCancelable?
@@ -347,6 +348,18 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         var zoomOffset: Double?
         var tiltOffset: Double?
         var clearance: StreetnavMapClearance?
+
+        /// The SDK's lines lie flat on the ground, where the buildings simply cover them, and fade with
+        /// `line-depth-occlusion-factor`, which the map no longer applies: the route vanished behind the buildings.
+        /// Lifted and seen through them as on the exploration map instead.
+        func navigationMapView(_ navigationMapView: NavigationMapView, willAdd layer: Layer) -> Layer? {
+            guard var line = layer as? LineLayer else { return layer }
+            line.lineDepthOcclusionFactor = nil
+            line.lineOcclusionOpacity = .constant(StreetnavExplorationMap.routeThroughBuildings)
+            line.lineElevationReference = .constant(.ground)
+            line.lineZOffset = .constant(StreetnavExplorationMap.routeLift)
+            return line
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -361,8 +374,10 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
             guard let map = view?.mapView.mapboxMap, let coordinator else { return }
             try? map.localizeLabels(into: Locale(identifier: "fr"))
             // The relief of the exploration map.
-            try? map.addSource(StreetnavExplorationMap.reliefSource)
-            try? map.setTerrain(Terrain(sourceId: "relief").exaggeration(StreetnavExplorationMap.reliefExaggeration))
+            if StreetnavExplorationMap.showsRelief {
+                try? map.addSource(StreetnavExplorationMap.reliefSource)
+                try? map.setTerrain(Terrain(sourceId: "relief").exaggeration(StreetnavExplorationMap.reliefExaggeration))
+            }
             // A new style has none of them.
             Self.show(streets: coordinator.streets, live: coordinator.live, outside: coordinator.outside, filter: coordinator.filter,
                       dark: coordinator.dark,
@@ -373,8 +388,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         context.coordinator.outside = outside
         context.coordinator.filter = filter
         context.coordinator.dark = dark
-        view.routeColor = .systemBlue
-        view.routeCasingColor = UIColor(white: 1, alpha: 0.9)
+        view.delegate = context.coordinator
+        Self.colourRoute(dark: dark, in: view)
         view.traversedRouteColor = UIColor(white: 0.55, alpha: 0.5)
         view.showsTrafficOnRouteLine = false
         view.showsAlternatives = false
@@ -384,8 +399,6 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         view.mapView.ornaments.options.compass.visibility = .hidden
         // Above the street being ridden.
         view.mapView.ornaments.options.attributionButton.position = .bottomLeading
-        // Seen through the buildings, as the streets are.
-        view.routeLineOcclusionFactor = 0.1
         Self.follow(at: zoomOffset, tilt: tiltOffset, in: view)
         context.coordinator.zoomOffset = zoomOffset
         context.coordinator.tiltOffset = tiltOffset
@@ -421,6 +434,12 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
             context.coordinator.light = light
         }
         let coordinator = context.coordinator
+        if coordinator.dark != dark {
+            // Applied when the route is drawn: drawn again.
+            Self.colourRoute(dark: dark, in: view)
+            coordinator.shownRoute = nil
+            show(guidance.routes, in: view, context: context)
+        }
         if coordinator.streets != streets || coordinator.live != live || coordinator.outside != outside || coordinator.filter != filter
             || coordinator.dark != dark
             || coordinator.streetsLight != light {
@@ -463,6 +482,12 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         }
     }
 
+    /// The route of the exploration map: its blue, its white edge, black at night.
+    private static func colourRoute(dark: Bool, in view: NavigationMapView) {
+        view.routeColor = StreetnavExplorationMap.accent(dark: dark)
+        view.routeCasingColor = StreetnavExplorationMap.routeEdge(dark: dark)
+    }
+
     /// The camera's padding, and Mapbox's logo with its credits button just after it.
     private static func keepClear(_ clearance: StreetnavMapClearance, in view: NavigationMapView) {
         view.viewportPadding = clearance.padding
@@ -473,6 +498,7 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     /// Standard's HD road markings again, just above the streets layers, which would hide them; the lines added later
     /// above the streets (this ride's) go between them.
     private static func showMarkings(in map: MapboxMap) {
+        guard StreetnavExplorationMap.showsMarkings else { return }
         if map.sourceExists(withId: StreetnavHDMarkings.sourceID) == false {
             try? map.addSource(StreetnavExplorationMap.hdMarkingsSource)
         }
