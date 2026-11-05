@@ -1,8 +1,8 @@
 [Unit]
-Description=Streetnav: OpenStreetMap's ways every month, before paris-rues reads them (04:30)
+Description=Streetnav: OpenStreetMap's places read again every week, the safety net of the updates
 
 [Timer]
-OnCalendar=*-*-01 04:00
+OnCalendar=Sun *-*-* 04:00
 Persistent=true
 
 [Install]

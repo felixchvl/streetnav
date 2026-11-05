@@ -46,6 +46,8 @@ for f in "$SRC"/sql/*.sql; do
   runuser -u postgres -- psql -v ON_ERROR_STOP=1 -q -d streetnav < "$f"  # read by root: postgres cannot open /root
 done
 runuser -u postgres -- psql -q -d streetnav -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO streetnav; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO streetnav"
+# OpenStreetMap's places (osm.py): written by Streetnav, read by everyone else
+runuser -u postgres -- psql -q -d streetnav -c "GRANT USAGE ON SCHEMA osm TO streetnav; GRANT ALL ON ALL TABLES IN SCHEMA osm TO streetnav"
 
 # Application code and its virtualenv
 rm -rf "$APP/streetnav_server"
@@ -55,15 +57,18 @@ cp -r "$SRC/streetnav_server" "$APP/"
 "$APP/venv/bin/pip" install -q -r "$SRC/requirements.txt"
 
 install -m 755 "$SRC/deploy/streetnav-backup" /usr/local/bin/streetnav-backup
+# The streets ridden, measured every 15 minutes until 2026-11-05: gone with the tables they filled
+if [ -f /etc/systemd/system/streetnav-streets.timer ]; then
+  systemctl disable --now streetnav-streets.timer
+  rm -f /etc/systemd/system/streetnav-streets.timer /etc/systemd/system/streetnav-streets.service
+fi
 cp "$SRC"/deploy/*.service "$SRC"/deploy/*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now streetnav-api.service streetnav-backup.timer streetnav-streets.timer streetnav-osm.timer
+systemctl enable --now streetnav-api.service streetnav-backup.timer streetnav-osm.timer streetnav-osm-update.timer
 systemctl restart streetnav-api.service
-# The arrondissements and communes of the streets ridden zone by zone, once (zones.py): the street runs then place the
-# new parts themselves
-if [ "$(runuser -u postgres -- psql -tA -d streetnav -c 'SELECT count(*) FROM zone')" = 0 ]; then
-  systemd-run --wait --pipe --collect -p User=streetnav -p EnvironmentFile="$ENV_FILE" -p WorkingDirectory="$APP" \
-    "$APP/venv/bin/python" -m streetnav_server.zones fetch
+# OpenStreetMap's places, read once (about 15 minutes, in the background): the updates wait for them
+if [ "$(runuser -u postgres -- psql -tA -d streetnav -c 'SELECT count(*) FROM osm.lieu')" = 0 ]; then
+  systemctl start --no-block streetnav-osm.service
 fi
 if grep -q '^RWGPS_AUTH_TOKEN=.\+' "$ENV_FILE"; then
   systemctl enable --now streetnav-rwgps.timer

@@ -2,10 +2,11 @@
 
 GET /tracks: one GeoJSON feature per ride with a track, simplified to about 5 metres (2,273 rides: 2 MB, much less
 gzipped), with an ETag so that the app only downloads them again when a ride was added or changed.
-GET /streets: every street around Paris cut into ridden and not ridden parts (streets.py), for the map's two colours,
-with the class of their road for the map to draw them as wide as it; 2 MB gzipped, with an ETag on the last street run.
-GET /stats: totals, this year, this month, the last 30 days, records, kilometres by year and streets ridden, overall and
-in each arrondissement of Paris and commune of the inner suburbs, with its ring (zones.py).
+GET /streets: the streets ridden and not ridden, for the map's two colours; empty since 2026-11-05, until the coverage
+is measured again from what each ride brought, on OpenStreetMap's osm.lieu (osm.py).
+GET /stats: totals, this year, this month, the last 30 days, records, kilometres by year, and the kilometres of streets a
+bike may ride overall and in each arrondissement of Paris and commune of the inner suburbs, with its ring (osm.py);
+none counted as ridden until the coverage is measured again.
 GET /zones: the outlines of those zones, simplified to about 25 m, for the app's maps of the streets ridden by zone.
 GET /tracks/outside: the parts of the bike rides' tracks outside those zones, where no street is measured, for the map
 to show where the rider has been there too.
@@ -16,25 +17,18 @@ import hashlib
 
 from fastapi import APIRouter, Depends, Header, Response
 
+from .osm import DEPARTMENTS, ZONE
 from .registry import connect
-from .streets import SHOWN_RIDDEN
 
 # About 5 metres in Paris (degrees of longitude / latitude): below what a phone screen shows at street level.
 SIMPLIFY_DEGREES = 0.00005
 
-# The width classes of Mapbox Standard's roads (its "roads" and "road-path" layers), from OpenStreetMap's highway tag:
-# 0 motorway or trunk, 1 primary, 2 secondary or tertiary, 3 street (the rest: residential, unclassified, motorway
-# links…), 4 link of a primary, secondary or tertiary, 5 service, track…, 6 path, footway, cycleway, pedestrian, steps.
-ROAD_CLASS = """CASE
-    WHEN s.highway IN ('motorway', 'trunk') THEN 0
-    WHEN s.highway = 'primary' THEN 1
-    WHEN s.highway IN ('secondary', 'tertiary') THEN 2
-    WHEN s.highway IN ('primary_link', 'secondary_link', 'tertiary_link') THEN 4
-    WHEN s.highway IN ('service', 'services', 'rest_area', 'track', 'construction', 'bus_stop', 'elevator') THEN 5
-    WHEN s.highway IN ('path', 'footway', 'cycleway', 'pedestrian', 'steps', 'bridleway') THEN 6
-    ELSE 3 END"""
 # Bumped whenever the street features change shape, so that the app downloads them again.
-STREETS_FORMAT = 2
+STREETS_FORMAT = 3
+EMPTY = '{"type": "FeatureCollection", "features": []}'
+ZONES = f"osm.lieu z WHERE {ZONE.format(t='z')}"
+DEPARTMENTS_SQL = f"""SELECT ST_Union(geom) FROM osm.lieu
+                      WHERE kind = 'limite' AND admin_level = 6 AND code = ANY('{{{",".join(DEPARTMENTS)}}}')"""
 # Metres: the zones drawn a few centimetres wide on a phone.
 ZONE_SIMPLIFY_M = 25
 
@@ -63,33 +57,25 @@ def router(require_token) -> APIRouter:
 
     @api.get("/streets")
     def streets(if_none_match: str | None = Header(default=None)) -> Response:
-        with connect() as conn:
-            last = conn.execute("SELECT max(finished_at) FROM street_run").fetchone()[0]
-            etag = '"' + hashlib.sha256(f"streets:{last}:{STREETS_FORMAT}".encode()).hexdigest()[:16] + '"'
-            if if_none_match == etag:
-                return Response(status_code=304, headers={"ETag": etag})
-            body = conn.execute(
-                f"""SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(
-                              json_build_object('type', 'Feature',
-                                                'geometry', ST_AsGeoJSON(ST_Transform(ST_Simplify(p.geom, 1.5), 4326), 5)::json,
-                                                'properties', json_build_object('r', {SHOWN_RIDDEN}::int, 'k', {ROAD_CLASS}))),
-                              '[]'::json))::text
-                   FROM street_part p JOIN street s ON s.id = p.street_id""").fetchone()[0]
-        return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
+        etag = '"' + hashlib.sha256(f"streets:none:{STREETS_FORMAT}".encode()).hexdigest()[:16] + '"'
+        if if_none_match == etag:
+            return Response(status_code=304, headers={"ETag": etag})
+        return Response(EMPTY, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
     @api.get("/tracks/outside")
     def tracks_outside(if_none_match: str | None = Header(default=None)) -> Response:
         with connect() as conn:
             count, changed = conn.execute(
                 "SELECT count(*), max(updated_at) FROM activity WHERE sport = 'cycling' AND track IS NOT NULL").fetchone()
-            zones = conn.execute("SELECT count(*), coalesce(sum(ST_NPoints(geom)), 0) FROM zone").fetchone()
+            zones = conn.execute(f"SELECT count(*), coalesce(sum(ST_NPoints(geom)), 0) FROM {ZONES}").fetchone()
             etag = '"' + hashlib.sha256(f"outside:{count}:{changed}:{zones}:{SIMPLIFY_DEGREES}".encode()).hexdigest()[:16] + '"'
             if if_none_match == etag:
                 return Response(status_code=304, headers={"ETag": etag})
-            # The zones a little wider, so that a ride along their edge stays theirs; `r` as for the streets ridden.
+            # The four departments a little wider, so that a ride along their edge stays theirs; `r` as for the
+            # streets ridden.
             body = conn.execute(
-                """WITH area AS (SELECT ST_Transform(ST_Buffer(ST_SimplifyPreserveTopology(ST_Union(geom), 20), 15), 4326) AS g
-                               FROM zone HAVING count(*) > 0),
+                f"""WITH area AS (SELECT ST_Transform(ST_Buffer(ST_SimplifyPreserveTopology(u, 20), 15), 4326) AS g
+                                FROM ({DEPARTMENTS_SQL}) d(u) WHERE u IS NOT NULL),
                         cut AS (SELECT a.id, ST_Difference(ST_Simplify(ST_Force2D(a.track), %(tolerance)s), area.g) AS d
                                 FROM activity a, area
                                 WHERE a.sport = 'cycling' AND a.track IS NOT NULL AND NOT ST_Within(ST_Envelope(a.track), area.g))
@@ -103,16 +89,16 @@ def router(require_token) -> APIRouter:
     @api.get("/zones")
     def zone_shapes(if_none_match: str | None = Header(default=None)) -> Response:
         with connect() as conn:
-            zones, points = conn.execute("SELECT count(*), coalesce(sum(ST_NPoints(geom)), 0) FROM zone").fetchone()
+            zones, points = conn.execute(f"SELECT count(*), coalesce(sum(ST_NPoints(geom)), 0) FROM {ZONES}").fetchone()
             etag = '"' + hashlib.sha256(f"zones:{zones}:{points}:{ZONE_SIMPLIFY_M}".encode()).hexdigest()[:16] + '"'
             if if_none_match == etag:
                 return Response(status_code=304, headers={"ETag": etag})
             body = conn.execute(
-                """SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(
-                          json_build_object('type', 'Feature',
-                                            'geometry', ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(geom, %s), 4326), 5)::json,
-                                            'properties', json_build_object('code', code)) ORDER BY code), '[]'::json))::text
-                   FROM zone""", (ZONE_SIMPLIFY_M,)).fetchone()[0]
+                f"""SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(
+                           json_build_object('type', 'Feature',
+                                             'geometry', ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(geom, %s), 4326), 5)::json,
+                                             'properties', json_build_object('code', code)) ORDER BY code), '[]'::json))::text
+                    FROM {ZONES}""", (ZONE_SIMPLIFY_M,)).fetchone()[0]
         return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
     @api.get("/stats")
@@ -129,14 +115,13 @@ def router(require_token) -> APIRouter:
                 """SELECT started_at::date, round((distance_m / 1000)::numeric, 1) FROM activity
                    WHERE sport = 'cycling' AND distance_m IS NOT NULL ORDER BY distance_m DESC LIMIT 1""").fetchone()
             last = conn.execute("SELECT max(started_at) FROM activity WHERE sport = 'cycling'").fetchone()[0]
-            streets = conn.execute(
-                f"""SELECT coalesce(sum(length_m) FILTER (WHERE {SHOWN_RIDDEN}), 0) / 1000, coalesce(sum(length_m), 0) / 1000
-                    FROM street_part""").fetchone()
-            zones = conn.execute(
-                f"""SELECT z.code, z.name, z.department, z.ring,
-                           coalesce(sum(p.length_m) FILTER (WHERE {SHOWN_RIDDEN}), 0) / 1000, coalesce(sum(p.length_m), 0) / 1000
-                    FROM zone z LEFT JOIN street_part p ON p.zone = z.code
-                    GROUP BY z.code ORDER BY z.ring NULLS LAST, z.code""").fetchall()
+            # Nothing counts as ridden until the coverage is measured again.
+            lengths = dict(conn.execute(
+                """SELECT zone, sum(ST_Length(geom)) / 1000 FROM osm.lieu
+                   WHERE kind = 'voie' AND bike AND counted AND zone IS NOT NULL GROUP BY zone""").fetchall())
+            zones = [(code, name, code[:2], ring, 0, lengths.get(code, 0)) for code, name, ring in conn.execute(
+                f"SELECT z.code, z.name, z.ring FROM {ZONES} ORDER BY z.ring NULLS LAST, z.code").fetchall()]
+            streets = (0, sum(lengths.values()))
             by_year = conn.execute(
                 """SELECT extract(year FROM started_at)::int, count(*), round((sum(distance_m) / 1000)::numeric)
                    FROM activity WHERE sport = 'cycling' GROUP BY 1 ORDER BY 1""").fetchall()

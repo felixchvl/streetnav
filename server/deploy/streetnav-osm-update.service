@@ -1,0 +1,12 @@
+[Unit]
+Description=Streetnav: apply the changes made in OpenStreetMap since the last run (osm.lieu)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=streetnav
+EnvironmentFile=/etc/streetnav/streetnav.env
+WorkingDirectory=/opt/streetnav
+ExecStart=/opt/streetnav/venv/bin/python -m streetnav_server.osm update
+MemoryMax=512M

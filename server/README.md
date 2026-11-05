@@ -59,6 +59,9 @@ gold from silver without importing anything again (`--dry-run` to see the counts
 - `streetnav_server/file_import.py` - import of a folder of FIT, GPX or TCX files, such as the FIT
   files HealthFit exports from Apple Health (source `file`, below Apple Health and Strava).
 - `streetnav_server/activity_files.py` - the file readers shared by both imports.
+- `streetnav_server/osm.py` - OpenStreetMap's places of the 75, 92, 93 and 94 (`osm.lieu`), see below.
+- `streetnav_server/map_data.py` - what the app's map and statistics read (`GET /tracks`, `/streets`, `/zones`,
+  `/tracks/outside`, `/stats`).
 - `tests/` - `python -m unittest discover -s tests`. The database tests also need
   `STREETNAV_TEST_DATABASE_URL`, a throwaway PostGIS database they empty, and the API tests httpx;
   without them they are skipped.
@@ -139,7 +142,8 @@ Since 2026-11-02 paris-rues's tables live in this database too, in the `paris_ru
 nightly dump; `streetnav-backup` leaves that schema out). In QGIS: a
 PostgreSQL connection to `192.168.1.62:5432`, database `streetnav`, SSL mode `require`. Useful layers:
 `activity` (track, one line per activity; filter `sport = 'cycling'`) and `activity_source` (one track per
-version, to compare them). Tracks are `LineStringZM` in EPSG:4326, both with a spatial index.
+version, to compare them). Tracks are `LineStringZM` in EPSG:4326, both with a spatial index. OpenStreetMap's places:
+`osm.lieu` (filter on `kind`; geometry in EPSG:2154, QGIS splits lines and surfaces) and `osm.voie`.
 
 ## Remote access
 
@@ -165,30 +169,37 @@ from the home network.
 `GET /tracks` returns every bike ride's track as GeoJSON, simplified to about 5 metres (2,273 rides:
 2.2 MB, 0.5 MB gzipped), with an ETag; `GET /stats` the riding statistics. The app caches both.
 
-`GET /streets` returns every street around Paris cut into ridden (`r` = 1) and not ridden (`r` = 0) parts,
-the two colours of the app's map, with the width class of their road in Mapbox Standard (`k`, `map_data.ROAD_CLASS`) for
-the app to draw them as wide as the road (1.6 MB gzipped, ETag on the last street run and the format). `streetnav_server/streets.py`
-builds them (`sql/005_streets.sql`): OpenStreetMap's ways in Paris and the inner suburbs, from Overpass every month
-(`streetnav-osm.timer`, the 1st at 04:00), in 4 x 4 tiles of the box around the 75, 92, 93 and 94, each loaded as it
-comes, then only the ways within their outlines kept (`zone`, below). The `street` table is the one
-copy of OpenStreetMap for Streetnav and paris-rues, which reads the named ways of Paris from it and attaches them to
-the city's register of voies (its role may read `street` and `activity`). A bike may ride a way or not
-by paris-rues's rules (explicit `bicycle` tags first, then access, then the kind of way: footways, steps and
-pedestrian streets without `bicycle=yes` are closed), and sidewalks, crossings and areas are not ways of their own;
-only the ways a bike may ride are drawn and measured. A point of a street
-counts as ridden when a ride passes within 12 m, sampled every 10 m, and a ridden stretch shorter than 5
-samples is only a ride crossing the street. A bike path (or footway, path, busway) running alongside a street a bike
-may ride (within 20 m all along) belongs to that street, as on the map: it is neither drawn nor counted, and riding it rides
-the street. A place of Paris (place, carrefour or rond-point in the city's register, read from paris-rues's
-`paris_rues.voie`, footprint widened by 3 m) is one open area: parts are cut at its edge, and once rides went through
-it along 20 m of its ways, every part inside it is shown as ridden (`street_part.place`; `ridden` stays what the
-rides measured). On 2026-11-02: 85,435 ways measured, 9,520 km, 1,440 km ridden, 1,453 km with the 344 places ridden
-through. `compute` redoes everything
-(about 50 s); `streetnav-streets.timer` runs
-`refresh` every 15 minutes, only around the rides added or changed since the last run.
+`GET /zones` returns the outlines of the arrondissements of Paris and the communes of the 92, 93 and 94, and
+`GET /tracks/outside` the parts of the rides outside the four departments, both from `osm.lieu` (below).
 
-The streets ridden zone by zone (`streetnav_server/zones.py`, `sql/006_zones.sql`, in `GET /stats`): the 20
-arrondissements of Paris and the 122 communes of the 92, 93 and 94 from the State's API Géo (`zones fetch`, once at
-install), numbered in rings out from Paris: ring 1 is the 29 communes along its edge, and ring 6 the far end of the 93
-and 94. Each part belongs to the zone its middle lies in. Since 2026-11-03 the ways cover the four departments whole; before,
-a box left out about a third of the 93 and of the 94.
+Until 2026-11-05 `GET /streets` returned every street around Paris cut into ridden and not ridden parts (`street_part`,
+from a monthly copy of OpenStreetMap in `street`, with the places of the Ville de Paris register and the zones of the
+State's API Géo). All of that was removed: the coverage is to be measured again from what each ride brought, on
+`osm.lieu`. Until then `GET /streets` is empty and `GET /stats` counts no street ridden; its zones, their rings and
+the kilometres a bike may ride in each come from `osm.lieu`.
+
+## OpenStreetMap's places
+
+`osm.lieu` (`sql/008_osm.sql`, `streetnav_server/osm.py`) is the one reference of the places of Paris and the inner
+suburbs, for Streetnav and paris-rues, as OpenStreetMap has them, with every tag:
+
+- `voie`: the ways of the kinds in `osm.HIGHWAYS`, every named way and every way marked open to bikes, with whether a
+  bike may ride it (`bike`, and the tag that decided, `bike_reason`: explicit `bicycle` tags first, then access, then
+  the kind of way) and whether it is a way of its own rather than a sidewalk or a crossing (`counted`);
+- `place`: `place=square` and the highway areas, drawn as surfaces;
+- `limite`: the departments, communes, arrondissements of Paris and its quartiers (`boundary=administrative`,
+  `admin_level` 6, 8, 9 and 10), with their INSEE `code`.
+
+Only what lies in the 75, 92, 93 and 94 stays. The zones are the arrondissements of Paris (ring 0) and the communes of
+the 92, 93 and 94, numbered in rings out from Paris (a commune is in ring n when it shares a border with one of ring
+n - 1); each voie and place carries the `zone` its middle lies in. `osm.voie` groups the ways by name and zone.
+Every way keeps its nodes (`nodes`), so that a node moved alone moves the ways through it.
+
+- `streetnav-osm-update.timer`, every 2 minutes: `osm update` asks the OSM API for the changesets touching the box
+  closed since the last run, and the ones still open, and applies their changes object by object, a newer version
+  only replacing an older one. A way takes its nodes' positions from the change, from the ways known already or from
+  the API; a relation is read again from Overpass. The state (the last changeset closed, the ones applied) is in
+  `/var/lib/streetnav/osm-state.json`. An edit saved in OSM shows here within about two minutes.
+- `streetnav-osm.timer`, Sundays at 04:00: `osm load` reads everything again from Overpass, in 4 x 4 tiles of the box
+  around the four departments, and replaces the table: the safety net for what changesets cannot show (a limit whose
+  member ways moved).

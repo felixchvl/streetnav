@@ -51,7 +51,7 @@ class LayersTest(unittest.TestCase):
         self.raw = tempfile.TemporaryDirectory()
         os.environ["STREETNAV_RAW_DIR"] = self.raw.name
         self.conn = registry.connect()
-        self.conn.execute("TRUNCATE activity, activity_source, activity_heart_rate, sync_run, raw_file, ride_piece, street_part, street_run RESTART IDENTITY")
+        self.conn.execute("TRUNCATE activity, activity_source, activity_heart_rate, sync_run, raw_file RESTART IDENTITY")
         self.conn.commit()
 
     def tearDown(self):
