@@ -556,10 +556,14 @@ extension StreetnavExplorationMap {
         source.tiles = ["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"]
         source.encoding = .terrarium
         source.tileSize = 512
-        source.maxzoom = 17
+        source.maxzoom = reliefZoom
         source.attribution = "<a href=\"https://mapterhorn.com/attribution\">© Mapterhorn</a> · Relief : IGN (MNT LiDAR HD, RGE ALTI)"
         return source
     }
+
+    /// The last zoom of the relief, and of the streets: a lifted line takes its height from the relief at the zoom of
+    /// its own tiles, so streets cut at a lower zoom stood on a coarser ground than the route, beside it on the slopes.
+    static let reliefZoom = 17.0
 
     // The streets of `streetsLayerSource`, here and under the route of the navigation map: every street not ridden yet
     // in red (the system red, lighter by day), those already ridden in green, apart from the blue of the routes, as
@@ -691,8 +695,8 @@ extension StreetnavExplorationMap {
     static func streetsLayerSource(_ geojson: String) -> GeoJSONSource {
         var source = GeoJSONSource(id: "rues-osm")
         source.data = .string(geojson)
-        // 88,000 street parts: tiles cut up to zoom 14 only, then scaled, to keep the memory down.
-        source.maxzoom = 14
+        // Cut down to the relief's zoom, so that the streets stand on the same ground as the routes (`reliefZoom`).
+        source.maxzoom = reliefZoom
         source.tolerance = 0.5
         return source
     }
