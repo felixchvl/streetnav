@@ -91,9 +91,9 @@ struct StreetnavExplorationMap: View {
 
     private var map: Map {
         Map(viewport: $viewport) {
-            // Standard's own relief, as Mapbox sets it: seen from afar, flattened from zoom 12 to 13.7. Its elevation stops
-            // at zoom 14, about ten metres a pixel: kept closer, it buried the buildings on the slopes, hid the roads and
-            // sank the bridges, under a city drawn to the metre.
+            // The real relief at every zoom, from the IGN's survey (`relief`).
+            Self.reliefSource
+            Terrain(sourceId: "relief").exaggeration(1)
             if let streets {
                 Self.streetsLayerSource(streets)
                 // Each colour twice: over the buildings, blended with them, then in its own colour where it is in sight.
@@ -546,6 +546,20 @@ extension StreetnavExplorationMap {
     }
 
     static var streetGlow: Double { StreetnavStreetLook.current.glow }
+
+    /// The ground as the IGN surveyed it (MNT LiDAR HD, half a metre, and RGE ALTI, one metre, under Licence Ouverte),
+    /// in Mapterhorn's open tiles down to zoom 17. Mapbox's own stops at zoom 14, about ten metres a pixel, which is why
+    /// Standard flattens it from zoom 12 to 13.7: kept closer, it buried the buildings on the slopes, hid the roads and
+    /// sank the bridges, under a city drawn to the metre. The ground of the survey has neither buildings nor bridges.
+    static var reliefSource: RasterDemSource {
+        var source = RasterDemSource(id: "relief")
+        source.tiles = ["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"]
+        source.encoding = .terrarium
+        source.tileSize = 512
+        source.maxzoom = 17
+        source.attribution = "<a href=\"https://mapterhorn.com/attribution\">© Mapterhorn</a> · Relief : IGN (MNT LiDAR HD, RGE ALTI)"
+        return source
+    }
 
     // The streets of `streetsLayerSource`, here and under the route of the navigation map: every street not ridden yet
     // in red (the system red, lighter by day), those already ridden in green, apart from the blue of the routes, as
