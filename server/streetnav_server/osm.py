@@ -1,7 +1,7 @@
 """OpenStreetMap as the one reference of the places of Paris and the inner suburbs (75, 92, 93 and 94), in osm.lieu: the
 ways (kind voie: streets, roads, paths), the squares drawn as areas (place) and the administrative limits (limite:
-departments, communes, the arrondissements of Paris and its quartiers), each with its tags as OSM has them. Streetnav
-and paris-rues read it; nothing else keeps a copy of OSM.
+departments, communes, the arrondissements of Paris and its quartiers), each with its tags as OSM has them: the one
+copy of OSM in this database.
 
 What is kept: every way of the kinds in HIGHWAYS, named or not, every named way and every way marked open to bikes
 (voie); place=square and the highway areas (place); boundary=administrative relations of LIMIT_LEVELS (limite). Only
@@ -71,7 +71,7 @@ TOUCH_M2 = 2500
 # déléguées of merged communes (Saint-Denis and Pierrefitte-sur-Seine since 2025), which are not zones.
 ARRONDISSEMENT = "({t}.admin_level = 9 AND left({t}.code, 3) = '751')"
 ZONE = f"({{t}}.kind = 'limite' AND ({ARRONDISSEMENT} OR {{t}}.admin_level = 8 AND left({{t}}.code, 2) <> '75'))"
-MIDDLE = "CASE WHEN ST_Dimension({g}) = 1 THEN ST_LineInterpolatePoint({g}, 0.5) ELSE ST_Centroid({g}) END"
+MIDDLE = "CASE WHEN ST_Dimension({g}) = 1 THEN ST_LineInterpolatePoint({g}, 0.5) ELSE ST_Centroid(ST_Boundary({g})) END"
 ASSIGN_SQL = f"""
     UPDATE osm.lieu l SET zone = (SELECT z.code FROM osm.lieu z
                                   WHERE {ZONE.format(t='z')} AND ST_Intersects(z.geom, {MIDDLE.format(g='l.geom')}) LIMIT 1)
@@ -91,8 +91,11 @@ STAGE_SQL = """CREATE TEMP TABLE osm_in (osm_type char(1), osm_id bigint, kind t
                admin_level smallint, code text, bike boolean, bike_reason text, counted boolean, nodes bigint[],
                ewkt text, version integer, changeset bigint, edited_at timestamptz) ON COMMIT DROP"""
 # Ways come as their line (or ring), relations as their member ways, made into an area here.
-GEOM = """CASE WHEN osm_type = 'r' THEN ST_Multi(ST_BuildArea(ST_Transform(ST_GeomFromEWKT(ewkt), 2154)))
+GEOM = """CASE WHEN osm_type = 'r' THEN osm.area(ST_Transform(ST_GeomFromEWKT(ewkt), 2154))
                ELSE ST_Transform(ST_GeomFromEWKT(ewkt), 2154) END"""
+# What is tested against the departments: a surface by its outline, a square drawn crossing itself being no polygon
+# GEOS can intersect.
+EDGE = "CASE WHEN ST_Dimension({g}) = 2 THEN ST_Boundary({g}) ELSE {g} END"
 COLUMNS = ("osm_type, osm_id, kind, name, tags, admin_level, code, bike, bike_reason, counted, nodes, geom, version, "
            "changeset, edited_at")
 UPSERT_SQL = f"""
@@ -102,7 +105,8 @@ UPSERT_SQL = f"""
     FROM (SELECT DISTINCT ON (osm_type, osm_id) *, {GEOM} AS g FROM osm_in {{where}}
           ORDER BY osm_type, osm_id, version DESC) i
     WHERE g IS NOT NULL AND NOT ST_IsEmpty(g)
-      AND (kind = 'limite' OR NOT EXISTS (SELECT FROM osm_area) OR EXISTS (SELECT FROM osm_area WHERE ST_Intersects(i.g, osm_area.g)))
+      AND (kind = 'limite' OR NOT EXISTS (SELECT FROM osm_area)
+           OR EXISTS (SELECT FROM osm_area WHERE ST_Intersects({EDGE.format(g='i.g')}, osm_area.g)))
     ON CONFLICT (osm_type, osm_id) DO UPDATE SET
         kind = EXCLUDED.kind, name = EXCLUDED.name, tags = EXCLUDED.tags, admin_level = EXCLUDED.admin_level,
         code = EXCLUDED.code, bike = EXCLUDED.bike, bike_reason = EXCLUDED.bike_reason, counted = EXCLUDED.counted,
@@ -111,11 +115,12 @@ UPSERT_SQL = f"""
     WHERE osm.lieu.version <= EXCLUDED.version
     RETURNING osm_type, osm_id, (xmax = 0) AS added"""
 # A newer version that left the four departments, or whose geometry could not be made, goes.
-LEFT_SQL = """
+LEFT_SQL = f"""
     DELETE FROM osm.lieu l USING osm_in i
     WHERE l.osm_type = i.osm_type AND l.osm_id = i.osm_id AND l.version <= i.version AND l.kind <> 'limite'
       AND EXISTS (SELECT FROM osm_area)
-      AND NOT EXISTS (SELECT FROM osm_area WHERE ST_Intersects(ST_Transform(ST_GeomFromEWKT(i.ewkt), 2154), osm_area.g))"""
+      AND NOT EXISTS (SELECT FROM osm_area
+                      WHERE ST_Intersects({EDGE.format(g="ST_Transform(ST_GeomFromEWKT(i.ewkt), 2154)")}, osm_area.g))"""
 # The positions of nodes the ways known already go through (WGS84).
 KNOWN_NODES_SQL = """
     SELECT u.n, ST_X(p), ST_Y(p)

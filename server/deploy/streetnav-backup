@@ -1,8 +1,8 @@
 #!/bin/sh
-# Nightly dump of the streetnav database, keeps the last 14. The paris_rues schema, paris-rues's tables, is
-# left out: paris-rues-backup dumps it. So are OpenStreetMap's places, downloaded again by osm.py at will.
+# Nightly dump of the streetnav database, keeps the last 14. The emmanuelspv schema, the EmmanuelSPV project's tables,
+# is left out: emmanuelspv-backup dumps it. So are OpenStreetMap's places, downloaded again by osm.py at will.
 set -eu
 umask 077
 dir=/var/backups/streetnav
-pg_dump -Fc -d streetnav -N paris_rues --exclude-table-data=osm.lieu -f "$dir/streetnav-$(date +%Y%m%d).dump"
+pg_dump -Fc -d streetnav -N emmanuelspv --exclude-table-data=osm.lieu -f "$dir/streetnav-$(date +%Y%m%d).dump"
 ls -1t "$dir"/streetnav-*.dump | tail -n +15 | xargs -r rm --

@@ -46,6 +46,9 @@ SIDEWALK = way(101, [(1011, 2.36, 48.84), (1012, 2.37, 48.84)], {"highway": "foo
 PATH = way(102, [(1021, 2.25, 48.86), (1022, 2.26, 48.86)], {"highway": "path"})  # unnamed path: not kept
 SQUARE = way(103, [(1031, 2.36, 48.86), (1032, 2.37, 48.86), (1033, 2.37, 48.87), (1034, 2.36, 48.87), (1031, 2.36, 48.86)],
              {"place": "square", "name": "Place C"})
+# A square drawn crossing itself (a bow tie): no polygon GEOS can intersect, kept all the same.
+BOW_TIE = way(107, [(1071, 2.36, 48.85), (1072, 2.37, 48.86), (1073, 2.37, 48.85), (1074, 2.36, 48.86), (1071, 2.36, 48.85)],
+              {"highway": "pedestrian", "area": "yes", "name": "Place H"})
 FAR = way(104, [(1041, 1.90, 48.85), (1042, 1.91, 48.85)], {"highway": "primary", "name": "Route D"})
 
 
@@ -107,7 +110,7 @@ class LieuTest(unittest.TestCase):
         os.environ["STREETNAV_STATE_DIR"] = self.state.name
         self.conn = registry.connect()
         self.conn.execute("TRUNCATE osm.lieu, sync_run")
-        osm.store(self.conn, LIMITS + [STREET, SIDEWALK, PATH, SQUARE, FAR], check=False)
+        osm.store(self.conn, LIMITS + [STREET, SIDEWALK, PATH, SQUARE, BOW_TIE, FAR], check=False)
         self.conn.commit()
 
     def tearDown(self):
@@ -122,7 +125,8 @@ class LieuTest(unittest.TestCase):
 
     def test_what_is_kept_and_where(self):
         self.assertEqual(self.rows("SELECT osm_type, osm_id, kind, zone FROM osm.lieu WHERE kind <> 'limite' ORDER BY osm_id"),
-                         [("w", 100, "voie", "75101"), ("w", 101, "voie", "75102"), ("w", 103, "place", "75102")])
+                         [("w", 100, "voie", "75101"), ("w", 101, "voie", "75102"), ("w", 103, "place", "75102"),
+                          ("w", 107, "place", "75102")])
         self.assertEqual(self.rows("SELECT bike, counted FROM osm.lieu WHERE osm_id IN (100, 101) ORDER BY osm_id"),
                          [(True, True), (False, False)])
         self.assertEqual(self.rows("SELECT code, ring FROM osm.lieu WHERE ring IS NOT NULL ORDER BY code"),
@@ -132,6 +136,12 @@ class LieuTest(unittest.TestCase):
         self.assertEqual(self.rows("SELECT ST_GeometryType(geom) FROM osm.lieu WHERE osm_id = 103"), [("ST_Polygon",)])
         self.assertEqual(self.rows("SELECT name, zone, ways FROM osm.voie ORDER BY name"),
                          [("Rue A", "75101", 1), ("Rue G", "75102", 1)])
+
+    def test_broken_multipolygons_make_an_area_or_none(self):
+        crossing = "ST_GeomFromText('MULTILINESTRING((0 0,10 10,10 0,0 10,0 0),(2 2,3 3))', 2154)"
+        valid, kind = self.rows(f"SELECT ST_IsValid(osm.area({crossing})), GeometryType(osm.area({crossing}))")[0]
+        self.assertEqual((valid, kind), (True, "MULTIPOLYGON"))
+        self.assertEqual(self.rows("SELECT osm.area(ST_GeomFromText('MULTILINESTRING((0 0,1 1))', 2154))"), [(None,)])
 
     def test_changes_applied(self):
         fetched = []

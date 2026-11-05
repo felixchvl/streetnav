@@ -135,10 +135,11 @@ keeps one sample per instant).
 
 ## QGIS
 
-The `qgis` login role (created by paris-rues's install, password kept out of this repo) reads Streetnav from the
+The `qgis` login role (created by the EmmanuelSPV project's install, password kept out of this repo) reads Streetnav from the
 home network only and over TLS: `sql/004_qgis.sql` grants it `SELECT` on `activity`, `activity_heart_rate` and
 `activity_source`, and `pg_hba.conf` holds `hostssl streetnav qgis 192.168.1.0/24 scram-sha-256` (added by hand).
-Since 2026-11-02 paris-rues's tables live in this database too, in the `paris_rues` schema (its own install, its own
+Since 2026-11-02 the EmmanuelSPV project's tables (called paris-rues until 2026-11-05) live in this database too, in
+the `emmanuelspv` schema (its own install, its own
 nightly dump; `streetnav-backup` leaves that schema out). In QGIS: a
 PostgreSQL connection to `192.168.1.62:5432`, database `streetnav`, SSL mode `require`. Useful layers:
 `activity` (track, one line per activity; filter `sport = 'cycling'`) and `activity_source` (one track per
@@ -181,7 +182,7 @@ the kilometres a bike may ride in each come from `osm.lieu`.
 ## OpenStreetMap's places
 
 `osm.lieu` (`sql/008_osm.sql`, `streetnav_server/osm.py`) is the one reference of the places of Paris and the inner
-suburbs, for Streetnav and paris-rues, as OpenStreetMap has them, with every tag:
+suburbs in this database, as OpenStreetMap has them, with every tag:
 
 - `voie`: the ways of the kinds in `osm.HIGHWAYS`, every named way and every way marked open to bikes, with whether a
   bike may ride it (`bike`, and the tag that decided, `bike_reason`: explicit `bicycle` tags first, then access, then

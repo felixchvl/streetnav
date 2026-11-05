@@ -1,6 +1,6 @@
--- OpenStreetMap, the one reference of the places of Paris and the inner suburbs (75, 92, 93 and 94) for Streetnav and
--- paris-rues (streetnav_server/osm.py): the ways, the squares and the administrative limits as OSM has them, kept up to
--- date as mappers edit. Lambert-93 (metres).
+-- OpenStreetMap, the one reference of the places of Paris and the inner suburbs (75, 92, 93 and 94) in this database
+-- (streetnav_server/osm.py): the ways, the squares and the administrative limits as OSM has them, kept up to date as
+-- mappers edit. Lambert-93 (metres).
 CREATE SCHEMA IF NOT EXISTS osm;
 
 CREATE TABLE IF NOT EXISTS osm.lieu (
@@ -30,6 +30,29 @@ CREATE INDEX IF NOT EXISTS lieu_kind ON osm.lieu (kind, admin_level);
 CREATE INDEX IF NOT EXISTS lieu_name ON osm.lieu (name);
 COMMENT ON TABLE osm.lieu IS
     'reference: the ways, squares and administrative limits of the 75, 92, 93 and 94 from OpenStreetMap, updated every few minutes (osm.py)';
+
+-- The area a relation's member ways enclose, made valid. Mappers leave some multipolygons broken (rings crossing or
+-- touching wrongly): the lines are cut where they cross and tried again, and a relation no area can be made of is left
+-- out (NULL) rather than stopping the load.
+CREATE OR REPLACE FUNCTION osm.area(lines geometry) RETURNS geometry LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE
+    a geometry;
+BEGIN
+    BEGIN
+        a := ST_BuildArea(lines);
+    EXCEPTION WHEN OTHERS THEN
+        a := NULL;
+    END;
+    IF a IS NULL OR ST_IsEmpty(a) THEN
+        a := ST_BuildArea(ST_Node(lines));
+    END IF;
+    IF a IS NULL OR ST_IsEmpty(a) THEN
+        RETURN NULL;
+    END IF;
+    RETURN ST_Multi(ST_CollectionExtract(ST_MakeValid(a), 3));
+EXCEPTION WHEN OTHERS THEN
+    RETURN NULL;
+END $$;
 
 -- The voies as people name them: the ways of the same name in the same zone.
 CREATE OR REPLACE VIEW osm.voie AS
