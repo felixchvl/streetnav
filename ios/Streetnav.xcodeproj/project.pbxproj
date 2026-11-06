@@ -54,8 +54,33 @@
 		STWB0040000000000000004 /* StreetnavStartRideIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = STWP0040000000000000004 /* StreetnavStartRideIntent.swift */; };
 		STWB0050000000000000005 /* StreetnavRideLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = STSP0010000000000000001 /* StreetnavRideLink.swift */; };
 		STWB0060000000000000006 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = STNP0190000000000000019 /* AppIcon.icon */; };
+		STWB0070000000000000007 /* StreetnavWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = STWP0070000000000000007 /* StreetnavWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
+
+/* Begin PBXContainerItemProxy section */
+		STWX0000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 664D4F1B2C1C476500A68BB1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = STWT0000000000000000001;
+			remoteInfo = StreetnavWatch;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		STWE0000000000000000001 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				STWB0070000000000000007 /* StreetnavWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		664D4F232C1C476500A68BB1 /* Streetnav.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Streetnav.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -216,10 +241,12 @@ STGRSHRD0000000000000017 /* Shared */ = { isa = PBXGroup; children = ( STSP00100
 				664D4F1F2C1C476500A68BB1 /* Sources */,
 				664D4F202C1C476500A68BB1 /* Frameworks */,
 				664D4F212C1C476500A68BB1 /* Resources */,
+				STWE0000000000000000001 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				STWD0000000000000000001 /* PBXTargetDependency */,
 			);
 			name = Streetnav;
 			packageProductDependencies = (
@@ -368,6 +395,14 @@ STGRSHRD0000000000000017 /* Shared */ = { isa = PBXGroup; children = ( STSP00100
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		STWD0000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = STWT0000000000000000001 /* StreetnavWatch */;
+			targetProxy = STWX0000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		664D4F2F2C1C476600A68BB1 /* Debug */ = {

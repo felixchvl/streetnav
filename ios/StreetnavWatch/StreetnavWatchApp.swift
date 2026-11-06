@@ -3,8 +3,8 @@ import SwiftUI
 import WatchKit
 
 /// Streetnav on the Watch: one bike ride at a time, started from the Action button (`StreetnavStartRideIntent`), from the
-/// app, or from the iPhone. Not embedded in the iPhone app for now, so that installing that one never installs this one
-/// on the Watch: it is built and installed on its own (scheme StreetnavWatch).
+/// app, or from the iPhone. Embedded in the iPhone app, from which the iPhone's Watch app installs it: an install of
+/// the iPhone app may update it on the Watch too.
 @main
 struct StreetnavWatchApp: App {
     @WKApplicationDelegateAdaptor private var delegate: StreetnavWatchDelegate
