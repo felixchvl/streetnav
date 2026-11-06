@@ -1,5 +1,5 @@
 [Unit]
-Description=Streetnav: download OpenStreetMap's places of the 75, 92, 93 and 94 again (osm.lieu)
+Description=Streetnav: bring OpenStreetMap's places of the 75, 92, 93 and 94 up to date (osm.lieu), everything the first time
 After=network-online.target postgresql.service
 Wants=network-online.target
 
@@ -8,5 +8,5 @@ Type=oneshot
 User=streetnav
 EnvironmentFile=/etc/streetnav/streetnav.env
 WorkingDirectory=/opt/streetnav
-ExecStart=/opt/streetnav/venv/bin/python -m streetnav_server.osm load
+ExecStart=/opt/streetnav/venv/bin/python -m streetnav_server.osm
 MemoryMax=768M

@@ -1,0 +1,9 @@
+[Unit]
+Description=Streetnav: OpenStreetMap's places brought up to date when the app asks for its map (the API writes osm-wanted)
+
+[Path]
+PathChanged=/var/lib/streetnav/osm-wanted
+Unit=streetnav-osm.service
+
+[Install]
+WantedBy=paths.target

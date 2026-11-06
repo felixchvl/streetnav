@@ -196,11 +196,17 @@ the 92, 93 and 94, numbered in rings out from Paris (a commune is in ring n when
 n - 1); each voie and place carries the `zone` its middle lies in.
 Every way keeps its nodes (`nodes`), so that a node moved alone moves the ways through it.
 
-- `streetnav-osm-update.timer`, every 2 minutes: `osm update` asks the OSM API for the changesets touching the box
-  closed since the last run, and the ones still open, and applies their changes object by object, a newer version
-  only replacing an older one. A way takes its nodes' positions from the change, from the ways known already or from
-  the API; a relation is read again from Overpass. The state (the last changeset closed, the ones applied) is in
-  `/var/lib/streetnav/osm-state.json`. An edit saved in OSM shows here within about two minutes.
-- `streetnav-osm.timer`, Sundays at 04:00: `osm load` reads everything again from Overpass, in 4 x 4 tiles of the box
-  around the four departments, and replaces the table: the safety net for what changesets cannot show (a limit whose
-  member ways moved).
+One pipeline, `python -m streetnav_server.osm`, run on demand, with no timer:
+
+- when the app asks for its map (`GET /zones`, `/streets`, `/stats` or `/tracks/outside`), the API writes
+  `/var/lib/streetnav/osm-wanted`, which `streetnav-osm.path` watches to start `streetnav-osm.service`, and waits for
+  it up to 20 seconds; one run at most every minute. An edit saved in OSM shows as soon as the app's map is opened
+  again;
+- the first run, `osm.lieu` empty, reads everything from Overpass in 4 x 4 tiles of the box around the four
+  departments (about 15 minutes, in the background). To start again from scratch, empty `osm.lieu`;
+- every later run asks the OSM API for the changesets touching the box closed since the last run, and the ones still
+  open, and applies their changes object by object, a newer version only replacing an older one. A way takes its
+  nodes' positions from the change, from the ways known already or from the API. A relation (a limit, a square drawn
+  as a multipolygon) is read again from Overpass when it changed or when one of its member ways did; when Overpass's
+  copy is older than the changes, it is read again at the next run. The state (the last changeset closed, the ones
+  applied, the relations to read again) is in `/var/lib/streetnav/osm-state.json`.

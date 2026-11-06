@@ -62,11 +62,19 @@ if [ -f /etc/systemd/system/streetnav-streets.timer ]; then
   systemctl disable --now streetnav-streets.timer
   rm -f /etc/systemd/system/streetnav-streets.timer /etc/systemd/system/streetnav-streets.service
 fi
-cp "$SRC"/deploy/*.service "$SRC"/deploy/*.timer /etc/systemd/system/
+# OpenStreetMap's changes every 2 minutes and everything again every Sunday, until 2026-11-06: one run on demand now
+for unit in streetnav-osm-update.timer streetnav-osm.timer; do
+  if [ -f "/etc/systemd/system/$unit" ]; then
+    systemctl disable --now "$unit"
+    rm -f "/etc/systemd/system/$unit"
+  fi
+done
+rm -f /etc/systemd/system/streetnav-osm-update.service
+cp "$SRC"/deploy/*.service "$SRC"/deploy/*.timer "$SRC"/deploy/*.path /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now streetnav-api.service streetnav-backup.timer streetnav-osm.timer streetnav-osm-update.timer
+systemctl enable --now streetnav-api.service streetnav-backup.timer streetnav-osm.path
 systemctl restart streetnav-api.service
-# OpenStreetMap's places, read once (about 15 minutes, in the background): the updates wait for them
+# OpenStreetMap's places, read once (about 15 minutes, in the background); then each time the app asks for its map
 if [ "$(runuser -u postgres -- psql -tA -d streetnav -c 'SELECT count(*) FROM osm.lieu')" = 0 ]; then
   systemctl start --no-block streetnav-osm.service
 fi

@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from streetnav_server import osm, registry
 from test_osm import LIMITS, SIDEWALK, STREET
@@ -27,6 +28,13 @@ class ApiTest(unittest.TestCase):
     def setUp(self):
         self.raw = tempfile.TemporaryDirectory()
         os.environ["STREETNAV_RAW_DIR"] = self.raw.name
+        # The map asks for OpenStreetMap's changes in a throwaway folder, without waiting for a run no unit starts.
+        self.state = tempfile.TemporaryDirectory()
+        os.environ["STREETNAV_STATE_DIR"] = self.state.name
+        patcher = mock.patch.multiple(osm, WAIT_S=0, _asked=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self.state.cleanup)
         with registry.connect() as conn:
             conn.execute("TRUNCATE activity, activity_source, activity_heart_rate, sync_run, raw_file, osm.lieu RESTART IDENTITY")
 
@@ -83,6 +91,8 @@ class ApiTest(unittest.TestCase):
         self.assertEqual([f["properties"]["code"] for f in features], ["75101", "75102", "92001", "92002"])
         self.assertIn(features[0]["geometry"]["type"], ("Polygon", "MultiPolygon"))
         self.assertEqual(self.client.get("/zones", headers={"If-None-Match": response.headers["ETag"]}).status_code, 304)
+        # Asking for the map asked for OpenStreetMap's latest changes.
+        self.assertTrue((Path(self.state.name) / osm.WANTED).exists())
 
     def test_tracks_outside_the_departments(self):
         # The ride runs east along latitude 48.85 from 2.35 to 2.41 (test_registry.workout); the departments end at 2.40.

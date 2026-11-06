@@ -16,14 +16,15 @@ The zones are the arrondissements of Paris and the communes of the 92, 93 and 94
 n when it shares a border with one of ring n - 1: the two overlap over at least TOUCH_M2 once the other is widened by
 WIDEN_M, which leaves out communes that only meet at a corner. Each voie and place carries the zone its middle lies in.
 
-Kept up to date as mappers edit (update, every two minutes): the OSM API lists the changesets in the box closed since
-the last run and the ones still open, and each one's changes are applied, a newer version only replacing an older one.
-A way takes its nodes' positions from the change, from the ways already known or from the API; a node moved alone
-moves the ways it belongs to. A relation is read again from Overpass. The full load (weekly) reads everything again,
-the safety net for what changes cannot show (a limit whose member ways moved).
+One pipeline, run on demand: when the app asks for its map, the API asks for a run (ask) and waits for it a little.
+The first run, osm.lieu empty, downloads everything from Overpass (about 15 minutes). Every later one brings it up to
+date: the OSM API lists the changesets in the box closed since the last run and the ones still open, and each one's
+changes are applied, a newer version only replacing an older one. A way takes its nodes' positions from the change,
+from the ways already known or from the API; a node moved alone moves the ways it belongs to. A relation is read again
+from Overpass when it changed, or when one of its member ways did (a limit or a square whose outline was redrawn);
+when Overpass is behind the changes, it is read again at the next run.
 
-  python -m streetnav_server.osm load      download everything from Overpass and replace osm.lieu (about 15 minutes)
-  python -m streetnav_server.osm update    apply the changes made in OSM since the last run
+  python -m streetnav_server.osm    bring osm.lieu up to date (everything, the first time)
 """
 from __future__ import annotations
 
@@ -31,12 +32,13 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .registry import connect
@@ -55,7 +57,12 @@ LOCK = 0x4F53_4D4C
 # known already or have a node in the box.
 LOCAL_DEGREES = 1.0
 NODES_PER_REQUEST = 300
+IDS_PER_QUERY = 5000
 RETRIES = 10
+# On demand: the API writes this file in the state folder, and streetnav-osm.path starts streetnav-osm.service.
+WANTED = "osm-wanted"
+WAIT_S = 20.0  # how long the app's request waits for the run
+EVERY_S = 60.0  # one run asked for at most every minute: the app asks for several map files in a row
 
 HIGHWAYS = ("primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|"
             "living_street|pedestrian|cycleway")
@@ -308,9 +315,14 @@ def request(url: str, data: bytes | None = None, accept: str = "application/json
             time.sleep(wait)
 
 
+def overpass_answer(query: str) -> dict:
+    """Overpass's answer (its elements, and in osm3s the time of the OSM data it holds), waiting and asking again while
+    it is busy."""
+    return json.loads(request(OVERPASS, urllib.parse.urlencode({"data": query}).encode()))
+
+
 def overpass(query: str) -> list[dict]:
-    """The elements Overpass answers, waiting and asking again while it is busy."""
-    return json.loads(request(OVERPASS, urllib.parse.urlencode({"data": query}).encode()))["elements"]
+    return overpass_answer(query)["elements"]
 
 
 def boxes(bbox=BBOX):
@@ -390,14 +402,15 @@ def parse_changesets(xml: bytes) -> list[dict]:
 
 
 def parse_change(xml: bytes) -> dict:
-    """An osmChange document: positions of the nodes it carries, the nodes modified, and its ways and relations as
-    (action, id, version, changeset, timestamp, tags, node refs)."""
-    nodes, moved, ways, relations = {}, set(), [], []
+    """An osmChange document: positions of the nodes it carries, the nodes modified, its ways and relations as
+    (action, id, version, changeset, timestamp, tags, node refs), and the time of its newest element."""
+    nodes, moved, ways, relations, newest = {}, set(), [], [], ""
     for block in ET.fromstring(xml):
         action = block.tag
         for e in block:
             tags = {t.get("k"): t.get("v") for t in e.findall("tag")}
             meta = (action, int(e.get("id")), int(e.get("version")), int(e.get("changeset") or 0), e.get("timestamp"))
+            newest = max(newest, meta[4] or "")
             if e.tag == "node":
                 if action != "delete" and e.get("lat") is not None:
                     nodes[meta[1]] = (float(e.get("lon")), float(e.get("lat")))
@@ -407,7 +420,7 @@ def parse_change(xml: bytes) -> dict:
                 ways.append((*meta, tags, [int(nd.get("ref")) for nd in e.findall("nd")]))
             elif e.tag == "relation":
                 relations.append((*meta, tags))
-    return {"nodes": nodes, "moved": moved, "ways": ways, "relations": relations}
+    return {"nodes": nodes, "moved": moved, "ways": ways, "relations": relations, "newest": newest}
 
 
 def fetch_nodes(ids) -> dict:
@@ -435,6 +448,11 @@ def apply(conn, change: dict, local: bool = True, fetch=fetch_nodes) -> dict:
     """Applies a parsed osmChange to osm.lieu; returns what it did. `local`: the changeset stays around the box, so a
     way of a kind kept that is new here is worth asking the API for its nodes."""
     done = {"added": 0, "changed": 0, "removed": 0, "moved": 0, "relations": []}
+    # What may have redrawn a relation: ways changed (and still there) and nodes moved, around the box. Whether a
+    # relation osm.lieu keeps has them as members is asked of Overpass once the run's changesets are applied.
+    done["ways"] = [w[1] for w in change["ways"] if w[0] != "delete" and (local or any(
+        in_box(change["nodes"][n]) for n in w[6] if n in change["nodes"]))]
+    done["nodes"] = [n for n in change["moved"] if in_box(change["nodes"][n])]
     with conn.cursor() as cur:
         cur.execute(AREA_SQL)
         positions = dict(change["nodes"])
@@ -495,9 +513,26 @@ def apply(conn, change: dict, local: bool = True, fetch=fetch_nodes) -> dict:
     return done
 
 
-def refresh_relations(conn, ids) -> None:
-    """Reads relations again from Overpass and replaces them, or removes them when gone or no longer kept."""
-    elements = overpass(f"[out:json][timeout:300];relation(id:{','.join(map(str, ids))});out geom meta;")
+def parent_relations(ways, nodes) -> set[int]:
+    """The relations having one of these ways, or a way through one of these nodes, as a member (Overpass), asked
+    IDS_PER_QUERY at a time: a run long after the last brings many."""
+    found, ways, nodes = set(), sorted(ways), sorted(nodes)
+    for i in range(0, max(len(ways), len(nodes)), IDS_PER_QUERY):
+        parts = ""
+        if nodes[i:i + IDS_PER_QUERY]:
+            parts += f"node(id:{','.join(map(str, nodes[i:i + IDS_PER_QUERY]))});way(bn);"
+        if ways[i:i + IDS_PER_QUERY]:
+            parts += f"way(id:{','.join(map(str, ways[i:i + IDS_PER_QUERY]))});"
+        found |= {e["id"] for e in overpass(f"[out:json][timeout:300];({parts});rel(bw);out ids;")
+                  if e["type"] == "relation"}
+    return found
+
+
+def refresh_relations(conn, ids) -> str:
+    """Reads relations again from Overpass and replaces them, or removes them when gone or no longer kept. Returns the
+    time of the OSM data Overpass answered from."""
+    answer = overpass_answer(f"[out:json][timeout:300];relation(id:{','.join(map(str, ids))});out geom meta;")
+    elements = answer["elements"]
     with conn.cursor() as cur:
         cur.execute(AREA_SQL)
         cur.execute("DROP TABLE IF EXISTS osm_in")
@@ -511,25 +546,26 @@ def refresh_relations(conn, ids) -> None:
             number_rings(cur)
             cur.execute(ASSIGN_SQL.format(where="true"))
             cur.execute("DROP TABLE osm_area")
+    return answer.get("osm3s", {}).get("timestamp_osm_base", "")
 
 
-def update(conn, bbox=BBOX) -> dict:
+def update(conn, bbox=BBOX, members=parent_relations) -> dict:
     """Applies the changesets since the last run; returns what it did. A changeset that fails is tried again at the
-    next runs, up to RETRIES times."""
+    next runs, up to RETRIES times; so is a relation Overpass answered for from data older than the changes."""
     with conn.cursor() as cur:
         cur.execute("SELECT max(edited_at) FROM osm.lieu")
-        newest = cur.fetchone()[0]
-    if newest is None:  # the first load is not done yet
-        return {"changesets": 0, "waiting": "osm.lieu is empty: python -m streetnav_server.osm load"}
+        newest_kept = cur.fetchone()[0]
     state = read_state()
-    since = state.get("since") or (newest - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    since = state.get("since") or (newest_kept - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     seen = {int(k): v for k, v in state.get("seen", {}).items()}
     retry = {int(k): v for k, v in state.get("retry", {}).items()}
+    pending = state.get("relations", {})
     total = {"changesets": 0, "added": 0, "changed": 0, "removed": 0, "moved": 0, "relations": 0, "errors": 0}
     listed = changesets(since, bbox)
     todo = [c for c in listed if seen.get(c["id"]) != c["changes"]]
     todo += [{"id": i, "changes": None, "box": None} for i in retry if i not in {c["id"] for c in todo}]
-    relations, next_seen, next_retry = set(), {c["id"]: c["changes"] for c in listed}, {}
+    relations, next_seen, next_retry = set(pending.get("ids", [])), {c["id"]: c["changes"] for c in listed}, {}
+    ways, nodes, newest = set(pending.get("ways", [])), set(pending.get("nodes", [])), pending.get("newest", "")
     for c in todo:
         try:
             change = parse_change(request(f"{API}/changeset/{c['id']}/download", accept="application/xml"))
@@ -545,30 +581,86 @@ def update(conn, bbox=BBOX) -> dict:
                 next_retry[c["id"]] = retry.get(c["id"], 0) + 1
             continue
         relations.update(done.pop("relations"))
+        ways.update(done.pop("ways"))
+        nodes.update(done.pop("nodes"))
+        newest = max(newest, change["newest"])
         total["changesets"] += 1
         for k, v in done.items():
             total[k] += v
-    if relations:
-        refresh_relations(conn, sorted(relations))
-        conn.commit()
-        total["relations"] = len(relations)
+    next_pending = {}
+    try:
+        if ways or nodes:
+            parents = sorted(members(ways, nodes))
+            with conn.cursor() as cur:
+                cur.execute("SELECT osm_id FROM osm.lieu WHERE osm_type = 'r' AND osm_id = ANY(%s::bigint[])", (parents,))
+                relations.update(r[0] for r in cur.fetchall())
+        if relations:
+            base = refresh_relations(conn, sorted(relations))
+            conn.commit()
+            total["relations"] = len(relations)
+            if base < newest:
+                next_pending = {"ids": sorted(relations), "newest": newest}
+    except Exception as error:  # noqa: BLE001 - Overpass down: the relations wait for the next run
+        conn.rollback()
+        print(f"relations: {error}", file=sys.stderr)
+        total["errors"] += 1
+        next_pending = {"ids": sorted(relations), "ways": sorted(ways), "nodes": sorted(nodes), "newest": newest}
     closed = [c["closed_at"] for c in listed if not c["open"] and c["closed_at"]]
-    write_state({"since": max([since, *closed]), "seen": next_seen, "retry": next_retry})
+    write_state({"since": max([since, *closed]), "seen": next_seen, "retry": next_retry, "relations": next_pending})
     return total
+
+
+def sync(conn) -> dict:
+    """Brings osm.lieu up to date: everything from Overpass while it is empty, the changes since the last run after."""
+    if conn.execute("SELECT NOT EXISTS (SELECT FROM osm.lieu)").fetchone()[0]:
+        done = store(conn, download())
+        conn.commit()
+        write_state({})
+        return done
+    return update(conn)
+
+
+_asked: float | None = None
+_asking = threading.Lock()
+
+
+def ask(wait: float | None = None) -> None:
+    """Asks for a run (streetnav-osm.path starts streetnav-osm.service), at most once every EVERY_S, and waits for it up
+    to WAIT_S: what the app asks for next is up to date, and a longer run (the first, or one long after the last) goes
+    on alone. Several requests at once wait together for the same run."""
+    global _asked
+    with _asking:
+        now = time.monotonic()
+        if _asked is not None and now - _asked < EVERY_S:
+            return
+        _asked = now
+        with connect() as conn:
+            conn.autocommit = True
+            last = "SELECT max(finished_at) FROM sync_run WHERE source = 'osm'"
+            before = conn.execute(last).fetchone()[0]
+            try:
+                state_path().with_name(WANTED).write_text(datetime.now(timezone.utc).isoformat() + "\n")
+            except OSError as error:
+                print(f"OpenStreetMap run not asked for: {error}", file=sys.stderr)
+                return
+            deadline = now + (WAIT_S if wait is None else wait)
+            while time.monotonic() < deadline:
+                time.sleep(0.5)
+                if conn.execute(last).fetchone()[0] != before:
+                    return
 
 
 def record(conn, started: float, done: dict) -> None:
     conn.execute("""INSERT INTO sync_run (source, finished_at, created, merged, updated, errors, message)
-                    VALUES ('osm', now(), %s, 0, %s, 0, %s)
+                    VALUES ('osm', now(), %s, 0, %s, %s, %s)
                     ON CONFLICT (source) DO UPDATE SET finished_at = now(), created = EXCLUDED.created,
-                        merged = 0, updated = EXCLUDED.updated, errors = 0, message = EXCLUDED.message""",
-                 (done.get("added", 0), done.get("changed", 0) + done.get("moved", 0),
+                        merged = 0, updated = EXCLUDED.updated, errors = EXCLUDED.errors, message = EXCLUDED.message""",
+                 (done.get("added", 0), done.get("changed", 0) + done.get("moved", 0), done.get("errors", 0),
                   json.dumps({**done, "seconds": round(time.monotonic() - started, 1)})))
 
 
 def main(argv=None) -> int:
-    args = argv if argv is not None else sys.argv[1:]
-    if args not in (["load"], ["update"]):
+    if (argv if argv is not None else sys.argv[1:]):
         print(__doc__, file=sys.stderr)
         return 2
     started = time.monotonic()
@@ -576,12 +668,7 @@ def main(argv=None) -> int:
         if not conn.execute("SELECT pg_try_advisory_lock(%s)", (LOCK,)).fetchone()[0]:
             print("another OpenStreetMap run is going: skipped")
             return 0
-        if args == ["load"]:
-            done = store(conn, download())
-            conn.commit()
-            write_state({})
-        else:
-            done = update(conn)
+        done = sync(conn)
         record(conn, started, done)
         conn.commit()
     print(json.dumps(done))

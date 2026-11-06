@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS lieu_nodes ON osm.lieu USING gin (nodes);
 CREATE INDEX IF NOT EXISTS lieu_kind ON osm.lieu (kind, admin_level);
 CREATE INDEX IF NOT EXISTS lieu_name ON osm.lieu (name);
 COMMENT ON TABLE osm.lieu IS
-    'reference: the ways, squares and administrative limits of the 75, 92, 93 and 94 from OpenStreetMap, updated every few minutes (osm.py)';
+    'reference: the ways, squares and administrative limits of the 75, 92, 93 and 94 from OpenStreetMap, brought up to date when the app asks for its map (osm.py)';
 
 -- The area a relation's member ways enclose, made valid. Mappers leave some multipolygons broken (rings crossing or
 -- touching wrongly): the lines are cut where they cross and tried again, and a relation no area can be made of is left

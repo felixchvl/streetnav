@@ -178,13 +178,55 @@ class LieuTest(unittest.TestCase):
         listed = [{"id": 9, "created_at": "2026-11-05T10:00:00Z", "closed_at": "2026-11-05T10:01:00Z", "open": False,
                    "changes": 1, "box": [48.85, 2.31, 48.85, 2.33]}]
         body = change(("modify", way_xml(100, [1001, 1002, 1003], {"highway": "residential", "name": "Rue B"})))
+        members = mock.Mock(return_value=set())
         with mock.patch.object(osm, "changesets", return_value=listed), \
                 mock.patch.object(osm, "request", return_value=body) as request:
-            self.assertEqual(osm.update(self.conn)["changed"], 1)
-            self.assertEqual(osm.update(self.conn)["changesets"], 0)
+            self.assertEqual(osm.update(self.conn, members=members)["changed"], 1)
+            self.assertEqual(osm.update(self.conn, members=members)["changesets"], 0)
         self.assertEqual(request.call_count, 1)
+        members.assert_called_once_with({100}, set())
         state = json.loads((Path(self.state.name) / "osm-state.json").read_text())
-        self.assertEqual((state["since"], state["seen"]), ("2026-11-05T10:01:00Z", {"9": 1}))
+        self.assertEqual((state["since"], state["seen"], state["relations"]), ("2026-11-05T10:01:00Z", {"9": 1}, {}))
+
+    def test_relation_read_again_when_a_member_way_moved(self):
+        # The outline of the 1st arrondissement (relation 4, member way 40) redrawn: the relation is not in the change.
+        listed = [{"id": 10, "created_at": "2026-11-05T10:00:00Z", "closed_at": "2026-11-05T10:01:00Z", "open": False,
+                   "changes": 2, "box": [48.82, 2.30, 48.88, 2.35]}]
+        body = change(("modify", node_xml(4001, 2.351, 48.85) + way_xml(40, [4001, 4002, 4001], {})))
+        redrawn = {**limit(4, 9, "75101", 2.30, 48.82, 2.351, 48.88), "version": 2}
+        members = mock.Mock(return_value={4, 999})  # 999: a relation osm.lieu does not keep
+        behind = {"elements": [redrawn], "osm3s": {"timestamp_osm_base": "2026-11-05T09:59:00Z"}}
+        caught_up = {"elements": [redrawn], "osm3s": {"timestamp_osm_base": "2026-11-05T10:02:00Z"}}
+        state = Path(self.state.name) / "osm-state.json"
+        with mock.patch.object(osm, "changesets", return_value=listed), \
+                mock.patch.object(osm, "request", return_value=body), \
+                mock.patch.object(osm, "overpass_answer", side_effect=[behind, caught_up]) as answer:
+            self.assertEqual(osm.update(self.conn, members=members)["relations"], 1)
+            self.assertIn("relation(id:4);", answer.call_args.args[0])
+            self.assertEqual(self.rows("SELECT version FROM osm.lieu WHERE osm_type = 'r' AND osm_id = 4"), [(2,)])
+            # Overpass was behind the change: read again at the next run, even with nothing new.
+            self.assertEqual(json.loads(state.read_text())["relations"], {"ids": [4], "newest": "2026-11-05T10:00:00Z"})
+            self.assertEqual(osm.update(self.conn, members=members)["relations"], 1)
+        members.assert_called_once_with({40}, {4001})
+        self.assertEqual(json.loads(state.read_text())["relations"], {})
+
+    def test_one_pipeline(self):
+        with mock.patch.object(osm, "update", return_value={"changesets": 0}) as update, \
+                mock.patch.object(osm, "store", return_value={"voie": 1}) as store, \
+                mock.patch.object(osm, "download", return_value=iter([])):
+            self.assertEqual(osm.sync(self.conn), {"changesets": 0})
+            self.conn.execute("TRUNCATE osm.lieu")
+            self.assertEqual(osm.sync(self.conn), {"voie": 1})
+        self.assertEqual((update.call_count, store.call_count), (1, 1))
+
+    def test_ask_for_a_run(self):
+        wanted = Path(self.state.name) / osm.WANTED
+        with mock.patch.multiple(osm, _asked=None):
+            osm.ask(wait=0)
+            self.assertTrue(wanted.exists())
+            wanted.unlink()
+            osm.ask(wait=0)  # asked a moment ago: not again
+            self.assertFalse(wanted.exists())
 
 
 if __name__ == "__main__":
