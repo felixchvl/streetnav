@@ -86,6 +86,24 @@ struct StreetnavServerClient {
         try JSONDecoder().decode(Status.self, from: await send("GET", "status")).activities
     }
 
+    /// What the server's OpenStreetMap run did (POST /osm/refresh): the changesets applied and the places they added,
+    /// changed or removed, or `running` while it goes on (Sunday's full run, or Overpass slow).
+    struct OSMRefresh: Decodable {
+        let running: Bool
+        let changesets: Int?
+        let added: Int?
+        let changed: Int?
+        let removed: Int?
+        let moved: Int?
+        let relations: Int?
+        let errors: Int?
+    }
+
+    /// Brings the server's copy of OpenStreetMap up to date now, without waiting for Sunday's full run.
+    func refreshOSM() async throws -> OSMRefresh {
+        try JSONDecoder().decode(OSMRefresh.self, from: await send("POST", "osm/refresh"))
+    }
+
     private func send(_ method: String, _ path: String, body: Data? = nil) async throws -> Data {
         var request = URLRequest(url: baseURL.appending(path: path), timeoutInterval: 60)
         request.httpMethod = method

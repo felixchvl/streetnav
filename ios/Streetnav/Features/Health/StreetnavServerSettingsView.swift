@@ -14,6 +14,8 @@ struct StreetnavServerSettingsView: View {
     @State private var pendingCertificate: Data?
     @State private var certificatePassword = ""
     @State private var certificateText: String?
+    @State private var isUpdatingOSM = false
+    @State private var osmText: String?
 
     var body: some View {
         Form {
@@ -42,6 +44,22 @@ struct StreetnavServerSettingsView: View {
                 header("Serveur Streetnav")
             } footer: {
                 Text("Le jeton reste dans le trousseau de l'iPhone.")
+            }
+
+            Section {
+                Button(isUpdatingOSM ? "Mise à jour en cours…" : "Mettre à jour depuis OpenStreetMap") {
+                    Task { await updateOSM() }
+                }
+                .disabled(isUpdatingOSM || StreetnavServerSettings.client == nil)
+                if let osmText {
+                    Text(osmText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                header("OpenStreetMap")
+            } footer: {
+                Text("Le serveur relit tout OpenStreetMap chaque dimanche. Après avoir modifié des rues, des places ou des limites dans OSM, ce bouton les prend en compte tout de suite.")
             }
 
             Section {
@@ -121,6 +139,41 @@ struct StreetnavServerSettingsView: View {
             certificateText = error.localizedDescription
         }
         certificatePassword = ""
+    }
+
+    /// Asks the server for OpenStreetMap's latest changes, then the map's files again (zones, statistics).
+    private func updateOSM() async {
+        guard let client = StreetnavServerSettings.client else {
+            osmText = StreetnavServerError.notConfigured.localizedDescription
+            return
+        }
+        isUpdatingOSM = true
+        defer { isUpdatingOSM = false }
+        do {
+            let run = try await client.refreshOSM()
+            osmText = Self.describe(run)
+            if run.running == false { await StreetnavRideHistory.shared.refresh() }
+        } catch {
+            osmText = error.localizedDescription
+        }
+    }
+
+    static func describe(_ run: StreetnavServerClient.OSMRefresh) -> String {
+        if run.running {
+            return "Le serveur lit encore OpenStreetMap (la relecture du dimanche, ou Overpass lent) : réessaie dans quelques minutes."
+        }
+        func count(_ n: Int, _ one: String, _ many: String) -> String? { n > 0 ? "\(n) \(n == 1 ? one : many)" : nil }
+        let parts = [
+            count(run.added ?? 0, "ajout", "ajouts"),
+            count((run.changed ?? 0) + (run.moved ?? 0), "modification", "modifications"),
+            count(run.removed ?? 0, "suppression", "suppressions"),
+            count(run.relations ?? 0, "limite ou place relue", "limites ou places relues"),
+        ].compactMap { $0 }
+        var text = parts.isEmpty ? "Déjà à jour." : "À jour : " + parts.joined(separator: ", ") + "."
+        if let errors = run.errors, errors > 0 {
+            text += " \(errors) \(errors == 1 ? "erreur" : "erreurs"), voir le journal du serveur."
+        }
+        return text
     }
 
     private func saveAndTest() async {
