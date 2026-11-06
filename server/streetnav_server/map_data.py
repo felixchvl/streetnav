@@ -11,8 +11,9 @@ GET /zones: the outlines of those zones, simplified to about 25 m, for the app's
 GET /tracks/outside: the parts of the bike rides' tracks outside those zones, where no street is measured, for the map
 to show where the rider has been there too.
 
-The four read osm.lieu: the first of them the app asks for brings it up to date with OpenStreetMap (osm.ask), so that
-an edit saved in OSM shows as soon as the app's map is opened again.
+POST /osm/refresh: brings osm.lieu up to date with OpenStreetMap now (osm.ask), from the button in the app's settings,
+so that an edit saved in OSM shows without waiting for Sunday's full run; what the run did, or running: true while it
+goes on.
 """
 from __future__ import annotations
 
@@ -37,13 +38,8 @@ DEPARTMENTS_SQL = f"""SELECT ST_Union(geom) FROM osm.lieu
 ZONE_SIMPLIFY_M = 25
 
 
-def osm_up_to_date() -> None:
-    osm.ask()
-
-
 def router(require_token) -> APIRouter:
     api = APIRouter(dependencies=[Depends(require_token)])
-    fresh = [Depends(osm_up_to_date)]
 
     @api.get("/tracks")
     def tracks(if_none_match: str | None = Header(default=None)) -> Response:
@@ -64,14 +60,14 @@ def router(require_token) -> APIRouter:
                 {"tolerance": SIMPLIFY_DEGREES}).fetchone()[0]
         return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
-    @api.get("/streets", dependencies=fresh)
+    @api.get("/streets")
     def streets(if_none_match: str | None = Header(default=None)) -> Response:
         etag = '"' + hashlib.sha256(f"streets:none:{STREETS_FORMAT}".encode()).hexdigest()[:16] + '"'
         if if_none_match == etag:
             return Response(status_code=304, headers={"ETag": etag})
         return Response(EMPTY, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
-    @api.get("/tracks/outside", dependencies=fresh)
+    @api.get("/tracks/outside")
     def tracks_outside(if_none_match: str | None = Header(default=None)) -> Response:
         with connect() as conn:
             count, changed = conn.execute(
@@ -95,7 +91,7 @@ def router(require_token) -> APIRouter:
                    FROM cut""", {"tolerance": SIMPLIFY_DEGREES}).fetchone()[0]
         return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
-    @api.get("/zones", dependencies=fresh)
+    @api.get("/zones")
     def zone_shapes(if_none_match: str | None = Header(default=None)) -> Response:
         with connect() as conn:
             zones, points = conn.execute(f"SELECT count(*), coalesce(sum(ST_NPoints(geom)), 0) FROM {ZONES}").fetchone()
@@ -110,7 +106,7 @@ def router(require_token) -> APIRouter:
                     FROM {ZONES}""", (ZONE_SIMPLIFY_M,)).fetchone()[0]
         return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
-    @api.get("/stats", dependencies=fresh)
+    @api.get("/stats")
     def stats() -> dict:
         with connect() as conn:
             def totals(where: str) -> dict:
@@ -147,5 +143,10 @@ def router(require_token) -> APIRouter:
                            "ridden_km": round(ridden, 1), "total_km": round(total, 1)}
                           for code, name, department, ring, ridden, total in zones],
             }
+
+    @api.post("/osm/refresh")
+    def osm_refresh() -> dict:
+        done = osm.ask()
+        return {"running": True} if done is None else {"running": False, **done}
 
     return api

@@ -74,7 +74,7 @@ cp "$SRC"/deploy/*.service "$SRC"/deploy/*.timer "$SRC"/deploy/*.path /etc/syste
 systemctl daemon-reload
 systemctl enable --now streetnav-api.service streetnav-backup.timer streetnav-osm.path streetnav-osm-full.timer
 systemctl restart streetnav-api.service
-# OpenStreetMap's places, read once (about 15 minutes, in the background); then each time the app asks for its map
+# OpenStreetMap's places, read once (about 15 minutes, in the background); then every Sunday and from the app's button
 if [ "$(runuser -u postgres -- psql -tA -d streetnav -c 'SELECT count(*) FROM osm.lieu')" = 0 ]; then
   systemctl start --no-block streetnav-osm.service
 fi

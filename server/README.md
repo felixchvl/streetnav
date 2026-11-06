@@ -201,10 +201,10 @@ One pipeline, `python -m streetnav_server.osm`, run in full every week and in be
 - in full, `osm full` (`streetnav-osm-full.timer`, Sundays at 04:00, and the first run, `osm.lieu` empty), it reads
   everything again from Overpass in 4 x 4 tiles of the box around the four departments and replaces the table (about
   15 minutes, in the background). A run on demand going at that moment is waited for, not skipped;
-- on demand, when the app asks for its map (`GET /zones`, `/streets`, `/stats` or `/tracks/outside`), the API writes
-  `/var/lib/streetnav/osm-wanted`, which `streetnav-osm.path` watches to start `streetnav-osm.service`, and waits for
-  it up to 20 seconds; one run at most every minute. An edit saved in OSM shows as soon as the app's map is opened
-  again;
+- on demand, from the button in the app's settings (Réglages › Serveur Streetnav › Mettre à jour depuis
+  OpenStreetMap): `POST /osm/refresh` writes `/var/lib/streetnav/osm-wanted`, which `streetnav-osm.path` watches to
+  start `streetnav-osm.service`, and waits for it up to 30 seconds, answering what it did (or `running: true` while it
+  goes on). An edit saved in OSM shows without waiting for Sunday;
 - a run on demand asks the OSM API for the changesets touching the box closed since the last run, and the ones still
   open, and applies their changes object by object, a newer version only replacing an older one. A way takes its
   nodes' positions from the change, from the ways known already or from the API. A relation (a limit, a square drawn

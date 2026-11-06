@@ -3,6 +3,8 @@ The database tests need STREETNAV_TEST_DATABASE_URL (a throwaway database these 
 import json
 import os
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -222,13 +224,19 @@ class LieuTest(unittest.TestCase):
 
     def test_ask_for_a_run(self):
         wanted = Path(self.state.name) / osm.WANTED
-        with mock.patch.multiple(osm, _asked=None):
-            osm.ask(wait=0)
-            self.assertTrue(wanted.exists())
-            wanted.unlink()
-            osm.ask(wait=0)  # asked a moment ago: not again
-            self.assertFalse(wanted.exists())
+        self.assertIsNone(osm.ask(wait=0))  # no run came: still going
+        self.assertTrue(wanted.exists())
+        # A run ends while the button waits: what it did comes back.
+        done = {"changesets": 1, "added": 2, "changed": 0, "removed": 0, "moved": 0, "relations": 0, "errors": 0}
 
+        def run_ends():
+            with registry.connect() as conn:  # committed on leaving
+                osm.record(conn, time.monotonic(), done)
+
+        later = threading.Timer(0.6, run_ends)
+        later.start()
+        self.assertEqual({k: v for k, v in osm.ask(wait=5).items() if k != "seconds"}, done)
+        later.join()
 
 if __name__ == "__main__":
     unittest.main()

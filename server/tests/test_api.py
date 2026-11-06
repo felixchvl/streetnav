@@ -28,10 +28,11 @@ class ApiTest(unittest.TestCase):
     def setUp(self):
         self.raw = tempfile.TemporaryDirectory()
         os.environ["STREETNAV_RAW_DIR"] = self.raw.name
-        # The map asks for OpenStreetMap's changes in a throwaway folder, without waiting for a run no unit starts.
+        # The settings' button asks for OpenStreetMap's changes in a throwaway folder, without waiting for a run no unit
+        # starts.
         self.state = tempfile.TemporaryDirectory()
         os.environ["STREETNAV_STATE_DIR"] = self.state.name
-        patcher = mock.patch.multiple(osm, WAIT_S=0, _asked=None)
+        patcher = mock.patch.object(osm, "WAIT_S", 0)
         patcher.start()
         self.addCleanup(patcher.stop)
         self.addCleanup(self.state.cleanup)
@@ -91,7 +92,9 @@ class ApiTest(unittest.TestCase):
         self.assertEqual([f["properties"]["code"] for f in features], ["75101", "75102", "92001", "92002"])
         self.assertIn(features[0]["geometry"]["type"], ("Polygon", "MultiPolygon"))
         self.assertEqual(self.client.get("/zones", headers={"If-None-Match": response.headers["ETag"]}).status_code, 304)
-        # Asking for the map asked for OpenStreetMap's latest changes.
+        # Opening the map does not ask OpenStreetMap for its changes: the settings' button does.
+        self.assertFalse((Path(self.state.name) / osm.WANTED).exists())
+        self.assertEqual(self.client.post("/osm/refresh").json(), {"running": True})
         self.assertTrue((Path(self.state.name) / osm.WANTED).exists())
 
     def test_tracks_outside_the_departments(self):

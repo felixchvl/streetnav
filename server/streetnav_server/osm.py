@@ -17,13 +17,13 @@ n when it shares a border with one of ring n - 1: the two overlap over at least 
 WIDEN_M, which leaves out communes that only meet at a corner. Each voie and place carries the zone its middle lies in.
 
 One pipeline, run in full every week and in between on demand. In full (every Sunday, and the first time, osm.lieu
-empty), it downloads everything from Overpass again (about 15 minutes). On demand, when the app asks for its map (the
-API asks for a run, ask, and waits for it a little), it brings osm.lieu up to date in a few seconds: the OSM API lists
-the changesets in the box closed since the last run and the ones still open, and each one's changes are applied, a
-newer version only replacing an older one. A way takes its nodes' positions from the change, from the ways already
-known or from the API; a node moved alone moves the ways it belongs to. A relation is read again from Overpass when it
-changed, or when one of its member ways did (a limit or a square whose outline was redrawn); when Overpass is behind
-the changes, it is read again at the next run.
+empty), it downloads everything from Overpass again (about 15 minutes). On demand, from the button in the app's
+settings (POST /osm/refresh: the API asks for a run, ask, and waits for it a little), it brings osm.lieu up to date
+in a few seconds: the OSM API lists the changesets in the box closed since the last run and the ones still open, and
+each one's changes are applied, a newer version only replacing an older one. A way takes its nodes' positions from the
+change, from the ways already known or from the API; a node moved alone moves the ways it belongs to. A relation is
+read again from Overpass when it changed, or when one of its member ways did (a limit or a square whose outline was
+redrawn); when Overpass is behind the changes, it is read again at the next run.
 
   python -m streetnav_server.osm         bring osm.lieu up to date (everything, the first time)
   python -m streetnav_server.osm full    download everything again
@@ -34,7 +34,6 @@ import json
 import os
 import re
 import sys
-import threading
 import time
 import urllib.error
 import urllib.parse
@@ -63,8 +62,7 @@ IDS_PER_QUERY = 5000
 RETRIES = 10
 # On demand: the API writes this file in the state folder, and streetnav-osm.path starts streetnav-osm.service.
 WANTED = "osm-wanted"
-WAIT_S = 20.0  # how long the app's request waits for the run
-EVERY_S = 60.0  # one run asked for at most every minute: the app asks for several map files in a row
+WAIT_S = 30.0  # how long the app's button waits for the run
 
 HIGHWAYS = ("primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|"
             "living_street|pedestrian|cycleway")
@@ -623,34 +621,21 @@ def sync(conn, full: bool = False) -> dict:
     return update(conn)
 
 
-_asked: float | None = None
-_asking = threading.Lock()
-
-
-def ask(wait: float | None = None) -> None:
-    """Asks for a run (streetnav-osm.path starts streetnav-osm.service), at most once every EVERY_S, and waits for it up
-    to WAIT_S: what the app asks for next is up to date, and a longer run (the first, or one long after the last) goes
-    on alone. Several requests at once wait together for the same run."""
-    global _asked
-    with _asking:
-        now = time.monotonic()
-        if _asked is not None and now - _asked < EVERY_S:
-            return
-        _asked = now
-        with connect() as conn:
-            conn.autocommit = True
-            last = "SELECT max(finished_at) FROM sync_run WHERE source = 'osm'"
-            before = conn.execute(last).fetchone()[0]
-            try:
-                state_path().with_name(WANTED).write_text(datetime.now(timezone.utc).isoformat() + "\n")
-            except OSError as error:
-                print(f"OpenStreetMap run not asked for: {error}", file=sys.stderr)
-                return
-            deadline = now + (WAIT_S if wait is None else wait)
-            while time.monotonic() < deadline:
-                time.sleep(0.5)
-                if conn.execute(last).fetchone()[0] != before:
-                    return
+def ask(wait: float | None = None) -> dict | None:
+    """Asks for a run on demand (streetnav-osm.path starts streetnav-osm.service) and waits for it up to WAIT_S: what it
+    did, or None while it goes on (a full run going, Overpass slow)."""
+    with connect() as conn:
+        conn.autocommit = True
+        last = "SELECT finished_at, message FROM sync_run WHERE source = 'osm'"
+        before = conn.execute(last).fetchone()
+        state_path().with_name(WANTED).write_text(datetime.now(timezone.utc).isoformat() + "\n")
+        deadline = time.monotonic() + (WAIT_S if wait is None else wait)
+        while time.monotonic() < deadline:
+            time.sleep(0.5)
+            run = conn.execute(last).fetchone()
+            if run != before:
+                return json.loads(run[1] or "{}")
+    return None
 
 
 def record(conn, started: float, done: dict) -> None:

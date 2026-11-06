@@ -1,5 +1,5 @@
 [Unit]
-Description=Streetnav: OpenStreetMap's places brought up to date when the app asks for its map (the API writes osm-wanted)
+Description=Streetnav: OpenStreetMap's places brought up to date from the app's settings (POST /osm/refresh writes osm-wanted)
 
 [Path]
 PathChanged=/var/lib/streetnav/osm-wanted
