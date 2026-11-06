@@ -144,7 +144,7 @@ nightly dump; `streetnav-backup` leaves that schema out). In QGIS: a
 PostgreSQL connection to `192.168.1.62:5432`, database `streetnav`, SSL mode `require`. Useful layers:
 `activity` (track, one line per activity; filter `sport = 'cycling'`) and `activity_source` (one track per
 version, to compare them). Tracks are `LineStringZM` in EPSG:4326, both with a spatial index. OpenStreetMap's places:
-`osm.lieu` (filter on `kind`; geometry in EPSG:2154, QGIS splits lines and surfaces) and `osm.voie`.
+`osm.lieu` (filter on `kind`; geometry in EPSG:2154, QGIS splits lines and surfaces).
 
 ## Remote access
 
@@ -193,7 +193,7 @@ suburbs in this database, as OpenStreetMap has them, with every tag:
 
 Only what lies in the 75, 92, 93 and 94 stays. The zones are the arrondissements of Paris (ring 0) and the communes of
 the 92, 93 and 94, numbered in rings out from Paris (a commune is in ring n when it shares a border with one of ring
-n - 1); each voie and place carries the `zone` its middle lies in. `osm.voie` groups the ways by name and zone.
+n - 1); each voie and place carries the `zone` its middle lies in.
 Every way keeps its nodes (`nodes`), so that a node moved alone moves the ways through it.
 
 - `streetnav-osm-update.timer`, every 2 minutes: `osm update` asks the OSM API for the changesets touching the box

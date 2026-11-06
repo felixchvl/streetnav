@@ -54,19 +54,14 @@ EXCEPTION WHEN OTHERS THEN
     RETURN NULL;
 END $$;
 
--- The voies as people name them: the ways of the same name in the same zone.
-CREATE OR REPLACE VIEW osm.voie AS
-SELECT name, zone, count(*) AS ways, sum(ST_Length(geom)) AS length_m, ST_Collect(geom) AS geom,
-       array_agg(osm_id ORDER BY osm_id) AS osm_ids
-FROM osm.lieu WHERE kind = 'voie' AND name IS NOT NULL
-GROUP BY name, zone;
-COMMENT ON VIEW osm.voie IS 'reference: the ways of osm.lieu grouped by name and zone';
+-- The ways grouped by name and zone, a view until 2026-11-06: nothing read it.
+DROP VIEW IF EXISTS osm.voie;
 
 DO $$
 BEGIN
     IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'qgis') THEN
         GRANT USAGE ON SCHEMA osm TO qgis;
-        GRANT SELECT ON osm.lieu, osm.voie TO qgis;
+        GRANT SELECT ON osm.lieu TO qgis;
     END IF;
 END $$;
 

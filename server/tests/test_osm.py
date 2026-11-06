@@ -134,8 +134,6 @@ class LieuTest(unittest.TestCase):
         self.assertEqual(self.rows("SELECT code FROM osm.lieu WHERE kind = 'limite' ORDER BY code"),
                          [("75",), ("75056",), ("75101",), ("75102",), ("92",), ("92001",), ("92002",), ("92098",)])
         self.assertEqual(self.rows("SELECT ST_GeometryType(geom) FROM osm.lieu WHERE osm_id = 103"), [("ST_Polygon",)])
-        self.assertEqual(self.rows("SELECT name, zone, ways FROM osm.voie ORDER BY name"),
-                         [("Rue A", "75101", 1), ("Rue G", "75102", 1)])
 
     def test_broken_multipolygons_make_an_area_or_none(self):
         crossing = "ST_GeomFromText('MULTILINESTRING((0 0,10 10,10 0,0 10,0 0),(2 2,3 3))', 2154)"
