@@ -36,6 +36,10 @@ enum StreetnavVanMoofProtocol {
         case motorState = 0x0260        // read only, meaning undocumented
         case bellMode = 0x0281          // read only here, values undocumented
         case auth = 0xFF00              // certificate and challenge
+        /// [granted, role]: published right after authentication. 7 · 7 in the session where the bike answered
+        /// everything, 1 · 7 in the one where it answered nothing and ignored the unlock (journal of 6 Nov 2026): read as
+        /// the access the bike grants and the certificate's role (7, owner).
+        case access = 0xFF02
     }
 
     /// The device classes of the S6's trouble codes (the high byte), as Knight1/vanmoof-ble read them in the firmware.
@@ -54,10 +58,17 @@ enum StreetnavVanMoofProtocol {
     }
 
     static func encode(_ message: Message) -> Data {
-        var body = Data([message.id, message.type.rawValue | (message.qos & 1) << 3])
-        body.append(contentsOf: [UInt8(message.topic & 0xFF), UInt8(message.topic >> 8)])
-        body.append(contentsOf: [UInt8(message.payload.count & 0xFF), UInt8(message.payload.count >> 8)])
-        body.append(message.payload)
+        var body: Data
+        if message.type == .ack {
+            // Only its id and type, as the bike's own: the bike ignored the longer form, with a topic and a length, and
+            // kept sending its message again (journal of 6 Nov 2026).
+            body = Data([message.id, MessageType.ack.rawValue])
+        } else {
+            body = Data([message.id, message.type.rawValue | (message.qos & 1) << 3])
+            body.append(contentsOf: [UInt8(message.topic & 0xFF), UInt8(message.topic >> 8)])
+            body.append(contentsOf: [UInt8(message.payload.count & 0xFF), UInt8(message.payload.count >> 8)])
+            body.append(message.payload)
+        }
         let crc = crc16Modbus(body)
         body.append(contentsOf: [UInt8(crc & 0xFF), UInt8(crc >> 8)])
         return body
@@ -66,6 +77,11 @@ enum StreetnavVanMoofProtocol {
     /// Nil when the message is truncated or its CRC is wrong.
     static func decode(_ data: Data) -> Message? {
         let bytes = [UInt8](data)
+        // The bike's acknowledgements of the messages sent "at least once" (QoS 0): id, type and CRC, nothing else.
+        if bytes.count == 4, bytes[1] & 0x07 == MessageType.ack.rawValue {
+            guard crc16Modbus(Data(bytes[0..<2])) == UInt16(bytes[2]) | UInt16(bytes[3]) << 8 else { return nil }
+            return Message(type: .ack, topic: 0, id: bytes[0], qos: (bytes[1] >> 3) & 1)
+        }
         guard bytes.count >= 8 else { return nil }
         let length = Int(bytes[4]) | Int(bytes[5]) << 8
         guard bytes.count >= 8 + length else { return nil }

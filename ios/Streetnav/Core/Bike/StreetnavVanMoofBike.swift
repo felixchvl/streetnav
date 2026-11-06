@@ -67,10 +67,14 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     private var pendingReads: [UInt16: Date] = [:]
     /// The bike's first notifications of a connection go raw into the journal, to see what it sends as it sends it.
     private var rawNotes = 0
-    /// The other ways of asking for a value, tried once per connection (`probeReads`).
-    private var probe: Task<Void, Never>?
     /// A refused certificate is tried once more, on a new connection, before giving up.
     private var authRetried = false
+    /// A session granted less than the certificate's role (`P.Topic.access`) is tried once more too.
+    private var accessRetried = false
+    /// Between the end of a connection and the next one, on such a retry: an unlock waits instead of giving up.
+    private var retrying = false
+    /// After the certificate is accepted, the access the bike grants is awaited a moment.
+    private var accessWait: Task<Void, Never>?
     private var fragmentID: UInt8 = 0
     private var deadline: Task<Void, Never>?
     private var lockWaiters: [CheckedContinuation<Bool?, Never>] = []
@@ -115,18 +119,21 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     func disconnect() {
         if state != .idle { note("Déconnexion demandée") }
         authRetried = false
+        accessRetried = false
+        retrying = false
         deadline?.cancel()
         central?.stopScan()
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
         reset(to: .idle)
     }
 
-    /// Wakes the bike, which unlocks it. True once the bike reports its lock open.
+    /// Wakes the bike, which unlocks it. True once the bike reports its lock open. Sent "at least once" (QoS 0), which
+    /// the bike acknowledges: the journal shows whether it got the command, even when it does not report its lock.
     @discardableResult
     func unlock() async -> Bool {
         if state != .ready { await connect() }
         guard await waitUntilReady() else { return false }
-        send(.set, .wake, P.valuePayload([1]))
+        send(.set, .wake, P.valuePayload([1]), qos: 0)
         let timeout = Task { [weak self] in
             try? await Task.sleep(for: .seconds(6))
             guard Task.isCancelled == false, let self else { return }
@@ -150,36 +157,6 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
                                  .alarmSensitivity, .chargeLimit, .speed, .errors, .motorState, .wakeState, .bellMode,
                                  .notifyInterval]
         for topic in topics { request(topic) }
-    }
-
-    /// The bike answers none of the plain GETs, not even the firmware version its own firmware serves (journal of
-    /// 5 Nov 2026): tries the other ways a value can be asked for, one topic per way, so that the journal shows which
-    /// one it answers. The plain GETs follow.
-    private func probeReads() {
-        let wrappedEmpty = P.wrap(CBOR.array([]).encoded)
-        let tries: [(String, P.Message)] = [
-            ("subscribe qos 1", P.Message(type: .subscribe, topic: P.Topic.batteryLevel.rawValue)),
-            ("subscribe qos 0", P.Message(type: .subscribe, topic: P.Topic.chargeLimit.rawValue, qos: 0)),
-            ("get qos 0", P.Message(type: .get, topic: P.Topic.distance.rawValue, qos: 0)),
-            ("get enveloppé", P.Message(type: .get, topic: P.Topic.alarm.rawValue, payload: wrappedEmpty)),
-            ("get numéro de cadre", P.Message(type: .get, topic: 0x0031)),
-            ("subscribe allow_all", P.Message(type: .subscribe, topic: 0xFFFF)),
-        ]
-        probe?.cancel()
-        probe = Task { [weak self] in
-            for (label, message) in tries {
-                try? await Task.sleep(for: .seconds(1.5))
-                guard Task.isCancelled == false, let self, self.state == .ready else { return }
-                var message = message
-                message.id = self.messageID
-                self.messageID &+= 1
-                let payload = message.payload.isEmpty ? "" : " " + message.payload.map { String(format: "%02X", $0) }.joined()
-                self.write(message, label: "essai \(label) \(Self.name(message.topic))\(payload)")
-            }
-            try? await Task.sleep(for: .seconds(1.5))
-            guard Task.isCancelled == false, let self else { return }
-            self.refresh()
-        }
     }
 
     /// The speed again, while the rider watches it: the S6 sends nothing unasked, so twice a second, as the official
@@ -290,12 +267,15 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     }
 
     private func received(_ message: P.Message) {
+        if message.type == .ack {
+            return note("← accusé de réception #\(message.id)")
+        }
         let topic = P.Topic(rawValue: message.topic)
         if topic != .auth, quiet(topic) == false {
             note("← \(message.type) \(Self.name(message.topic)) #\(message.id) qos \(message.qos) : \(P.raw(message.payload))")
         }
-        // QoS 0 is "at least once" in this protocol: the bike waits for its acknowledgement before it goes on.
-        if message.qos == 0, message.type != .ack {
+        // QoS 0 is "at least once" in this protocol: the bike sends it again until it is acknowledged.
+        if message.qos == 0 {
             write(.init(type: .ack, topic: message.topic, id: message.id), label: "ack \(Self.name(message.topic)) #\(message.id)")
         }
         guard message.type == .publish else { return }
@@ -308,11 +288,17 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
                 guard let key, let signature = try? key.signature(for: challenge) else { return fail("Signature impossible.") }
                 send(.set, .auth, P.signaturePayload(signature))
             case .accepted?:
-                note("Certificat accepté : vélo prêt")
+                note("Certificat accepté")
                 authRetried = false
                 deadline?.cancel()
-                state = .ready
-                probeReads()
+                // Ready once the bike says what it grants (`access`), which follows at once; without it, after a second.
+                accessWait?.cancel()
+                accessWait = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(1))
+                    guard Task.isCancelled == false, let self, self.state == .authenticating else { return }
+                    self.note("Pas d'accès annoncé par le vélo : vélo prêt")
+                    self.becomeReady()
+                }
             case .rejected?:
                 note("Certificat refusé par le vélo")
                 guard authRetried == false else {
@@ -321,15 +307,30 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
                 // It was refused once and taken on the next connection: try again before giving up.
                 authRetried = true
                 note("Nouvel essai sur une nouvelle connexion")
-                deadline?.cancel()
-                if let peripheral { central?.cancelPeripheralConnection(peripheral) }
-                reset(to: .idle)
-                Task {
-                    try? await Task.sleep(for: .seconds(1))
-                    await connect()
-                }
+                retryOnNewConnection()
             case nil:
                 note("Réponse d'authentification illisible (\(message.payload.count) octets)")
+            }
+        case .access:
+            let fields = (P.fields(of: message.payload) ?? []).compactMap { field -> Int? in
+                if case .int(let value) = field { value } else { nil }
+            }
+            guard state == .authenticating, fields.count >= 2 else { break }
+            accessWait?.cancel()
+            if fields[0] == fields[1] {
+                note("Accès accordé : rôle \(fields[0]), vélo prêt")
+                accessRetried = false
+                becomeReady()
+            } else if accessRetried == false {
+                // A session with less than the owner's access answered nothing and ignored the unlock; the one after a
+                // new connection was granted it (journal of 6 Nov 2026).
+                note("Accès limité (\(fields[0]) au lieu de \(fields[1])) : nouvel essai sur une nouvelle connexion")
+                accessRetried = true
+                retryOnNewConnection()
+            } else {
+                note("Accès encore limité (\(fields[0]) au lieu de \(fields[1])) : le vélo risque de ne pas répondre")
+                accessRetried = false
+                becomeReady()
             }
         case .lockState:
             let locked = firstInt(message.payload).map { $0 != 0 }
@@ -379,11 +380,30 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         send(.get, topic, Data())
     }
 
-    private func send(_ type: P.MessageType, _ topic: P.Topic, _ payload: Data) {
+    private func send(_ type: P.MessageType, _ topic: P.Topic, _ payload: Data, qos: UInt8 = 1) {
         let label = topic == .auth || quiet(topic) ? nil
             : "\(type) \(Self.name(topic.rawValue))\(payload.isEmpty ? "" : " " + payload.map { String(format: "%02X", $0) }.joined())"
-        write(.init(type: type, topic: topic.rawValue, payload: payload, id: messageID), label: label)
+                + (qos == 0 ? " #\(messageID) qos 0" : "")
+        write(.init(type: type, topic: topic.rawValue, payload: payload, id: messageID, qos: qos), label: label)
         messageID &+= 1
+    }
+
+    private func becomeReady() {
+        state = .ready
+        refresh()
+    }
+
+    /// Ends this connection and starts another a second later; an unlock under way waits for it.
+    private func retryOnNewConnection() {
+        deadline?.cancel()
+        if let peripheral { central?.cancelPeripheralConnection(peripheral) }
+        reset(to: .idle)
+        retrying = true
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            await connect()
+            retrying = false
+        }
     }
 
     /// Encodes a message, cuts it into fragments and queues them; `label` goes in the journal.
@@ -443,7 +463,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
 
     private func waitUntilReady() async -> Bool {
         for _ in 0..<60 where state != .ready {
-            if state.isFailure || state == .idle { return false }
+            if state.isFailure || (state == .idle && retrying == false) { return false }
             try? await Task.sleep(for: .milliseconds(500))
         }
         return state == .ready
@@ -461,6 +481,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     private func fail(_ reason: String) {
         note("Échec : \(reason)")
         authRetried = false
+        accessRetried = false
         central?.stopScan()
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
         reset(to: .failed(reason))
@@ -475,8 +496,8 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         messageID = 0
         pendingReads.removeAll()
         rawNotes = 0
-        probe?.cancel()
-        probe = nil
+        accessWait?.cancel()
+        accessWait = nil
         lockWaiters.forEach { $0.resume(returning: nil) }
         lockWaiters.removeAll()
         self.state = state
