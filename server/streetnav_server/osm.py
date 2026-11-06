@@ -16,15 +16,17 @@ The zones are the arrondissements of Paris and the communes of the 92, 93 and 94
 n when it shares a border with one of ring n - 1: the two overlap over at least TOUCH_M2 once the other is widened by
 WIDEN_M, which leaves out communes that only meet at a corner. Each voie and place carries the zone its middle lies in.
 
-One pipeline, run on demand: when the app asks for its map, the API asks for a run (ask) and waits for it a little.
-The first run, osm.lieu empty, downloads everything from Overpass (about 15 minutes). Every later one brings it up to
-date: the OSM API lists the changesets in the box closed since the last run and the ones still open, and each one's
-changes are applied, a newer version only replacing an older one. A way takes its nodes' positions from the change,
-from the ways already known or from the API; a node moved alone moves the ways it belongs to. A relation is read again
-from Overpass when it changed, or when one of its member ways did (a limit or a square whose outline was redrawn);
-when Overpass is behind the changes, it is read again at the next run.
+One pipeline, run in full every week and in between on demand. In full (every Sunday, and the first time, osm.lieu
+empty), it downloads everything from Overpass again (about 15 minutes). On demand, when the app asks for its map (the
+API asks for a run, ask, and waits for it a little), it brings osm.lieu up to date in a few seconds: the OSM API lists
+the changesets in the box closed since the last run and the ones still open, and each one's changes are applied, a
+newer version only replacing an older one. A way takes its nodes' positions from the change, from the ways already
+known or from the API; a node moved alone moves the ways it belongs to. A relation is read again from Overpass when it
+changed, or when one of its member ways did (a limit or a square whose outline was redrawn); when Overpass is behind
+the changes, it is read again at the next run.
 
-  python -m streetnav_server.osm    bring osm.lieu up to date (everything, the first time)
+  python -m streetnav_server.osm         bring osm.lieu up to date (everything, the first time)
+  python -m streetnav_server.osm full    download everything again
 """
 from __future__ import annotations
 
@@ -610,9 +612,10 @@ def update(conn, bbox=BBOX, members=parent_relations) -> dict:
     return total
 
 
-def sync(conn) -> dict:
-    """Brings osm.lieu up to date: everything from Overpass while it is empty, the changes since the last run after."""
-    if conn.execute("SELECT NOT EXISTS (SELECT FROM osm.lieu)").fetchone()[0]:
+def sync(conn, full: bool = False) -> dict:
+    """Brings osm.lieu up to date: everything from Overpass in full or while it is empty, the changes since the last run
+    otherwise."""
+    if full or conn.execute("SELECT NOT EXISTS (SELECT FROM osm.lieu)").fetchone()[0]:
         done = store(conn, download())
         conn.commit()
         write_state({})
@@ -660,15 +663,19 @@ def record(conn, started: float, done: dict) -> None:
 
 
 def main(argv=None) -> int:
-    if (argv if argv is not None else sys.argv[1:]):
+    args = argv if argv is not None else sys.argv[1:]
+    if args not in ([], ["full"]):
         print(__doc__, file=sys.stderr)
         return 2
+    full = args == ["full"]
     started = time.monotonic()
     with connect() as conn:
-        if not conn.execute("SELECT pg_try_advisory_lock(%s)", (LOCK,)).fetchone()[0]:
+        if full:  # the week's run waits for a run on demand rather than being skipped until next week
+            conn.execute("SELECT pg_advisory_lock(%s)", (LOCK,))
+        elif not conn.execute("SELECT pg_try_advisory_lock(%s)", (LOCK,)).fetchone()[0]:
             print("another OpenStreetMap run is going: skipped")
             return 0
-        done = sync(conn)
+        done = sync(conn, full)
         record(conn, started, done)
         conn.commit()
     print(json.dumps(done))

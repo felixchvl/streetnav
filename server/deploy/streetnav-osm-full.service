@@ -1,0 +1,12 @@
+[Unit]
+Description=Streetnav: download OpenStreetMap's places of the 75, 92, 93 and 94 again (osm.lieu)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=streetnav
+EnvironmentFile=/etc/streetnav/streetnav.env
+WorkingDirectory=/opt/streetnav
+ExecStart=/opt/streetnav/venv/bin/python -m streetnav_server.osm full
+MemoryMax=768M

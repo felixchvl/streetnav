@@ -196,15 +196,16 @@ the 92, 93 and 94, numbered in rings out from Paris (a commune is in ring n when
 n - 1); each voie and place carries the `zone` its middle lies in.
 Every way keeps its nodes (`nodes`), so that a node moved alone moves the ways through it.
 
-One pipeline, `python -m streetnav_server.osm`, run on demand, with no timer:
+One pipeline, `python -m streetnav_server.osm`, run in full every week and in between on demand:
 
-- when the app asks for its map (`GET /zones`, `/streets`, `/stats` or `/tracks/outside`), the API writes
+- in full, `osm full` (`streetnav-osm-full.timer`, Sundays at 04:00, and the first run, `osm.lieu` empty), it reads
+  everything again from Overpass in 4 x 4 tiles of the box around the four departments and replaces the table (about
+  15 minutes, in the background). A run on demand going at that moment is waited for, not skipped;
+- on demand, when the app asks for its map (`GET /zones`, `/streets`, `/stats` or `/tracks/outside`), the API writes
   `/var/lib/streetnav/osm-wanted`, which `streetnav-osm.path` watches to start `streetnav-osm.service`, and waits for
   it up to 20 seconds; one run at most every minute. An edit saved in OSM shows as soon as the app's map is opened
   again;
-- the first run, `osm.lieu` empty, reads everything from Overpass in 4 x 4 tiles of the box around the four
-  departments (about 15 minutes, in the background). To start again from scratch, empty `osm.lieu`;
-- every later run asks the OSM API for the changesets touching the box closed since the last run, and the ones still
+- a run on demand asks the OSM API for the changesets touching the box closed since the last run, and the ones still
   open, and applies their changes object by object, a newer version only replacing an older one. A way takes its
   nodes' positions from the change, from the ways known already or from the API. A relation (a limit, a square drawn
   as a multipolygon) is read again from Overpass when it changed or when one of its member ways did; when Overpass's

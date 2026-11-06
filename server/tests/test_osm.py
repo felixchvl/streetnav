@@ -215,9 +215,10 @@ class LieuTest(unittest.TestCase):
                 mock.patch.object(osm, "store", return_value={"voie": 1}) as store, \
                 mock.patch.object(osm, "download", return_value=iter([])):
             self.assertEqual(osm.sync(self.conn), {"changesets": 0})
+            self.assertEqual(osm.sync(self.conn, full=True), {"voie": 1})  # every week
             self.conn.execute("TRUNCATE osm.lieu")
-            self.assertEqual(osm.sync(self.conn), {"voie": 1})
-        self.assertEqual((update.call_count, store.call_count), (1, 1))
+            self.assertEqual(osm.sync(self.conn), {"voie": 1})  # the first time
+        self.assertEqual((update.call_count, store.call_count), (1, 2))
 
     def test_ask_for_a_run(self):
         wanted = Path(self.state.name) / osm.WANTED
