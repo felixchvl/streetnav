@@ -305,6 +305,12 @@ struct StreetnavUnlockSlider: View {
     private var armed: Bool { progress >= Self.threshold }
     private var opening: Bool { armed || phase == .unlocking || phase == .unlocked }
 
+    /// Why it failed, or, while the bike sleeps through an unlock, how to wake it.
+    private var caption: String? {
+        if let failure { return failure }
+        return phase == .unlocking && bike.isAsleep == true ? "Le vélo dort : appuie sur un bouton du guidon." : nil
+    }
+
     var body: some View {
         if bike.isLocked != false || phase != .resting {
             ZStack(alignment: .top) {
@@ -318,8 +324,8 @@ struct StreetnavUnlockSlider: View {
             // Only the lock takes room: the track hangs below, over the map.
             .frame(width: Self.knob, height: Self.knob, alignment: .top)
             .overlay(alignment: .topLeading) {
-                if let failure {
-                    Text(failure)
+                if let caption {
+                    Text(caption)
                         .font(.footnote.weight(.medium))
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -328,7 +334,8 @@ struct StreetnavUnlockSlider: View {
                         .streetnavGlass(in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         // As wide as its words, up to 240 points, beyond the lock's own width.
                         .frame(width: 240, alignment: .leading)
-                        .offset(y: Self.knob + 8)
+                        // Below the lock, or below the track while it is down.
+                        .offset(y: Self.knob + 8 + (phase == .unlocking ? Self.travel : 0))
                         .transition(.opacity)
                 }
             }
@@ -449,7 +456,8 @@ struct StreetnavUnlockSlider: View {
                 withAnimation(.spring(duration: 0.45, bounce: 0.3)) {
                     phase = .failed
                     offset = 0
-                    failure = Self.reason(bike.state)
+                    failure = bike.isAsleep == true ? "Le vélo dort toujours : appuie sur un bouton du guidon, puis glisse à nouveau."
+                        : Self.reason(bike.state)
                 }
                 try? await Task.sleep(for: .seconds(4))
                 guard phase == .failed else { return }

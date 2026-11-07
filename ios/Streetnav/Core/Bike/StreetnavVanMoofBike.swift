@@ -19,6 +19,9 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     @Published private(set) var state: State = .idle
     @Published private(set) var battery: Int?
     @Published private(set) var isLocked: Bool?
+    /// True while only the bike's Bluetooth answers (`P.Topic.access` 1 · 7): it then ignores every request and the unlock
+    /// until it wakes, from one of its buttons or, says VanMoof, for an iPhone paired with it in the Bluetooth settings.
+    @Published private(set) var isAsleep: Bool?
     @Published private(set) var odometerMeters: Int?
     @Published private(set) var firmware: String?
     /// 0 off, 1 eco, 2 normal, 3 sport, 4 turbo.
@@ -69,8 +72,8 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     private var rawNotes = 0
     /// A refused certificate is tried once more, on a new connection, before giving up.
     private var authRetried = false
-    /// A session granted less than the certificate's role (`P.Topic.access`) is tried once more too.
-    private var accessRetried = false
+    /// The bike's characteristics outside its message service, read once per connection to see what they hold.
+    private var otherCharacteristics: [CBCharacteristic] = []
     /// Between the end of a connection and the next one, on such a retry: an unlock waits instead of giving up.
     private var retrying = false
     /// After the certificate is accepted, the access the bike grants is awaited a moment.
@@ -125,7 +128,6 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     func disconnect() {
         if state != .idle { note("Déconnexion demandée") }
         authRetried = false
-        accessRetried = false
         retrying = false
         deadline?.cancel()
         central?.stopScan()
@@ -133,36 +135,53 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         reset(to: .idle)
     }
 
-    /// Wakes the bike, which unlocks it. True once the bike reports its lock open. Sent exactly as the official app
-    /// sends it in the published captures: a SET with the app's usual QoS 1.
+    /// Wakes the bike, which unlocks it. True once the bike reports its lock open. Sent as the official app sends it in the
+    /// published captures (a SET with the app's usual QoS 1), then once more "at least once" (QoS 0), which the bike
+    /// acknowledges: the journal then shows whether it got it. A sleeping bike gets more time, to be woken from a button,
+    /// and the wake again as soon as it is up.
     @discardableResult
     func unlock() async -> Bool {
         #if DEBUG
-        // Development: the sample bike opens after a moment (-sampleUnlockFails YES: it never answers).
+        // Development: the sample bike opens after a moment (-sampleUnlockFails YES: it never answers; -sampleAsleep YES:
+        // it sleeps through it).
         if UserDefaults.standard.bool(forKey: "sampleBike") {
-            try? await Task.sleep(for: .seconds(1.2))
-            if UserDefaults.standard.bool(forKey: "sampleUnlockFails") { return false }
+            isAsleep = UserDefaults.standard.bool(forKey: "sampleAsleep") ? true : isAsleep
+            try? await Task.sleep(for: .seconds(isAsleep == true ? 4 : 1.2))
+            if UserDefaults.standard.bool(forKey: "sampleUnlockFails") || isAsleep == true { return false }
             isLocked = false
             return true
         }
         #endif
         if state != .ready { await connect() }
         guard await waitUntilReady() else { return false }
-        send(.set, .wake, P.valuePayload([1]))
+        sendWake()
+        let again = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard Task.isCancelled == false, let self, self.state == .ready, self.lockWaiters.isEmpty == false else { return }
+            self.sendWake(qos: 0)
+        }
         let timeout = Task { [weak self] in
             try? await Task.sleep(for: .seconds(6))
+            // Asleep, the bike may yet be woken from one of its buttons: a while longer.
+            if self?.isAsleep == true { try? await Task.sleep(for: .seconds(12)) }
             guard Task.isCancelled == false, let self else { return }
             self.lockWaiters.forEach { $0.resume(returning: nil) }
             self.lockWaiters.removeAll()
         }
         let locked = await withCheckedContinuation { lockWaiters.append($0) }
+        again.cancel()
         timeout.cancel()
         if locked == nil {
+            note(isAsleep == true ? "Pas d'ouverture : le vélo dort toujours" : "Pas d'ouverture annoncée par le vélo")
             // No news from the bike: ask it.
             request(.lockState)
             try? await Task.sleep(for: .seconds(2))
         }
         return (locked ?? isLocked) == false
+    }
+
+    private func sendWake(qos: UInt8 = 1) {
+        send(.set, .wake, P.valuePayload([1]), qos: qos)
     }
 
     /// Asks the bike for the values Streetnav shows.
@@ -327,25 +346,26 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
                 note("Réponse d'authentification illisible (\(message.payload.count) octets)")
             }
         case .access:
+            // [systems up, all of them]: 7 · 7 when the bike is awake and answers everything; 1 · 7 when only its
+            // Bluetooth is, which then answers nothing, even on a new connection (journals of 6 and 7 Nov 2026).
             let fields = (P.fields(of: message.payload) ?? []).compactMap { field -> Int? in
                 if case .int(let value) = field { value } else { nil }
             }
-            guard state == .authenticating, fields.count >= 2 else { break }
-            accessWait?.cancel()
-            if fields[0] == fields[1] {
-                note("Accès accordé : rôle \(fields[0]), vélo prêt")
-                accessRetried = false
+            guard fields.count >= 2 else { break }
+            let asleep = fields[0] < fields[1]
+            let woke = isAsleep == true && asleep == false
+            if asleep != isAsleep {
+                note(asleep ? "Vélo endormi (\(fields[0]) sur \(fields[1])) : seul son Bluetooth répond"
+                            : "Vélo réveillé (\(fields[0]) sur \(fields[1]))")
+            }
+            isAsleep = asleep
+            if state == .authenticating {
+                accessWait?.cancel()
                 becomeReady()
-            } else if accessRetried == false {
-                // A session with less than the owner's access answered nothing and ignored the unlock; the one after a
-                // new connection was granted it (journal of 6 Nov 2026).
-                note("Accès limité (\(fields[0]) au lieu de \(fields[1])) : nouvel essai sur une nouvelle connexion")
-                accessRetried = true
-                retryOnNewConnection()
-            } else {
-                note("Accès encore limité (\(fields[0]) au lieu de \(fields[1])) : le vélo risque de ne pas répondre")
-                accessRetried = false
-                becomeReady()
+            } else if woke, state == .ready {
+                refresh()
+                // Woken during an unlock: the wake again, now that it is heard.
+                if lockWaiters.isEmpty == false { sendWake() }
             }
         case .lockState:
             let locked = firstInt(message.payload).map { $0 != 0 }
@@ -405,7 +425,18 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
 
     private func becomeReady() {
         state = .ready
-        refresh()
+        if isAsleep != true { refresh() }
+        readOtherCharacteristics()
+    }
+
+    /// Once per connection, the bike's other characteristics are read and their size written in the journal. Should one
+    /// of them need a paired iPhone, iOS asks to pair with the bike, as VanMoof asks for its auto-wake.
+    private func readOtherCharacteristics() {
+        guard let peripheral else { return }
+        for characteristic in otherCharacteristics where characteristic.properties.contains(.read) {
+            peripheral.readValue(for: characteristic)
+        }
+        otherCharacteristics.removeAll()
     }
 
     /// Ends this connection and starts another a second later; an unlock under way waits for it.
@@ -536,7 +567,6 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     private func fail(_ reason: String) {
         note("Échec : \(reason)")
         authRetried = false
-        accessRetried = false
         central?.stopScan()
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
         reset(to: .failed(reason))
@@ -553,6 +583,8 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         rawNotes = 0
         accessWait?.cancel()
         accessWait = nil
+        isAsleep = nil
+        otherCharacteristics.removeAll()
         lockWaiters.forEach { $0.resume(returning: nil) }
         lockWaiters.removeAll()
         self.state = state
@@ -560,6 +592,17 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
 }
 
 extension StreetnavVanMoofBike {
+    /// A characteristic's properties, in the journal's words: whether it needs a paired iPhone shows here.
+    nonisolated fileprivate static func describe(_ properties: CBCharacteristicProperties) -> String {
+        let names: [(CBCharacteristicProperties, String)] = [
+            (.read, "lecture"), (.write, "écriture"), (.writeWithoutResponse, "écriture sans réponse"),
+            (.notify, "notification"), (.indicate, "indication"), (.notifyEncryptionRequired, "notification chiffrée"),
+            (.indicateEncryptionRequired, "indication chiffrée"), (.authenticatedSignedWrites, "écriture signée"),
+        ]
+        let found = names.filter { properties.contains($0.0) }.map(\.1)
+        return found.isEmpty ? "aucune" : found.joined(separator: ", ")
+    }
+
     fileprivate static func describe(_ state: CBManagerState) -> String {
         switch state {
         case .poweredOn: "allumé"
@@ -611,7 +654,8 @@ extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
             note("Connecté, recherche du service VanMoof")
             UserDefaults.standard.set(peripheral.identifier.uuidString, forKey: Self.knownBikeKey)
         }
-        peripheral.discoverServices(StreetnavVanMoofProtocol.serviceUUIDs.map { CBUUID(string: $0) })
+        // All of them, so that the journal shows what else the bike offers.
+        peripheral.discoverServices(nil)
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -629,20 +673,27 @@ extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
         let services = (peripheral.services ?? []).map(\.uuid.uuidString)
         MainActor.assumeIsolated { note("Services : \(services.isEmpty ? "aucun" : services.joined(separator: ", "))") }
         for service in peripheral.services ?? [] { peripheral.discoverCharacteristics(nil, for: service) }
-        if peripheral.services?.isEmpty ?? true {
+        let messageService = services.contains { StreetnavVanMoofProtocol.serviceUUIDs.contains($0.uppercased()) }
+        if messageService == false {
             MainActor.assumeIsolated { fail("Ce vélo ne présente pas le service VanMoof S6.") }
         }
     }
 
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        guard let characteristic = service.characteristics?.first(where: {
+        let characteristics = service.characteristics ?? []
+        let listed = characteristics.map { "\($0.uuid.uuidString) (\(Self.describe($0.properties)))" }.joined(separator: ", ")
+        guard let characteristic = characteristics.first(where: {
             $0.uuid.uuidString.hasPrefix(StreetnavVanMoofProtocol.characteristicPrefix)
         }) else {
-            let found = (service.characteristics ?? []).map(\.uuid.uuidString).joined(separator: ", ")
-            MainActor.assumeIsolated { note("Pas de caractéristique VanMoof dans \(service.uuid.uuidString) (\(found))") }
+            MainActor.assumeIsolated {
+                note("Service \(service.uuid.uuidString) : \(listed.isEmpty ? "aucune caractéristique" : listed)")
+                otherCharacteristics += characteristics
+            }
             return
         }
-        MainActor.assumeIsolated { note("Caractéristique \(characteristic.uuid.uuidString), activation des notifications") }
+        MainActor.assumeIsolated {
+            note("Caractéristique \(characteristic.uuid.uuidString) (\(Self.describe(characteristic.properties))), activation des notifications")
+        }
         peripheral.setNotifyValue(true, for: characteristic)
     }
 
@@ -658,6 +709,15 @@ extension StreetnavVanMoofBike: CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        guard characteristic.uuid.uuidString.hasPrefix(StreetnavVanMoofProtocol.characteristicPrefix) else {
+            // One of the bike's other characteristics, read once: only its size, or why it could not be read.
+            let uuid = characteristic.uuid.uuidString, size = characteristic.value?.count
+            MainActor.assumeIsolated {
+                if let error { note("Lecture \(uuid) impossible : \(error.localizedDescription)") }
+                else { note("Lecture \(uuid) : \(size ?? 0) octets") }
+            }
+            return
+        }
         guard let value = characteristic.value else { return }
         MainActor.assumeIsolated {
             if rawNotes < 80 {

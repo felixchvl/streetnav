@@ -36,9 +36,10 @@ enum StreetnavVanMoofProtocol {
         case motorState = 0x0260        // read only, meaning undocumented
         case bellMode = 0x0281          // read only here, values undocumented
         case auth = 0xFF00              // certificate and challenge
-        /// [granted, role]: published right after authentication. 7 · 7 in the session where the bike answered
-        /// everything, 1 · 7 in the one where it answered nothing and ignored the unlock (journal of 6 Nov 2026): read as
-        /// the access the bike grants and the certificate's role (7, owner).
+        /// Published right after authentication, and again when it changes. 7 · 7 while the bike is awake and answers
+        /// everything; 1 · 7 while it sleeps and only its Bluetooth answers: no reply then, the unlock ignored, a new
+        /// connection no better (journals of 6 and 7 Nov 2026). The same certificate got both a minute apart, so it is
+        /// read as the bike's state, not as the access it grants. Undocumented.
         case access = 0xFF02
     }
 
