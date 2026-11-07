@@ -19,8 +19,13 @@ struct StreetnavGuidanceView: View {
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
     @State private var showsOverview = false
     @State private var showsEnd = false
-    /// The overview, zoom and tilt buttons: a tap on the map hides them, another brings them back.
+    /// The overview, zoom and tilt buttons: a tap on the map hides them, another brings them back; moving the map by hand
+    /// sets them aside too, until it has been still for a moment.
     @State private var showsButtons = true
+    @State private var buttonsReturn: Task<Void, Never>?
+    /// The map moved by hand no longer follows the rider: the first button brings it back.
+    @State private var movedByHand = false
+    @State private var recenters = 0
     /// Where the cards lie within the safe area, and its height: the map keeps clear of them.
     @State private var safeHeight: CGFloat = 0
     @State private var maneuverFrame = CGRect.zero
@@ -35,7 +40,12 @@ struct StreetnavGuidanceView: View {
                              showsOverview: showsOverview,
                              streets: history.streets, live: live.ridden, outside: history.tracksOutside, filter: streetFilter,
                              dark: colorScheme == .dark, zoomOffset: zoomOffset, tiltOffset: tiltOffset, clearance: clearance,
-                             onTap: { showsButtons.toggle() })
+                             recenters: recenters,
+                             onTap: {
+                                 buttonsReturn?.cancel()
+                                 showsButtons.toggle()
+                             },
+                             onMove: mapMoved)
             .ignoresSafeArea()
             .overlay(alignment: .top) {
                 if guidance.hasArrived == false {
@@ -188,12 +198,36 @@ struct StreetnavGuidanceView: View {
         .streetnavGlass(in: RoundedRectangle(cornerRadius: 48, style: .continuous))
     }
 
-    /// The overview, then the zoom and the tilt while the camera follows the rider.
+    /// Set aside while the map is moved by hand, back once it has been still for a moment.
+    private func mapMoved(_ moving: Bool) {
+        buttonsReturn?.cancel()
+        if moving {
+            movedByHand = true
+            showsButtons = false
+        } else {
+            buttonsReturn = Task {
+                try? await Task.sleep(for: .seconds(2.5))
+                guard Task.isCancelled == false else { return }
+                showsButtons = true
+            }
+        }
+    }
+
+    /// The overview (or back to the rider, once the map was moved by hand), then the zoom and the tilt while the camera
+    /// follows the rider.
     private var mapButtons: some View {
         VStack(spacing: Self.spacing) {
-            roundButton(showsOverview ? "location.north.line.fill" : "point.topleft.down.to.point.bottomright.curvepath",
-                        label: showsOverview ? "Suivre ma position" : "Voir tout l'itinéraire") {
-                showsOverview.toggle()
+            if movedByHand, showsOverview == false {
+                roundButton("location.fill", label: "Recentrer") {
+                    movedByHand = false
+                    recenters += 1
+                }
+            } else {
+                roundButton(showsOverview ? "location.north.line.fill" : "point.topleft.down.to.point.bottomright.curvepath",
+                            label: showsOverview ? "Suivre ma position" : "Voir tout l'itinéraire") {
+                    movedByHand = false
+                    showsOverview.toggle()
+                }
             }
             if showsOverview == false {
                 zoomButtons
@@ -339,11 +373,17 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
     let tiltOffset: Double
     /// What the camera and Mapbox's logo keep clear of.
     let clearance: StreetnavMapClearance
+    /// Bumped to follow the rider again (or show the whole route again) after the map was moved by hand.
+    let recenters: Int
     /// A tap on the map (not a double tap, which zooms).
     let onTap: () -> Void
+    /// The map starts (true) or stops (false) being moved by hand.
+    let onMove: (Bool) -> Void
 
     final class Coordinator: NSObject, NavigationMapViewDelegate {
         var onTap: (() -> Void)?
+        var onMove: ((Bool) -> Void)?
+        var recenters = 0
         var shownRoute: String?
         var light: StandardLightPreset?
         var styleObserver: AnyCancelable?
@@ -362,6 +402,15 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
         /// The SDK's own single tap on the map, which waits for a double tap to fail: Mapbox's `onMapTap` never fires under it.
         @objc func tapped(_ gesture: UITapGestureRecognizer) {
             if gesture.state == .recognized { onTap?() }
+        }
+
+        /// A pan, pinch, rotation or tilt by hand (the SDK then stops following the rider), not a single tap.
+        func navigationMapViewUserDidStartInteraction(_ navigationMapView: NavigationMapView) {
+            onMove?(true)
+        }
+
+        func navigationMapViewUserDidEndInteraction(_ navigationMapView: NavigationMapView) {
+            onMove?(false)
         }
 
         /// The SDK's lines lie flat on the ground, where the buildings simply cover them, and fade with
@@ -397,6 +446,8 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
                       light: coordinator.light ?? .day, in: map, reload: true)
         }
         context.coordinator.onTap = onTap
+        context.coordinator.onMove = onMove
+        context.coordinator.recenters = recenters
         view.mapViewTapGestureRecognizer.addTarget(context.coordinator, action: #selector(Coordinator.tapped(_:)))
         context.coordinator.streets = streets
         context.coordinator.live = live
@@ -424,6 +475,11 @@ private struct StreetnavGuidanceMap: UIViewRepresentable {
 
     func updateUIView(_ view: NavigationMapView, context: Context) {
         context.coordinator.onTap = onTap
+        context.coordinator.onMove = onMove
+        if context.coordinator.recenters != recenters {
+            context.coordinator.recenters = recenters
+            view.update(navigationCameraState: showsOverview ? .overview : .following)
+        }
         show(guidance.routes, in: view, context: context)
         if context.coordinator.clearance != clearance {
             context.coordinator.clearance = clearance

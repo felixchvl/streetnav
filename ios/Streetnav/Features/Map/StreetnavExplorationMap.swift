@@ -44,6 +44,10 @@ struct StreetnavExplorationMap: View {
     @AppStorage(StreetnavStreetFilter.key) private var streetFilter: StreetnavStreetFilter = .all
     @State private var camera = CameraBox()
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
+    /// The zoom, tilt and other map buttons step aside while the map is moved by hand, to look around; they come back
+    /// once it has been still for a moment, or with a tap on the map, which also hides them.
+    @State private var buttonsAside = false
+    @State private var buttonsReturn: Task<Void, Never>?
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -62,6 +66,8 @@ struct StreetnavExplorationMap: View {
                     zoomButtons
                     controls
                 }
+                    .opacity(buttonsAside ? 0 : 1)
+                    .allowsHitTesting(buttonsAside == false)
                     .padding(.trailing, 22)
                     .padding(.bottom, panelOverlap + 14)
                     .transition(.opacity)
@@ -75,8 +81,13 @@ struct StreetnavExplorationMap: View {
                         StreetnavCompass(bearing: bearing, action: pointNorth)
                             .transition(.scale.combined(with: .opacity))
                     }
-                    tiltButtons
-                    threeDButton
+                    // The compass stays while the map is moved: it tells which way it is turned.
+                    Group {
+                        tiltButtons
+                        threeDButton
+                    }
+                    .opacity(buttonsAside ? 0 : 1)
+                    .allowsHitTesting(buttonsAside == false)
                 }
                 .padding(.leading, 22)
                 // Above Mapbox's logo, which sits on the panel where Maps has its Look Around button.
@@ -86,6 +97,7 @@ struct StreetnavExplorationMap: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showsButtons)
+        .animation(.easeInOut(duration: 0.2), value: buttonsAside)
         .accessibilityLabel("Carte des rues parcourues et des rues à découvrir")
     }
 
@@ -201,11 +213,28 @@ struct StreetnavExplorationMap: View {
                 FeatureState(.standardBuildings, id: id, state: .init(select: true))
             }
 
+            TapInteraction { _ in
+                buttonsReturn?.cancel()
+                buttonsAside.toggle()
+                return true
+            }
+
             // Where the phone points while exploring, where the bike goes while riding.
             Puck2D(bearing: mode.isNavigationLike ? .course : .heading)
                 .showsAccuracyRing(true)
         }
         .mapStyle(mapStyle)
+        .gestureHandlers(MapGestureHandlers(
+            onBegin: { gesture in
+                guard gesture != .singleTap else { return }
+                buttonsReturn?.cancel()
+                buttonsAside = true
+            },
+            onEnd: { gesture, willAnimate in
+                if gesture != .singleTap, willAnimate == false { bringButtonsBack() }
+            },
+            onEndAnimation: { _ in bringButtonsBack() }
+        ))
         .onCameraChanged { changed in
             let state = changed.cameraState
             camera.state = state
@@ -327,6 +356,17 @@ struct StreetnavExplorationMap: View {
             let padding = state.padding
             viewport = Viewport.camera(center: state.center, zoom: state.zoom, bearing: 0, pitch: state.pitch)
                 .padding(EdgeInsets(top: padding.top, leading: padding.left, bottom: padding.bottom, trailing: padding.right))
+        }
+    }
+
+    /// Once the map has been still for a moment.
+    private func bringButtonsBack() {
+        guard buttonsAside else { return }
+        buttonsReturn?.cancel()
+        buttonsReturn = Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            guard Task.isCancelled == false else { return }
+            buttonsAside = false
         }
     }
 
@@ -514,15 +554,15 @@ extension StreetnavExplorationMap {
                     .padding(.bottom, bottomInset)
             }
             #endif
-            // Close enough to read the streets around, tilted enough to see the buildings and their light, north up.
-            return Viewport.followPuck(zoom: 16.6 + StreetnavMapZoom.offset, pitch: pitch).padding(.bottom, bottomInset)
+            // As the navigation shows the ride, from the start: as close, as tilted, turning with where the phone points
+            // (the course means nothing standing still).
+            return Viewport.followPuck(zoom: 17 + StreetnavMapZoom.offset, bearing: .heading, pitch: pitch).padding(.bottom, bottomInset)
         }
     }
 
-    /// The location button tapped again while following: closer, tilted, turning with where the phone points.
-    static func headingViewport(bottomInset: CGFloat) -> Viewport {
-        Viewport.followPuck(zoom: 17.6 + StreetnavMapZoom.offset, bearing: .heading, pitch: StreetnavMapTilt.pitch(60))
-            .padding(.bottom, bottomInset)
+    /// The location button tapped again while following: a little farther, north up, to read the streets around.
+    static func northUpViewport(bottomInset: CGFloat, pitch: CGFloat) -> Viewport {
+        Viewport.followPuck(zoom: 16.6 + StreetnavMapZoom.offset, pitch: pitch).padding(.bottom, bottomInset)
     }
 
     /// The map runs under the status bar: the top keeps 60 more points clear, for the routes not to end under it.

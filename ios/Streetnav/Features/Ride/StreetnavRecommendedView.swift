@@ -120,7 +120,7 @@ struct StreetnavRecommendedView: View {
         .onChange(of: model.route.id) {
             guard model.flowState.isRouteStep else { return }
             withViewportAnimation(.easeInOut(duration: 0.6)) {
-                viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? StreetnavMapTilt.pitch(50) : 0)
+                viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: pitch)
             }
         }
         .alert("Terminer la sortie ?", isPresented: $showsEndConfirmation) {
@@ -173,25 +173,28 @@ struct StreetnavRecommendedView: View {
         if preferred != StreetnavExplorePanel.preferredDetent(for: oldState) { panelDetent = preferred }
         // The default animation is the one that keeps up with a moving position.
         withViewportAnimation(.default(maxDuration: 0.8)) {
-            viewport = StreetnavExplorationMap.viewport(for: newState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? StreetnavMapTilt.pitch(50) : 0)
+            viewport = StreetnavExplorationMap.viewport(for: newState, route: model.route, bottomInset: cameraInset, pitch: pitch)
         }
     }
 
     private func recenter() {
         withViewportAnimation(.default(maxDuration: 0.5)) {
-            viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: isThreeD ? StreetnavMapTilt.pitch(50) : 0)
+            viewport = StreetnavExplorationMap.viewport(for: model.flowState, route: model.route, bottomInset: cameraInset, pitch: pitch)
         }
     }
 
-    /// The location button, as in Maps: back to the rider and following them; tapped again, closer, tilted and turning
-    /// with where the phone points; once more, north up again.
+    /// The location button: back to the rider, seen as the navigation sees them (close, tilted, turning with where the
+    /// phone points); tapped again, a little farther and north up; once more, as the navigation again.
     private func locationTapped() {
         let exploring = model.flowState == .home || model.flowState == .planner
-        guard exploring, let following = viewport.followPuck, following.bearing != .heading else { return recenter() }
+        guard exploring, let following = viewport.followPuck, following.bearing == .heading else { return recenter() }
         withViewportAnimation(.default(maxDuration: 0.6)) {
-            viewport = StreetnavExplorationMap.headingViewport(bottomInset: cameraInset)
+            viewport = StreetnavExplorationMap.northUpViewport(bottomInset: cameraInset, pitch: pitch)
         }
     }
+
+    /// As tilted as the navigation (with the rider's own tilt), or seen from above in 2D.
+    private var pitch: CGFloat { isThreeD ? StreetnavMapTilt.pitch(55) : 0 }
 
     private func focus(on coordinates: [CLLocationCoordinate2D]) {
         if panelDetent == .large { panelDetent = StreetnavExplorePanel.preferredDetent(for: model.flowState) }
