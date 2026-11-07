@@ -18,6 +18,8 @@
 			<string>workout-processing</string>
 			<string>bluetooth-central</string>
 		</array>
+		<key>CADisableMinimumFrameDurationOnPhone</key>
+		<true/>
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>Streetnav utilise ta position pour afficher ta progression sur la carte et préparer des boucles autour de toi.</string>
 	</dict>

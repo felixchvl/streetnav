@@ -233,45 +233,254 @@ struct StreetnavVanMoofView: View {
     }
 }
 
-/// The bike on the map, as Maps shows the weather: its battery in a glass chip, and a lock while it is locked, only
-/// while the bike is connected; a tap unlocks it or rings the bell. The assistance and the lights are left to the bike's
-/// settings.
+/// The bike on the map, as Maps shows the weather: the lock to slide down while the bike is locked (or not connected
+/// yet), then its battery in a glass chip once connected; a tap on the battery unlocks it or rings the bell. The
+/// assistance and the lights are left to the bike's settings.
 struct StreetnavBikeChip: View {
     @ObservedObject private var bike = StreetnavVanMoofBike.shared
+    @ObservedObject private var account = StreetnavVanMoofAccount.shared
 
     var body: some View {
-        if bike.state == .ready {
-            Menu {
-                if bike.isLocked != false {
-                    Button("Déverrouiller", systemImage: "lock.open") { Task { await bike.unlock() } }
-                }
-                Button("Sonner", systemImage: "bell") { bike.ringBell() }
-            } label: {
-                HStack(spacing: 10) {
-                    StreetnavBikeBattery(percent: bike.battery)
-                    if bike.isLocked == true {
-                        Image(systemName: "lock.fill")
-                            .foregroundStyle(.orange)
-                            .accessibilityLabel("verrouillé")
-                    }
-                }
+        HStack(alignment: .top, spacing: 8) {
+            if account.isSignedIn || bike.state == .ready {
+                StreetnavUnlockSlider()
+            }
+            if bike.state == .ready {
+                status
+            }
+        }
+    }
+
+    private var status: some View {
+        Menu {
+            if bike.isLocked != false {
+                Button("Déverrouiller", systemImage: "lock.open") { Task { await bike.unlock() } }
+            }
+            Button("Sonner", systemImage: "bell") { bike.ringBell() }
+        } label: {
+            StreetnavBikeBattery(percent: bike.battery)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 14)
-                .frame(height: 38)
+                .frame(height: StreetnavUnlockSlider.knob)
                 .streetnavGlass(in: Capsule(), interactive: true)
+        }
+        // The menu would tint its label with the accent.
+        .tint(.primary)
+        .accessibilityLabel("Vélo")
+        // Battery and lock now and then while it shows.
+        .task {
+            while Task.isCancelled == false {
+                bike.refreshStatus()
+                try? await Task.sleep(for: .seconds(20))
             }
-            // The menu would tint its label with the accent.
-            .tint(.primary)
-            .accessibilityLabel("Vélo")
-            // Battery and lock now and then while it shows.
-            .task {
-                while Task.isCancelled == false {
-                    bike.refreshStatus()
-                    try? await Task.sleep(for: .seconds(20))
+        }
+    }
+}
+
+/// The lock to slide down, as in VanMoof's app: it follows the finger down its track, at the screen's full rate (120 Hz
+/// on ProMotion), opens past three quarters of the way, and unlocks the bike once let go there; let go sooner, it
+/// springs back. At rest it is a single round button that leaves the map in sight, and nudges down now and then.
+struct StreetnavUnlockSlider: View {
+    @ObservedObject private var bike = StreetnavVanMoofBike.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private enum Phase { case resting, sliding, unlocking, unlocked, failed }
+
+    @State private var phase = Phase.resting
+    /// How far down the lock is, in points.
+    @State private var offset: CGFloat = 0
+    @State private var failure: String?
+    @State private var successes = 0
+    @State private var failures = 0
+
+    /// The lock's size, and the battery chip's height beside it.
+    static let knob: CGFloat = 44
+    /// How far it slides.
+    static let travel: CGFloat = 128
+    /// The share of the way past which letting go unlocks.
+    static let threshold: CGFloat = 0.72
+
+    private var progress: CGFloat { min(1, offset / Self.travel) }
+    private var armed: Bool { progress >= Self.threshold }
+    private var opening: Bool { armed || phase == .unlocking || phase == .unlocked }
+
+    var body: some View {
+        if bike.isLocked != false || phase != .resting {
+            ZStack(alignment: .top) {
+                if phase == .sliding || phase == .unlocking || phase == .unlocked {
+                    track
+                        .transition(.opacity.combined(with: .scale(scale: 0.4, anchor: .top)))
+                }
+                knobView
+                    .offset(y: offset)
+            }
+            // Only the lock takes room: the track hangs below, over the map.
+            .frame(width: Self.knob, height: Self.knob, alignment: .top)
+            .overlay(alignment: .topLeading) {
+                if let failure {
+                    Text(failure)
+                        .font(.footnote.weight(.medium))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .streetnavGlass(in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        // As wide as its words, up to 240 points, beyond the lock's own width.
+                        .frame(width: 240, alignment: .leading)
+                        .offset(y: Self.knob + 8)
+                        .transition(.opacity)
+                }
+            }
+            // A tick when the lock would open, or would no longer, under the finger.
+            .sensoryFeedback(.selection, trigger: armed) { _, _ in phase == .sliding }
+            .sensoryFeedback(.success, trigger: successes)
+            .sensoryFeedback(.error, trigger: failures)
+            .accessibilityElement()
+            .accessibilityLabel(phase == .unlocking ? "Déverrouillage du vélo" : "Vélo verrouillé")
+            .accessibilityHint("Glisser le cadenas vers le bas pour déverrouiller")
+            .accessibilityAction(named: "Déverrouiller") { unlock() }
+        }
+    }
+
+    /// The way down: filled to the lock (green once letting go would unlock), chevrons going down, the open lock at the end.
+    private var track: some View {
+        ZStack(alignment: .top) {
+            Capsule()
+                .fill(Color.green.opacity(opening ? 0.9 : 0.12 + 0.3 * progress))
+                .frame(height: Self.knob + offset)
+            StreetnavDownChevrons()
+                .frame(height: Self.travel - Self.knob)
+                .padding(.top, Self.knob)
+                .opacity(phase == .sliding ? max(0, 1 - progress * 1.6) : 0)
+            Image(systemName: "lock.open")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: Self.knob, height: Self.knob)
+                .padding(.top, Self.travel)
+                .opacity(armed ? 0 : 0.8)
+        }
+        .frame(width: Self.knob, height: Self.knob + Self.travel, alignment: .top)
+        .streetnavGlass(in: Capsule())
+    }
+
+    private var knobView: some View {
+        Image(systemName: opening ? "lock.open.fill" : "lock.fill")
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(opening ? Color.white : phase == .failed ? Color.orange : Color.primary)
+            // The shackle opens as the symbol changes.
+            .contentTransition(.symbolEffect(.replace.magic(fallback: .downUp.byLayer)))
+            // Which way to slide, now and then while it rests.
+            .symbolEffect(.wiggle.down, options: .repeat(.periodic(delay: 6)), isActive: phase == .resting && reduceMotion == false)
+            .symbolEffect(.pulse, isActive: phase == .unlocking)
+            .symbolEffect(.bounce, value: successes)
+            .symbolEffect(.wiggle, value: failures)
+            .frame(width: Self.knob, height: Self.knob)
+            .background(Circle().fill(Color.green).opacity(opening ? 1 : 0))
+            .streetnavGlass(in: Circle(), interactive: true)
+            .contentShape(Circle())
+            .gesture(slide)
+            .onTapGesture(perform: hint)
+    }
+
+    private var slide: some Gesture {
+        // Measured on the screen: the lock moves under the finger, so its own frame would move with it.
+        DragGesture(minimumDistance: 2, coordinateSpace: .global)
+            .onChanged { value in
+                guard phase == .resting || phase == .sliding || phase == .failed else { return }
+                if phase != .sliding {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        phase = .sliding
+                        failure = nil
+                    }
+                }
+                // Straight under the finger, then a little resistance past the end.
+                let y = max(0, value.translation.height)
+                offset = y <= Self.travel ? y : Self.travel + min(16, (y - Self.travel) * 0.2)
+            }
+            .onEnded { value in
+                guard phase == .sliding else { return }
+                // A flick down past the middle unlocks too.
+                let flicked = progress >= 0.5 && value.predictedEndTranslation.height >= Self.travel * 1.2
+                if armed || flicked { unlock() } else { rest() }
+            }
+    }
+
+    private func rest() {
+        withAnimation(.spring(duration: 0.35, bounce: 0.3)) {
+            offset = 0
+            phase = .resting
+        }
+    }
+
+    /// A tap shows the way: the lock dips and comes back.
+    private func hint() {
+        guard phase == .resting else { return }
+        withAnimation(.spring(duration: 0.25, bounce: 0)) {
+            phase = .sliding
+            offset = 30
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(260))
+            if phase == .sliding { rest() }
+        }
+    }
+
+    private func unlock() {
+        guard phase != .unlocking else { return }
+        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+            offset = Self.travel
+            phase = .unlocking
+            failure = nil
+        }
+        Task {
+            let opened = await bike.unlock()
+            if opened {
+                successes += 1
+                withAnimation(.snappy) { phase = .unlocked }
+                try? await Task.sleep(for: .seconds(1.2))
+                // The bike now reports its lock open: the slider goes.
+                withAnimation(.snappy) {
+                    phase = .resting
+                    offset = 0
+                }
+            } else {
+                failures += 1
+                withAnimation(.spring(duration: 0.45, bounce: 0.3)) {
+                    phase = .failed
+                    offset = 0
+                    failure = Self.reason(bike.state)
+                }
+                try? await Task.sleep(for: .seconds(4))
+                guard phase == .failed else { return }
+                withAnimation(.snappy) {
+                    phase = .resting
+                    failure = nil
                 }
             }
         }
+    }
+
+    private static func reason(_ state: StreetnavVanMoofBike.State) -> String {
+        if case .failed(let reason) = state { return reason }
+        return "Le vélo n'a pas confirmé l'ouverture."
+    }
+}
+
+/// Three chevrons lighting up one after the other, downwards: the way to slide.
+private struct StreetnavDownChevrons: View {
+    var body: some View {
+        PhaseAnimator([0, 1, 2, 3]) { lit in
+            VStack(spacing: -6) {
+                ForEach(0..<3, id: \.self) { index in
+                    Image(systemName: "chevron.compact.down")
+                        .opacity(index == lit ? 0.95 : 0.3)
+                }
+            }
+        } animation: { _ in .easeInOut(duration: 0.22) }
+        .font(.system(size: 20, weight: .semibold))
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
     }
 }
 

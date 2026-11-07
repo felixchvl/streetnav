@@ -131,6 +131,15 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     /// the bike acknowledges: the journal shows whether it got the command, even when it does not report its lock.
     @discardableResult
     func unlock() async -> Bool {
+        #if DEBUG
+        // Development: the sample bike opens after a moment (-sampleUnlockFails YES: it never answers).
+        if UserDefaults.standard.bool(forKey: "sampleBike") {
+            try? await Task.sleep(for: .seconds(1.2))
+            if UserDefaults.standard.bool(forKey: "sampleUnlockFails") { return false }
+            isLocked = false
+            return true
+        }
+        #endif
         if state != .ready { await connect() }
         guard await waitUntilReady() else { return false }
         send(.set, .wake, P.valuePayload([1]), qos: 0)
