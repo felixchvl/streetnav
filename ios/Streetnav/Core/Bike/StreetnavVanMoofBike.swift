@@ -87,6 +87,12 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     private var speedFactor: Double? = UserDefaults.standard.object(forKey: speedFactorKey) as? Double
     private static let speedUnits = [1, 0.1, 0.01, 3.6, 0.36, 0.036]
 
+    /// The journal of the last connections, read back from the file it is kept in: still there after a relaunch.
+    override init() {
+        super.init()
+        log = Self.savedJournal()
+    }
+
     /// Connects when the account is set up and the bike not yet connected: at launch and when guidance starts, so that
     /// the map and the navigation show the bike at once. The bike takes one connection at a time.
     func connectIfSignedIn() async {
@@ -127,8 +133,8 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         reset(to: .idle)
     }
 
-    /// Wakes the bike, which unlocks it. True once the bike reports its lock open. Sent "at least once" (QoS 0), which
-    /// the bike acknowledges: the journal shows whether it got the command, even when it does not report its lock.
+    /// Wakes the bike, which unlocks it. True once the bike reports its lock open. Sent exactly as the official app
+    /// sends it in the published captures: a SET with the app's usual QoS 1.
     @discardableResult
     func unlock() async -> Bool {
         #if DEBUG
@@ -142,7 +148,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         #endif
         if state != .ready { await connect() }
         guard await waitUntilReady() else { return false }
-        send(.set, .wake, P.valuePayload([1]), qos: 0)
+        send(.set, .wake, P.valuePayload([1]))
         let timeout = Task { [weak self] in
             try? await Task.sleep(for: .seconds(6))
             guard Task.isCancelled == false, let self else { return }
@@ -439,11 +445,51 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     }
 
     private func note(_ text: String) {
-        log.append(LogEntry(date: Date(), text: text))
+        let entry = LogEntry(date: Date(), text: text)
+        log.append(entry)
         if log.count > 400 { log.removeFirst(log.count - 400) }
+        Self.save(entry)
     }
 
-    func clearLog() { log.removeAll() }
+    func clearLog() {
+        log.removeAll()
+        try? FileManager.default.removeItem(at: Self.journalFile)
+    }
+
+    // MARK: Journal file
+
+    /// In the app's documents, so that it outlives a relaunch or a reinstall and can be copied off the iPhone. Holds
+    /// what the journal shows: steps and messages, never the certificate or the signature.
+    private static let journalFile = URL.documentsDirectory.appending(path: "journal-velo.txt")
+
+    /// One line per entry: the date (ISO 8601, milliseconds), a tab, the text.
+    private static let journalDate = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+
+    private static func save(_ entry: LogEntry) {
+        let line = Data("\(entry.date.formatted(journalDate))\t\(entry.text.replacingOccurrences(of: "\n", with: " "))\n".utf8)
+        if let handle = try? FileHandle(forWritingTo: journalFile) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: line)
+        } else {
+            try? line.write(to: journalFile, options: .atomic)
+        }
+    }
+
+    /// The last 400 entries; the file is cut back to its last 1,000 lines once it passes 2,000.
+    private static func savedJournal() -> [LogEntry] {
+        guard let text = try? String(contentsOf: journalFile, encoding: .utf8) else { return [] }
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        if lines.count > 2000 {
+            lines = Array(lines.suffix(1000))
+            try? Data((lines.joined(separator: "\n") + "\n").utf8).write(to: journalFile, options: .atomic)
+        }
+        return lines.suffix(400).compactMap { line in
+            let parts = line.split(separator: "\t", maxSplits: 1)
+            guard parts.count == 2, let date = try? journalDate.parse(String(parts[0])) else { return nil }
+            return LogEntry(date: date, text: String(parts[1]))
+        }
+    }
 
     /// The journal as text, to share.
     var logText: String {
