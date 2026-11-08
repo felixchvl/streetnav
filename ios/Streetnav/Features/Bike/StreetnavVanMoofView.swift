@@ -361,8 +361,8 @@ struct StreetnavStartScreen: View {
 struct StreetnavUnlockSlider: View {
     @ObservedObject private var bike = StreetnavVanMoofBike.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Chosen in the haptics laboratory: an impact when let go past the mark, or iOS's success once the bike opens.
-    @AppStorage(StreetnavUnlockHaptic.key) private var unlockHaptic = StreetnavUnlockHaptic.success
+    /// VanMoof's hit when let go past the mark, unless another is chosen in the haptics laboratory.
+    @AppStorage(StreetnavUnlockHaptic.key) private var unlockHaptic = StreetnavUnlockHaptic.vanmoof
 
     private enum Phase { case resting, sliding, unlocking, unlocked, failed }
 
@@ -487,6 +487,7 @@ struct StreetnavUnlockSlider: View {
             .onChanged { value in
                 guard phase == .resting || phase == .sliding || phase == .failed else { return }
                 if phase != .sliding {
+                    unlockHaptic.prepare()
                     withAnimation(.snappy(duration: 0.2)) {
                         phase = .sliding
                         failure = nil
