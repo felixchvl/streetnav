@@ -13,9 +13,6 @@ enum StreetnavUnlockHaptic: String, CaseIterable, Identifiable {
     case doubleLight, doubleMedium, doubleHeavy, doubleSoft, doubleRigid
     case tap060, tap2x020, tap2x040, tap2x060, tap2x080, tap2x100, players2x060
 
-    /// Played in a row by « Mesurer » in the laboratory, to compare with VanMoof's in a capture of the log.
-    static let measured: [StreetnavUnlockHaptic] = [.medium, .tap060, .tap2x020, .tap2x040, .tap2x060, .tap2x080, .tap2x100,
-                                                    .players2x060]
 
     static let key = "streetnav.unlockHaptic"
     var id: String { rawValue }
@@ -211,13 +208,26 @@ struct StreetnavHapticLab: View {
         hapticLog.notice("haptic-lab \(name, privacy: .public)")
     }
 
+    /// Two taps at the same instant, by intensity then sharpness: the grid the measuring run goes through.
+    private static let grid: [(intensity: Double, sharpness: Double)] = [0.5, 0.6, 0.7, 0.8].flatMap { intensity in
+        [0.4, 0.7, 1].map { (intensity, $0) }
+    }
+
+    /// UIKit's medium impact for reference, then each pair of taps of the grid, the engine stopped after each so that the
+    /// kernel measures them one by one (left running, it measures them all as one).
     private func measureAll() {
         measuring = true
         Task {
-            for choice in StreetnavUnlockHaptic.measured {
-                mark(choice.rawValue)
-                choice.play()
-                try? await Task.sleep(for: .seconds(3))
+            mark("medium")
+            StreetnavUnlockHaptic.medium.play()
+            try? await Task.sleep(for: .seconds(3))
+            for cell in Self.grid {
+                mark("ch2_i\(Int(cell.intensity * 100))_s\(Int(cell.sharpness * 100))")
+                let tap = StreetnavHapticEngine.tap(cell.intensity, cell.sharpness)
+                engine.playTogether([tap, tap], separatePlayers: false)
+                try? await Task.sleep(for: .seconds(0.8))
+                engine.stopNow()
+                try? await Task.sleep(for: .seconds(2.2))
             }
             measuring = false
         }
@@ -336,6 +346,12 @@ final class StreetnavHapticEngine: ObservableObject {
               let player = try? engine.makePlayer(with: pattern) else { return }
         try? engine.start()
         try? player.start(atTime: CHHapticTimeImmediate)
+    }
+
+    /// Stops the engine at once, so that the system closes its haptics session.
+    func stopNow() {
+        engine?.stop()
+        forget()
     }
 
     /// The events at the very same instant: in one pattern, or each in its own player started at the same engine time.
