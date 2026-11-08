@@ -361,6 +361,8 @@ struct StreetnavStartScreen: View {
 struct StreetnavUnlockSlider: View {
     @ObservedObject private var bike = StreetnavVanMoofBike.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Chosen in the haptics laboratory: an impact when let go past the mark, or iOS's success once the bike opens.
+    @AppStorage(StreetnavUnlockHaptic.key) private var unlockHaptic = StreetnavUnlockHaptic.success
 
     private enum Phase { case resting, sliding, unlocking, unlocked, failed }
 
@@ -430,7 +432,7 @@ struct StreetnavUnlockSlider: View {
             }
             // A tick when the lock would open, or would no longer, under the finger.
             .sensoryFeedback(.selection, trigger: armed) { _, _ in phase == .sliding }
-            .sensoryFeedback(.success, trigger: successes)
+            .sensoryFeedback(trigger: successes) { _, _ in unlockHaptic == .success ? .success : nil }
             .sensoryFeedback(.error, trigger: failures)
             .accessibilityElement()
             .accessibilityLabel(phase == .unlocking ? "Déverrouillage du vélo" : "Vélo verrouillé")
@@ -524,6 +526,7 @@ struct StreetnavUnlockSlider: View {
 
     private func unlock() {
         guard phase != .unlocking else { return }
+        unlockHaptic.play()
         withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
             offset = travel
             phase = .unlocking

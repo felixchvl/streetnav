@@ -1,5 +1,59 @@
 import CoreHaptics
 import SwiftUI
+import UIKit
+import os
+
+/// The lock's vibration once it is let go past the mark: iOS's success, as before, or an impact from UIKit's generator,
+/// alone or twice at once. The VanMoof app plays two at once (journal of 8 Nov 2026): the doubled ones are there to
+/// find which, by the kernel's measures of each.
+enum StreetnavUnlockHaptic: String, CaseIterable, Identifiable {
+    case success
+    case light, medium, heavy, soft, rigid
+    case doubleLight, doubleMedium, doubleHeavy, doubleSoft, doubleRigid
+
+    static let key = "streetnav.unlockHaptic"
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .success: "Succès d'iOS (après l'ouverture)"
+        case .light: "Impact léger"
+        case .medium: "Impact moyen"
+        case .heavy: "Impact lourd"
+        case .soft: "Impact souple"
+        case .rigid: "Impact rigide"
+        case .doubleLight: "Impact léger ×2"
+        case .doubleMedium: "Impact moyen ×2"
+        case .doubleHeavy: "Impact lourd ×2"
+        case .doubleSoft: "Impact souple ×2"
+        case .doubleRigid: "Impact rigide ×2"
+        }
+    }
+
+    private var style: UIImpactFeedbackGenerator.FeedbackStyle? {
+        switch self {
+        case .success: nil
+        case .light, .doubleLight: .light
+        case .medium, .doubleMedium: .medium
+        case .heavy, .doubleHeavy: .heavy
+        case .soft, .doubleSoft: .soft
+        case .rigid, .doubleRigid: .rigid
+        }
+    }
+
+    private var count: Int { rawValue.hasPrefix("double") ? 2 : 1 }
+
+    /// Played at once by as many generators, as VanMoof's app does; nothing for `success`, which the lock plays itself
+    /// once the bike confirms.
+    @MainActor func play() {
+        guard let style else { return }
+        let generators = (0..<count).map { _ in UIImpactFeedbackGenerator(style: style) }
+        generators.forEach { $0.prepare() }
+        generators.forEach { $0.impactOccurred() }
+    }
+}
+
+private let hapticLog = Logger(subsystem: "com.felixchevalier.streetnav", category: "haptics")
 
 /// Réglages › Laboratoire haptique, in development builds: every sensation the Taptic Engine can give, to feel them before
 /// choosing the lock's. iOS's ready-made feedback, impacts by weight and by texture, then Core Haptics: a tap and a
@@ -12,6 +66,8 @@ struct StreetnavHapticLab: View {
     @State private var intensity = 1.0
     @State private var sharpness = 0.5
     @State private var duration = 0.6
+    @AppStorage(StreetnavUnlockHaptic.key) private var unlockHaptic = StreetnavUnlockHaptic.success
+    @State private var measuring = false
 
     private struct Ready: Identifiable {
         let name: String
@@ -36,6 +92,21 @@ struct StreetnavHapticLab: View {
 
     var body: some View {
         Form {
+            Section {
+                Picker("Vibration du cadenas", selection: $unlockHaptic) {
+                    ForEach(StreetnavUnlockHaptic.allCases) { Text($0.title).tag($0) }
+                }
+                ForEach(StreetnavUnlockHaptic.allCases.filter { $0 != .success }) { choice in
+                    Button { mark(choice.rawValue); choice.play() } label: { row(choice.title, choice.rawValue) }
+                }
+                Button(measuring ? "Mesure en cours…" : "Tout jouer, 3 s d'écart") { measureAll() }
+                    .disabled(measuring)
+            } header: {
+                Text("Cadenas, façon VanMoof")
+            } footer: {
+                Text("Impacts du générateur UIKit, seuls ou deux à la fois comme l'app VanMoof. Le choix vaut pour le grand cadenas, quand il est lâché au-delà du trait.")
+            }
+
             Section {
                 ForEach(Self.ready) { item in
                     Button { play(item.feedback) } label: { row(item.name, item.code) }
@@ -100,6 +171,23 @@ struct StreetnavHapticLab: View {
         .navigationTitle("Laboratoire haptique")
         .navigationBarTitleDisplayMode(.inline)
         .sensoryFeedback(trigger: plays) { _, _ in feedback }
+    }
+
+    /// A mark in the system log before each sound, to tell the plays apart in a capture.
+    private func mark(_ name: String) {
+        hapticLog.notice("haptic-lab \(name, privacy: .public)")
+    }
+
+    private func measureAll() {
+        measuring = true
+        Task {
+            for choice in StreetnavUnlockHaptic.allCases where choice != .success {
+                mark(choice.rawValue)
+                choice.play()
+                try? await Task.sleep(for: .seconds(3))
+            }
+            measuring = false
+        }
     }
 
     private func play(_ value: SensoryFeedback) {
