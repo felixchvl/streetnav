@@ -3,85 +3,116 @@ import SwiftUI
 import UIKit
 import os
 
-/// The lock's vibration once it is let go past the mark. By default VanMoof's: its app plays two medium impacts that land
-/// at the same instant and add up, which two Core Haptics taps at intensity 0.7 and sharpness 0.7, in one pattern, match
-/// within 3 % on each of the kernel's measures (energy, amplitude, slew, displacement; 8 and 9 Nov 2026). The others are
-/// left to compare: iOS's success once the bike opens, and UIKit's impacts alone or twice.
-enum StreetnavUnlockHaptic: String, CaseIterable, Identifiable {
-    case vanmoof
-    case success
-    case light, medium, heavy, soft, rigid
-    case doubleLight, doubleMedium, doubleHeavy, doubleSoft, doubleRigid
-    case tripleMedium
+/// The large lock's vibration once it is let go past the mark, set in the haptics laboratory: impacts from UIKit's
+/// generator or Core Haptics taps, how many, how far apart and how strong; or iOS's success once the bike opens. By
+/// default three medium impacts 10 ms apart, chosen by hand on 9 Nov 2026 against the VanMoof app's.
+struct StreetnavLockHaptic {
+    enum Kind: String, CaseIterable, Identifiable {
+        case impact, tap, success
+        var id: String { rawValue }
 
-    /// A new key for the VanMoof default, rather than a choice made among the trials before it.
-    static let key = "streetnav.unlockHaptic.v2"
-    /// The time between the three medium impacts of `tripleMedium`, in seconds, set in the laboratory.
-    static let gapKey = "streetnav.unlockHaptic.gap"
-    static let defaultGap = 0.06
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .vanmoof: "Comme VanMoof"
-        case .success: "Succès d'iOS (après l'ouverture)"
-        case .light: "Impact léger"
-        case .medium: "Impact moyen"
-        case .heavy: "Impact lourd"
-        case .soft: "Impact souple"
-        case .rigid: "Impact rigide"
-        case .doubleLight: "Impact léger ×2"
-        case .doubleMedium: "Impact moyen ×2"
-        case .doubleHeavy: "Impact lourd ×2"
-        case .doubleSoft: "Impact souple ×2"
-        case .doubleRigid: "Impact rigide ×2"
-        case .tripleMedium: "Impact moyen ×3, espacés"
+        var title: String {
+            switch self {
+            case .impact: "Impact iOS"
+            case .tap: "Coup Core Haptics"
+            case .success: "Succès d'iOS, après l'ouverture"
+            }
         }
     }
 
-    private var style: UIImpactFeedbackGenerator.FeedbackStyle? {
-        switch self {
-        case .light, .doubleLight: .light
-        case .medium, .doubleMedium: .medium
-        case .heavy, .doubleHeavy: .heavy
-        case .soft, .doubleSoft: .soft
-        case .rigid, .doubleRigid: .rigid
-        default: nil
+    enum Style: String, CaseIterable, Identifiable {
+        case light, medium, heavy, soft, rigid
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .light: "Léger"
+            case .medium: "Moyen"
+            case .heavy: "Lourd"
+            case .soft: "Souple"
+            case .rigid: "Rigide"
+            }
+        }
+
+        var uikit: UIImpactFeedbackGenerator.FeedbackStyle {
+            switch self {
+            case .light: .light
+            case .medium: .medium
+            case .heavy: .heavy
+            case .soft: .soft
+            case .rigid: .rigid
+            }
         }
     }
 
-    private var count: Int { rawValue.hasPrefix("double") ? 2 : 1 }
+    enum Key {
+        static let kind = "streetnav.lockHaptic.kind"
+        static let style = "streetnav.lockHaptic.style"
+        static let count = "streetnav.lockHaptic.count"
+        static let gap = "streetnav.lockHaptic.gap"
+        static let intensity = "streetnav.lockHaptic.intensity"
+        static let sharpness = "streetnav.lockHaptic.sharpness"
+    }
 
-    /// Ready to play without delay: the haptic engine started while the lock slides.
+    var kind = Kind.impact
+    var style = Style.medium
+    var count = 3
+    /// Seconds from the start of one to the start of the next; 0 plays them all at once.
+    var gap = 0.010
+    var intensity = 1.0
+    /// Core Haptics only: 0 dull and round, 1 dry.
+    var sharpness = 0.7
+
+    static let standard = StreetnavLockHaptic()
+    /// The VanMoof app's, as the kernel measured it (8 and 9 Nov 2026): two Core Haptics taps at the same instant.
+    static let vanmoof = StreetnavLockHaptic(kind: .tap, count: 2, gap: 0, intensity: 0.7, sharpness: 0.7)
+
+    /// As set in the laboratory, or the default.
+    static var current: StreetnavLockHaptic {
+        let defaults = UserDefaults.standard
+        var haptic = standard
+        if let raw = defaults.string(forKey: Key.kind), let kind = Kind(rawValue: raw) { haptic.kind = kind }
+        if let raw = defaults.string(forKey: Key.style), let style = Style(rawValue: raw) { haptic.style = style }
+        if defaults.object(forKey: Key.count) != nil { haptic.count = max(1, defaults.integer(forKey: Key.count)) }
+        if defaults.object(forKey: Key.gap) != nil { haptic.gap = max(0, defaults.double(forKey: Key.gap)) }
+        if defaults.object(forKey: Key.intensity) != nil { haptic.intensity = defaults.double(forKey: Key.intensity) }
+        if defaults.object(forKey: Key.sharpness) != nil { haptic.sharpness = defaults.double(forKey: Key.sharpness) }
+        return haptic
+    }
+
+    /// Ready to play without delay: the Core Haptics engine started while the lock slides.
     @MainActor func prepare() {
-        if self == .vanmoof { StreetnavHapticEngine.shared.prepare() }
+        if kind == .tap { StreetnavHapticEngine.shared.prepare() }
     }
 
     /// Nothing for `success`, which the lock plays itself once the bike confirms.
     @MainActor func play() {
-        if self == .tripleMedium {
-            let stored = UserDefaults.standard.double(forKey: Self.gapKey)
-            let gap = stored > 0 ? stored : Self.defaultGap
-            let generator = UIImpactFeedbackGenerator(style: .medium)
+        switch kind {
+        case .success:
+            return
+        case .tap:
+            // One pattern: the taps fall exactly `gap` apart, or together at 0.
+            StreetnavHapticEngine.shared.play((0..<count).map {
+                StreetnavHapticEngine.tap(intensity, sharpness, at: Double($0) * gap)
+            })
+        case .impact:
+            if gap <= 0 {
+                let generators = (0..<count).map { _ in UIImpactFeedbackGenerator(style: style.uikit) }
+                generators.forEach { $0.prepare() }
+                generators.forEach { $0.impactOccurred(intensity: intensity) }
+                return
+            }
+            let generator = UIImpactFeedbackGenerator(style: style.uikit)
             generator.prepare()
+            let (count, gap, intensity) = (count, gap, intensity)
             Task { @MainActor in
-                for index in 0..<3 {
-                    generator.impactOccurred()
+                for index in 0..<count {
+                    generator.impactOccurred(intensity: intensity)
                     generator.prepare()
-                    if index < 2 { try? await Task.sleep(for: .seconds(gap)) }
+                    if index < count - 1 { try? await Task.sleep(for: .seconds(gap)) }
                 }
             }
-            return
         }
-        if self == .vanmoof {
-            let tap = StreetnavHapticEngine.tap(0.7, 0.7)
-            StreetnavHapticEngine.shared.playTogether([tap, tap], separatePlayers: false)
-            return
-        }
-        guard let style else { return }
-        let generators = (0..<count).map { _ in UIImpactFeedbackGenerator(style: style) }
-        generators.forEach { $0.prepare() }
-        generators.forEach { $0.impactOccurred() }
     }
 }
 
@@ -98,9 +129,12 @@ struct StreetnavHapticLab: View {
     @State private var intensity = 1.0
     @State private var sharpness = 0.5
     @State private var duration = 0.6
-    @AppStorage(StreetnavUnlockHaptic.key) private var unlockHaptic = StreetnavUnlockHaptic.vanmoof
-    @AppStorage(StreetnavUnlockHaptic.gapKey) private var gap = StreetnavUnlockHaptic.defaultGap
-    @State private var measuring = false
+    @AppStorage(StreetnavLockHaptic.Key.kind) private var lockKind = StreetnavLockHaptic.standard.kind
+    @AppStorage(StreetnavLockHaptic.Key.style) private var lockStyle = StreetnavLockHaptic.standard.style
+    @AppStorage(StreetnavLockHaptic.Key.count) private var lockCount = StreetnavLockHaptic.standard.count
+    @AppStorage(StreetnavLockHaptic.Key.gap) private var lockGap = StreetnavLockHaptic.standard.gap
+    @AppStorage(StreetnavLockHaptic.Key.intensity) private var lockIntensity = StreetnavLockHaptic.standard.intensity
+    @AppStorage(StreetnavLockHaptic.Key.sharpness) private var lockSharpness = StreetnavLockHaptic.standard.sharpness
 
     private struct Ready: Identifiable {
         let name: String
@@ -126,29 +160,52 @@ struct StreetnavHapticLab: View {
     var body: some View {
         Form {
             Section {
-                Picker("Vibration du cadenas", selection: $unlockHaptic) {
-                    ForEach(StreetnavUnlockHaptic.allCases) { Text($0.title).tag($0) }
+                Picker("Type", selection: $lockKind) {
+                    ForEach(StreetnavLockHaptic.Kind.allCases) { Text($0.title).tag($0) }
                 }
-                ForEach(StreetnavUnlockHaptic.allCases.filter { $0 != .success }) { choice in
-                    Button { mark(choice.rawValue); choice.play() } label: { row(choice.title, choice.rawValue) }
-                }
-                LabeledContent {
-                    HStack {
-                        Slider(value: $gap, in: 0.01...0.3, step: 0.005)
-                        Text("\(Int((gap * 1000).rounded())) ms")
-                            .font(.footnote.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 52, alignment: .trailing)
+                if lockKind == .impact {
+                    Picker("Style", selection: $lockStyle) {
+                        ForEach(StreetnavLockHaptic.Style.allCases) { Text($0.title).tag($0) }
                     }
-                } label: {
-                    Text("Écart ×3")
                 }
-                Button(measuring ? "Mesure en cours…" : "Mesurer les coups superposés, 3 s d'écart") { measureAll() }
-                    .disabled(measuring)
+                if lockKind != .success {
+                    Stepper(value: $lockCount, in: 1...6) {
+                        LabeledContent("Répétitions", value: "\(lockCount)")
+                    }
+                    if lockCount > 1 {
+                        LabeledContent {
+                            HStack {
+                                Slider(value: $lockGap, in: 0...0.3, step: 0.005)
+                                Text("\(Int((lockGap * 1000).rounded())) ms")
+                                    .font(.footnote.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 52, alignment: .trailing)
+                            }
+                        } label: {
+                            Text("Espacement")
+                        }
+                    }
+                    slider("Intensité", value: $lockIntensity, in: 0.1...1)
+                    if lockKind == .tap { slider("Netteté", value: $lockSharpness) }
+                }
+                Button {
+                    test()
+                } label: {
+                    Label("Tester", systemImage: "waveform")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
             } header: {
-                Text("Cadenas, façon VanMoof")
+                Text("Vibration du cadenas")
             } footer: {
-                Text("« Comme VanMoof » : deux coups superposés, intensité 0,7, netteté 0,7, mesurés à 3 % de l'app VanMoof. Le choix vaut pour le grand cadenas, quand il est lâché au-delà du trait.")
+                Text("Jouée quand le grand cadenas est lâché au-delà du trait. Espacement : du début d'un coup au suivant, 0 ms les joue tous ensemble.")
+            }
+
+            Section {
+                Button("3 impacts moyens à 10 ms (par défaut)") { apply(.standard) }
+                Button("Comme l'app VanMoof, mesuré") { apply(.vanmoof) }
+            } header: {
+                Text("Réglages tout faits")
             }
 
             Section {
@@ -222,29 +279,27 @@ struct StreetnavHapticLab: View {
         hapticLog.notice("haptic-lab \(name, privacy: .public)")
     }
 
-    /// Two taps at the same instant, by intensity then sharpness: the grid the measuring run goes through.
-    private static let grid: [(intensity: Double, sharpness: Double)] = [0.5, 0.6, 0.7, 0.8].flatMap { intensity in
-        [0.4, 0.7, 1].map { (intensity, $0) }
+    /// The lock's vibration as set above, with a mark in the log; the Core Haptics engine is stopped a second later so that
+    /// the kernel measures each test on its own.
+    private func test() {
+        mark("lock-test")
+        guard lockKind != .success else { return play(.success) }
+        let haptic = StreetnavLockHaptic.current
+        haptic.play()
+        guard haptic.kind == .tap else { return }
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            engine.stopNow()
+        }
     }
 
-    /// UIKit's medium impact for reference, then each pair of taps of the grid, the engine stopped after each so that the
-    /// kernel measures them one by one (left running, it measures them all as one).
-    private func measureAll() {
-        measuring = true
-        Task {
-            mark("medium")
-            StreetnavUnlockHaptic.medium.play()
-            try? await Task.sleep(for: .seconds(3))
-            for cell in Self.grid {
-                mark("ch2_i\(Int(cell.intensity * 100))_s\(Int(cell.sharpness * 100))")
-                let tap = StreetnavHapticEngine.tap(cell.intensity, cell.sharpness)
-                engine.playTogether([tap, tap], separatePlayers: false)
-                try? await Task.sleep(for: .seconds(0.8))
-                engine.stopNow()
-                try? await Task.sleep(for: .seconds(2.2))
-            }
-            measuring = false
-        }
+    private func apply(_ haptic: StreetnavLockHaptic) {
+        lockKind = haptic.kind
+        lockStyle = haptic.style
+        lockCount = haptic.count
+        lockGap = haptic.gap
+        lockIntensity = haptic.intensity
+        lockSharpness = haptic.sharpness
     }
 
     private func play(_ value: SensoryFeedback) {
@@ -369,18 +424,6 @@ final class StreetnavHapticEngine: ObservableObject {
     func stopNow() {
         engine?.stop()
         forget()
-    }
-
-    /// The events at the very same instant: in one pattern, or each in its own player started at the same engine time.
-    func playTogether(_ events: [CHHapticEvent], separatePlayers: Bool) {
-        guard separatePlayers else { return play(events) }
-        guard let engine = started() else { return }
-        try? engine.start()
-        let players = events.compactMap { event in
-            (try? CHHapticPattern(events: [event], parameters: [])).flatMap { try? engine.makePlayer(with: $0) }
-        }
-        let at = engine.currentTime + 0.03
-        players.forEach { try? $0.start(atTime: at) }
     }
 
     static func tap(_ intensity: Double, _ sharpness: Double, at time: TimeInterval = 0) -> CHHapticEvent {

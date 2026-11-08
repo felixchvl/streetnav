@@ -361,8 +361,6 @@ struct StreetnavStartScreen: View {
 struct StreetnavUnlockSlider: View {
     @ObservedObject private var bike = StreetnavVanMoofBike.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// VanMoof's hit when let go past the mark, unless another is chosen in the haptics laboratory.
-    @AppStorage(StreetnavUnlockHaptic.key) private var unlockHaptic = StreetnavUnlockHaptic.vanmoof
 
     private enum Phase { case resting, sliding, unlocking, unlocked, failed }
 
@@ -432,7 +430,8 @@ struct StreetnavUnlockSlider: View {
             }
             // A tick when the lock would open, or would no longer, under the finger.
             .sensoryFeedback(.selection, trigger: armed) { _, _ in phase == .sliding }
-            .sensoryFeedback(trigger: successes) { _, _ in unlockHaptic == .success ? .success : nil }
+            // The lock's vibration plays when let go (`StreetnavLockHaptic`), unless it is iOS's success, played here.
+            .sensoryFeedback(trigger: successes) { _, _ in StreetnavLockHaptic.current.kind == .success ? .success : nil }
             .sensoryFeedback(.error, trigger: failures)
             .accessibilityElement()
             .accessibilityLabel(phase == .unlocking ? "Déverrouillage du vélo" : "Vélo verrouillé")
@@ -487,7 +486,7 @@ struct StreetnavUnlockSlider: View {
             .onChanged { value in
                 guard phase == .resting || phase == .sliding || phase == .failed else { return }
                 if phase != .sliding {
-                    unlockHaptic.prepare()
+                    StreetnavLockHaptic.current.prepare()
                     withAnimation(.snappy(duration: 0.2)) {
                         phase = .sliding
                         failure = nil
@@ -527,7 +526,7 @@ struct StreetnavUnlockSlider: View {
 
     private func unlock() {
         guard phase != .unlocking else { return }
-        unlockHaptic.play()
+        StreetnavLockHaptic.current.play()
         withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
             offset = travel
             phase = .unlocking
