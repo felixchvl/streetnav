@@ -12,9 +12,13 @@ enum StreetnavUnlockHaptic: String, CaseIterable, Identifiable {
     case success
     case light, medium, heavy, soft, rigid
     case doubleLight, doubleMedium, doubleHeavy, doubleSoft, doubleRigid
+    case tripleMedium
 
     /// A new key for the VanMoof default, rather than a choice made among the trials before it.
     static let key = "streetnav.unlockHaptic.v2"
+    /// The time between the three medium impacts of `tripleMedium`, in seconds, set in the laboratory.
+    static let gapKey = "streetnav.unlockHaptic.gap"
+    static let defaultGap = 0.06
     var id: String { rawValue }
 
     var title: String {
@@ -31,6 +35,7 @@ enum StreetnavUnlockHaptic: String, CaseIterable, Identifiable {
         case .doubleHeavy: "Impact lourd ×2"
         case .doubleSoft: "Impact souple ×2"
         case .doubleRigid: "Impact rigide ×2"
+        case .tripleMedium: "Impact moyen ×3, espacés"
         }
     }
 
@@ -54,6 +59,20 @@ enum StreetnavUnlockHaptic: String, CaseIterable, Identifiable {
 
     /// Nothing for `success`, which the lock plays itself once the bike confirms.
     @MainActor func play() {
+        if self == .tripleMedium {
+            let stored = UserDefaults.standard.double(forKey: Self.gapKey)
+            let gap = stored > 0 ? stored : Self.defaultGap
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.prepare()
+            Task { @MainActor in
+                for index in 0..<3 {
+                    generator.impactOccurred()
+                    generator.prepare()
+                    if index < 2 { try? await Task.sleep(for: .seconds(gap)) }
+                }
+            }
+            return
+        }
         if self == .vanmoof {
             let tap = StreetnavHapticEngine.tap(0.7, 0.7)
             StreetnavHapticEngine.shared.playTogether([tap, tap], separatePlayers: false)
@@ -80,6 +99,7 @@ struct StreetnavHapticLab: View {
     @State private var sharpness = 0.5
     @State private var duration = 0.6
     @AppStorage(StreetnavUnlockHaptic.key) private var unlockHaptic = StreetnavUnlockHaptic.vanmoof
+    @AppStorage(StreetnavUnlockHaptic.gapKey) private var gap = StreetnavUnlockHaptic.defaultGap
     @State private var measuring = false
 
     private struct Ready: Identifiable {
@@ -111,6 +131,17 @@ struct StreetnavHapticLab: View {
                 }
                 ForEach(StreetnavUnlockHaptic.allCases.filter { $0 != .success }) { choice in
                     Button { mark(choice.rawValue); choice.play() } label: { row(choice.title, choice.rawValue) }
+                }
+                LabeledContent {
+                    HStack {
+                        Slider(value: $gap, in: 0.01...0.3, step: 0.005)
+                        Text("\(Int((gap * 1000).rounded())) ms")
+                            .font(.footnote.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(width: 52, alignment: .trailing)
+                    }
+                } label: {
+                    Text("Écart ×3")
                 }
                 Button(measuring ? "Mesure en cours…" : "Mesurer les coups superposés, 3 s d'écart") { measureAll() }
                     .disabled(measuring)
