@@ -104,8 +104,10 @@ struct StreetnavServerClient {
         try JSONDecoder().decode(OSMRefresh.self, from: await send("POST", "osm/refresh"))
     }
 
-    private func send(_ method: String, _ path: String, body: Data? = nil) async throws -> Data {
-        var request = URLRequest(url: baseURL.appending(path: path), timeoutInterval: 60)
+    func send(_ method: String, _ path: String, query: [URLQueryItem] = [], body: Data? = nil) async throws -> Data {
+        var url = baseURL.appending(path: path)
+        if query.isEmpty == false { url.append(queryItems: query) }
+        var request = URLRequest(url: url, timeoutInterval: 60)
         request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         if let body {

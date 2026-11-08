@@ -23,6 +23,7 @@ struct StreetnavExplorePanel: View {
     @ObservedObject var places: StreetnavPlaceSearch
     @ObservedObject private var guidance = StreetnavGuidance.shared
     @ObservedObject private var history = StreetnavRideHistory.shared
+    @ObservedObject private var rides = StreetnavRidesStore.shared
     @ObservedObject private var healthSync = StreetnavHealthSync.shared
     @ObservedObject private var vanMoof = StreetnavVanMoofAccount.shared
     @ObservedObject private var vanMoofBike = StreetnavVanMoofBike.shared
@@ -87,6 +88,16 @@ struct StreetnavExplorePanel: View {
                     .navigationDestination(for: StreetnavZoneGroup.self) { group in
                         StreetnavZonePage(group: group, all: history.stats?.zones ?? [], shapes: history.zoneShapes)
                             .onAppear { detent = .large }
+                    }
+                    // The rides open the same way: every ride, or one with its streets.
+                    .navigationDestination(for: StreetnavRidesRoute.self) { route in
+                        Group {
+                            switch route {
+                            case .all: StreetnavRidesPage()
+                            case .ride(let ride): StreetnavRidePage(ride: ride)
+                            }
+                        }
+                        .onAppear { detent = .large }
                     }
                 }
             }
@@ -491,8 +502,29 @@ struct StreetnavExplorePanel: View {
     /// department and ring opening on a page of its own.
     private func ridesDetails(_ stats: StreetnavRideHistory.Stats) -> some View {
         VStack(alignment: .leading, spacing: 20) {
+            // The last three, each opening on its streets, then all of them.
+            if rides.rides.isEmpty == false {
+                section("Dernières sorties") {
+                    ForEach(Array(rides.rides.prefix(3).enumerated()), id: \.element.id) { index, ride in
+                        if index > 0 { separator(leading: 72) }
+                        NavigationLink(value: StreetnavRidesRoute.ride(ride)) {
+                            StreetnavRideRow(ride: ride)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    separator(leading: 16)
+                    NavigationLink(value: StreetnavRidesRoute.all) {
+                        row(symbol: "list.bullet", title: "Toutes les sorties", chevron: true)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
             section("Depuis le début") {
-                row(symbol: "figure.outdoor.cycle", title: "Sorties", value: stats.total.rides.formatted())
+                NavigationLink(value: StreetnavRidesRoute.all) {
+                    row(symbol: "figure.outdoor.cycle", title: "Sorties", value: stats.total.rides.formatted(), chevron: true)
+                }
+                .buttonStyle(.plain)
                 separator
                 row(symbol: "point.topleft.down.to.point.bottomright.curvepath", title: "Distance",
                     value: "\(distance(stats.total.km)) km")
@@ -534,6 +566,7 @@ struct StreetnavExplorePanel: View {
             }
         }
         .padding(.top, 8)
+        .task { await rides.refresh() }
     }
 
     /// Each department or ring: its small map, its share and kilometres; a tap opens its page.
