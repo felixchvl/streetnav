@@ -224,11 +224,13 @@ out.
 - `troncon`: the streets a bike may ride, cut at their crossroads. Each is a stretch of one OSM way between two nodes it
   shares with another street; bike paths running along a street, the other carriageway of a dual carriageway and
   contre-allées are merged into the street (`membre`), so riding them rides the street. With its zone, surface class
-  (`revetu`, `stabilise`, `terre`, `inconnu`), tunnel flag and dead end (`impasse`).
+  (`revetu`, `stabilise`, `terre`, `inconnu`), tunnel flag, dead end (`impasse`) and the place it lies in (`place`:
+  a square, carrefour or rond-point drawn as an area).
 - `passage`: each time a ride went along a tronçon (the ride's points within the tronçon's reach, half its width plus
   5 m of GPS, or a merged way's), one row per ride, tronçon and run (cut where the ride turns back), with the part
   ridden, when, and whether it rode the tronçon all along (90 % of it; an impasse but its last 20 m, on the way in).
-  A ride merely crossing a street leaves no passage.
+  A ride merely crossing a street leaves no passage. A ride that rode 20 m in a place rode all of it: a complete
+  passage on each of its tronçons (`by_place`).
 - `troncon_etat`: per tronçon, the metres ridden by all passages together, done or not, the number of complete
   passages and of rides, the first passage, when it was done and by which ride, the last passage.
 - `objet` (a view, for QGIS): per OSM way, the number of passages that rode one of its tronçons, or one of the

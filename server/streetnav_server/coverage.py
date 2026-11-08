@@ -29,6 +29,10 @@ Streetnav » in Metanotes.
 3. State (couverture.troncon_etat): the metres ridden by all passages together, done when they cover the tronçon as
    one complete passage would, the number of complete passages and of rides, the first passage, when it was done and
    by which ride, the last passage. couverture.objet counts the passages of each OSM way.
+4. Places (a square, carrefour or rond-point drawn as an area: place=square, or an area named Place, Placette,
+   Carrefour or Rond-point) are one open area: a ride that rode PLACE_TRAVERSED_M along the tronçons lying in a place
+   (PLACE_INSIDE_SHARE of their length within PLACE_MARGIN_M of it) rode all of them, a complete passage each
+   (passage.by_place).
 
 Each run brings the coverage up to date: everything again when osm.lieu changed since the tronçons were cut,
 otherwise only the rides added, changed or deleted since the last run (a timer runs it every 10 minutes).
@@ -72,6 +76,9 @@ TURN_M = 30.0
 TUNNEL_GAP_S = 600
 TUNNEL_SPEED_MS = 20.0
 TUNNEL_MOUTH_M = 30.0
+PLACE_MARGIN_M = 3.0
+PLACE_INSIDE_SHARE = 0.9
+PLACE_TRAVERSED_M = 20.0
 LOCK = 0x434F_5652
 RIDE = "a.sport = 'cycling' AND a.track IS NOT NULL AND NOT coalesce(a.indoor, false)"
 PATHS = "('cycleway', 'footway', 'path')"
@@ -217,8 +224,31 @@ MEMBERS_SQL = """
     CROSS JOIN LATERAL (SELECT ST_LineLocatePoint(r.geom, ST_StartPoint(s.g)) AS ra,
                                ST_LineLocatePoint(r.geom, ST_EndPoint(s.g)) AS rb) l
     WHERE GeometryType(s.g) = 'LINESTRING'"""
+# The place each tronçon lies in, if any (the smallest, where places overlap).
+PLACES_SQL = rf"""
+    WITH place AS (
+        SELECT osm_type || osm_id AS place, ST_Buffer(geom, {PLACE_MARGIN_M}) AS g, ST_Area(geom) AS area FROM osm.lieu
+        WHERE kind = 'place' AND (tags->>'place' = 'square' OR name ~* '^(place|placette|carrefour|rond-point|rond point)\M'))
+    UPDATE couverture.troncon t SET place = p.place
+    FROM (SELECT DISTINCT ON (t.id) t.id, p.place FROM couverture.troncon t JOIN place p ON ST_Intersects(t.geom, p.g)
+          WHERE ST_Length(ST_Intersection(t.geom, p.g)) >= {PLACE_INSIDE_SHARE} * t.length_m
+          ORDER BY t.id, p.area, p.place) p
+    WHERE t.id = p.id"""
+# A ride through a place rides all its tronçons: a complete passage on each it has none on.
+PLACE_PASSAGES_SQL = f"""
+    WITH ridden AS (
+        SELECT t.place, min(p.entered_at) AS entered_at, max(p.left_at) AS left_at
+        FROM couverture.passage p JOIN couverture.troncon t ON t.id = p.troncon_id
+        WHERE p.activity_id = %(id)s AND t.place IS NOT NULL AND NOT p.by_place
+        GROUP BY t.place HAVING sum(p.to_m - p.from_m) >= {PLACE_TRAVERSED_M})
+    INSERT INTO couverture.passage (troncon_id, activity_id, run, from_m, to_m, entered_at, left_at, complete, by_place)
+    SELECT t.id, %(id)s, 0, 0, t.length_m, r.entered_at, r.left_at, true, true
+    FROM ridden r JOIN couverture.troncon t ON t.place = r.place
+    WHERE NOT EXISTS (SELECT FROM couverture.passage q WHERE q.troncon_id = t.id AND q.activity_id = %(id)s AND q.complete)
+    RETURNING troncon_id"""
 # The state of osm.lieu the tronçons are cut from: any OpenStreetMap run that changed something changes it.
-OSM_STATE_SQL = "SELECT count(*) || ':' || coalesce(max(loaded_at)::text, '') FROM osm.lieu WHERE kind = 'voie'"
+OSM_STATE_SQL = ("SELECT count(*) || ':' || coalesce(max(loaded_at)::text, '') FROM osm.lieu "
+                 "WHERE kind IN ('voie', 'place')")
 # The points of a ride's track along tronçons (within their reach, or a merged way's), each placed along the
 # tronçon's way (0 to 1): when several tronçons of one way reach a point, the nearest.
 HITS_SQL = f"""
@@ -338,6 +368,7 @@ def build(conn) -> int:
         cur.execute(MEMBERS_SQL)
         # Statistics of what this transaction wrote, or the planner measures the rides against tables it thinks empty.
         cur.execute("ANALYZE couverture.troncon; ANALYZE couverture.membre")
+        cur.execute(PLACES_SQL)
         cur.execute(OSM_STATE_SQL)
         state = cur.fetchone()[0]
         cur.execute("""INSERT INTO couverture.build (osm_state, troncons) VALUES (%s, %s)
@@ -466,11 +497,14 @@ def measure(conn, activity_id: int) -> set[int]:
                       "FROM STDIN") as copy:
             for r in rows:
                 copy.write_row(r)
+        cur.execute(PLACE_PASSAGES_SQL, {"id": activity_id})
+        by_place = {r[0] for r in cur.fetchall()}
+        touched |= by_place
         cur.execute("""INSERT INTO couverture.sortie (activity_id, updated_at, passages)
                        SELECT id, updated_at, %s FROM activity WHERE id = %s
                        ON CONFLICT (activity_id) DO UPDATE SET updated_at = EXCLUDED.updated_at, measured_at = now(),
                                                                passages = EXCLUDED.passages""",
-                    (len(rows), activity_id))
+                    (len(rows) + len(by_place), activity_id))
     return touched
 
 

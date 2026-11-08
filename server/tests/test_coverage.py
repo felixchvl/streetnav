@@ -155,3 +155,31 @@ class CoverageTest(unittest.TestCase):
         done = coverage.update(self.conn)
         self.assertEqual((done["full"], done["removed"]), (False, 1))
         self.assertEqual(self.rows("SELECT count(*) FROM couverture.troncon_etat WHERE done_activity = 3"), [(0,)])
+
+    def test_a_ride_through_a_place_rides_all_of_it(self):
+        # Place G, a square of 100 m, crossed corner to corner by Rue H and Rue I, which meet in its middle
+        x, y, d = 2.35, 48.86, 100
+        corner = [(x, y), (x + d * LON_M, y), (x + d * LON_M, y + d * LAT_M), (x, y + d * LAT_M)]
+        middle = (2065, x + d / 2 * LON_M, y + d / 2 * LAT_M)
+        place = way(208, [(2051 + k, *corner[k % 4]) for k in range(4)] + [(2051, *corner[0])],
+                    {"place": "square", "name": "Place G"})
+        rue_h = way(209, [(2061, *corner[0]), middle, (2062, *corner[2])], {"highway": "residential", "name": "Rue H"})
+        rue_i = way(210, [(2063, *corner[1]), middle, (2064, *corner[3])], {"highway": "residential", "name": "Rue I"})
+        osm.store(self.conn, LIMITS + [RUE_A, RUE_B, RUE_E, RUE_F, CYCLEWAY, EASTBOUND, WESTBOUND, place, rue_h, rue_i],
+                  check=False)
+        # From the south-west corner to the middle only: 70 m in the place
+        self.conn.execute("""INSERT INTO activity (id, started_at, sport, track, primary_source)
+                             VALUES (4, to_timestamp(%s), 'cycling', ST_GeomFromEWKT(%s), 'healthkit')""",
+                          (T0 + 10800, track(corner[0], middle[1:], start=T0 + 10800)))
+        coverage.update(self.conn, full=True)
+        self.assertEqual(self.rows("SELECT osm_id, place FROM couverture.troncon WHERE place IS NOT NULL ORDER BY osm_id, a"),
+                         [(209, "w208"), (209, "w208"), (210, "w208"), (210, "w208")])
+        # All four tronçons ridden all along by that ride, by riding through the place (its corners being dead ends,
+        # the ride rode out of one, which is no complete passage of it)
+        self.assertEqual(self.rows("""SELECT count(*), count(*) FILTER (WHERE by_place) FROM couverture.passage
+                                      WHERE activity_id = 4 AND complete"""), [(4, 4)])
+        self.assertEqual(self.rows("""SELECT e.passages, e.done, e.done_activity FROM couverture.troncon t
+                                      JOIN couverture.troncon_etat e ON e.troncon_id = t.id WHERE t.place IS NOT NULL"""),
+                         [(1, True, 4)] * 4)
+        self.assertEqual(self.rows("SELECT osm_id, passages FROM couverture.objet WHERE osm_id IN (209, 210) ORDER BY osm_id"),
+                         [(209, 1), (210, 1)])

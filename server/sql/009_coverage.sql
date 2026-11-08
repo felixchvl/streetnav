@@ -22,7 +22,10 @@ CREATE TABLE IF NOT EXISTS couverture.troncon (
     reach_m   double precision NOT NULL,      -- half its width, plus the GPS margin
     geom      geometry(LineString, 2154) NOT NULL
 );
+-- The place (square, carrefour, rond-point drawn as an area) it lies in, as its osm_type and osm_id (w123, r45).
+ALTER TABLE couverture.troncon ADD COLUMN IF NOT EXISTS place text;
 CREATE INDEX IF NOT EXISTS troncon_geom ON couverture.troncon USING gist (geom);
+CREATE INDEX IF NOT EXISTS troncon_place ON couverture.troncon (place) WHERE place IS NOT NULL;
 CREATE INDEX IF NOT EXISTS troncon_way ON couverture.troncon (osm_id, a);
 COMMENT ON TABLE couverture.troncon IS
     'coverage: the streets a bike may ride cut at their crossroads, from osm.lieu (coverage.py)';
@@ -58,6 +61,8 @@ CREATE TABLE IF NOT EXISTS couverture.passage (
     complete    boolean NOT NULL,             -- the run rode the tronçon all along (rules in coverage.py)
     PRIMARY KEY (troncon_id, activity_id, run)
 );
+-- A passage the ride did not measure but earned by riding through the place the tronçon lies in (run 0).
+ALTER TABLE couverture.passage ADD COLUMN IF NOT EXISTS by_place boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS passage_activity ON couverture.passage (activity_id);
 COMMENT ON TABLE couverture.passage IS
     'coverage: each time a bike ride went along a tronçon (coverage.py)';
