@@ -1,0 +1,11 @@
+[Unit]
+Description=Streetnav: bring the coverage up to date (couverture: the streets each bike ride went along), everything again when OpenStreetMap changed
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=streetnav
+EnvironmentFile=/etc/streetnav/streetnav.env
+WorkingDirectory=/opt/streetnav
+ExecStart=/opt/streetnav/venv/bin/python -m streetnav_server.coverage
+MemoryMax=512M

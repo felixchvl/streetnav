@@ -1,0 +1,9 @@
+[Unit]
+Description=Streetnav: coverage brought up to date every 10 minutes (the rides added or changed, everything after an OpenStreetMap run)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target

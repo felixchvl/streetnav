@@ -2,11 +2,11 @@
 
 GET /tracks: one GeoJSON feature per ride with a track, simplified to about 5 metres (2,273 rides: 2 MB, much less
 gzipped), with an ETag so that the app only downloads them again when a ride was added or changed.
-GET /streets: the streets ridden and not ridden, for the map's two colours; empty since 2026-11-05, until the coverage
-is measured again from what each ride brought, on OpenStreetMap's osm.lieu (osm.py).
+GET /streets: the streets ridden and not ridden, for the map's two colours; empty since 2026-11-05, until the map
+draws the coverage measured again on OpenStreetMap's osm.lieu (coverage.py).
 GET /stats: totals, this year, this month, the last 30 days, records, kilometres by year, and the kilometres of streets a
-bike may ride overall and in each arrondissement of Paris and commune of the inner suburbs, with its ring (osm.py);
-none counted as ridden until the coverage is measured again.
+bike may ride and of those ridden, overall and in each arrondissement of Paris and commune of the inner suburbs, with
+its ring (the tronçons of coverage.py).
 GET /zones: the outlines of those zones, simplified to about 25 m, for the app's maps of the streets ridden by zone.
 GET /tracks/outside: the parts of the bike rides' tracks outside those zones, where no street is measured, for the map
 to show where the rider has been there too.
@@ -120,13 +120,14 @@ def router(require_token) -> APIRouter:
                 """SELECT started_at::date, round((distance_m / 1000)::numeric, 1) FROM activity
                    WHERE sport = 'cycling' AND distance_m IS NOT NULL ORDER BY distance_m DESC LIMIT 1""").fetchone()
             last = conn.execute("SELECT max(started_at) FROM activity WHERE sport = 'cycling'").fetchone()[0]
-            # Nothing counts as ridden until the coverage is measured again.
-            lengths = dict(conn.execute(
-                """SELECT zone, sum(ST_Length(geom)) / 1000 FROM osm.lieu
-                   WHERE kind = 'voie' AND bike AND counted AND zone IS NOT NULL GROUP BY zone""").fetchall())
-            zones = [(code, name, code[:2], ring, 0, lengths.get(code, 0)) for code, name, ring in conn.execute(
+            # The tronçons of each zone and the metres ridden along them (coverage.py).
+            lengths = {zone: (ridden, total) for zone, ridden, total in conn.execute(
+                """SELECT t.zone, coalesce(sum(e.ridden_m), 0) / 1000, sum(t.length_m) / 1000
+                   FROM couverture.troncon t LEFT JOIN couverture.troncon_etat e ON e.troncon_id = t.id
+                   WHERE t.zone IS NOT NULL GROUP BY t.zone""").fetchall()}
+            zones = [(code, name, code[:2], ring, *lengths.get(code, (0, 0))) for code, name, ring in conn.execute(
                 f"SELECT z.code, z.name, z.ring FROM {ZONES} ORDER BY z.ring NULLS LAST, z.code").fetchall()]
-            streets = (0, sum(lengths.values()))
+            streets = (sum(r for r, _ in lengths.values()), sum(t for _, t in lengths.values()))
             by_year = conn.execute(
                 """SELECT extract(year FROM started_at)::int, count(*), round((sum(distance_m) / 1000)::numeric)
                    FROM activity WHERE sport = 'cycling' GROUP BY 1 ORDER BY 1""").fetchall()

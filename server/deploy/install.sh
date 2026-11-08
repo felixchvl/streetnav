@@ -48,6 +48,8 @@ done
 runuser -u postgres -- psql -q -d streetnav -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO streetnav; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO streetnav"
 # OpenStreetMap's places (osm.py): written by Streetnav, read by everyone else
 runuser -u postgres -- psql -q -d streetnav -c "GRANT USAGE ON SCHEMA osm TO streetnav; GRANT ALL ON ALL TABLES IN SCHEMA osm TO streetnav"
+# The coverage (coverage.py): written by Streetnav, computed again at will
+runuser -u postgres -- psql -q -d streetnav -c "GRANT USAGE ON SCHEMA couverture TO streetnav; GRANT ALL ON ALL TABLES IN SCHEMA couverture TO streetnav"
 
 # Application code and its virtualenv
 rm -rf "$APP/streetnav_server"
@@ -72,7 +74,8 @@ done
 rm -f /etc/systemd/system/streetnav-osm-update.service
 cp "$SRC"/deploy/*.service "$SRC"/deploy/*.timer "$SRC"/deploy/*.path /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now streetnav-api.service streetnav-backup.timer streetnav-osm.path streetnav-osm-full.timer
+systemctl enable --now streetnav-api.service streetnav-backup.timer streetnav-osm.path streetnav-osm-full.timer \
+  streetnav-coverage.timer
 systemctl restart streetnav-api.service
 # OpenStreetMap's places, read once (about 15 minutes, in the background); then every Sunday and from the app's button
 if [ "$(runuser -u postgres -- psql -tA -d streetnav -c 'SELECT count(*) FROM osm.lieu')" = 0 ]; then

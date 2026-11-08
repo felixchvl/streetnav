@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from streetnav_server import osm, registry
+from streetnav_server import coverage, osm, registry
 from test_osm import LIMITS, SIDEWALK, STREET
 from test_registry import URL, workout
 
@@ -37,7 +37,9 @@ class ApiTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.addCleanup(self.state.cleanup)
         with registry.connect() as conn:
-            conn.execute("TRUNCATE activity, activity_source, activity_heart_rate, sync_run, raw_file, osm.lieu RESTART IDENTITY")
+            conn.execute("TRUNCATE activity, activity_source, activity_heart_rate, sync_run, raw_file, osm.lieu, "
+                         "couverture.troncon, couverture.membre, couverture.passage, couverture.troncon_etat, "
+                         "couverture.sortie, couverture.build RESTART IDENTITY")
 
     def tearDown(self):
         self.raw.cleanup()
@@ -116,6 +118,7 @@ class ApiTest(unittest.TestCase):
     def test_stats_count_the_streets_a_bike_may_ride_in_each_zone(self):
         with registry.connect() as conn:
             osm.store(conn, LIMITS + [STREET, SIDEWALK], check=False)
+            coverage.update(conn, full=True)
         stats = self.client.get("/stats").json()
         self.assertEqual([(z["code"], z["ring"], z["ridden_km"]) for z in stats["zones"]],
                          [("75101", 0, 0), ("75102", 0, 0), ("92001", 1, 0), ("92002", 2, 0)])

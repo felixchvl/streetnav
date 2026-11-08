@@ -60,6 +60,7 @@ gold from silver without importing anything again (`--dry-run` to see the counts
   files HealthFit exports from Apple Health (source `file`, below Apple Health and Strava).
 - `streetnav_server/activity_files.py` - the file readers shared by both imports.
 - `streetnav_server/osm.py` - OpenStreetMap's places of the 75, 92, 93 and 94 (`osm.lieu`), see below.
+- `streetnav_server/coverage.py` - the streets each bike ride went along (schema `couverture`), see below.
 - `streetnav_server/map_data.py` - what the app's map and statistics read (`GET /tracks`, `/streets`, `/zones`,
   `/tracks/outside`, `/stats`).
 - `tests/` - `python -m unittest discover -s tests`. The database tests also need
@@ -144,7 +145,8 @@ nightly dump; `streetnav-backup` leaves that schema out). In QGIS: a
 PostgreSQL connection to `192.168.1.62:5432`, database `streetnav`, SSL mode `require`. Useful layers:
 `activity` (track, one line per activity; filter `sport = 'cycling'`) and `activity_source` (one track per
 version, to compare them). Tracks are `LineStringZM` in EPSG:4326, both with a spatial index. OpenStreetMap's places:
-`osm.lieu` (filter on `kind`; geometry in EPSG:2154, QGIS splits lines and surfaces).
+`osm.lieu` (filter on `kind`; geometry in EPSG:2154, QGIS splits lines and surfaces). The coverage: `couverture.troncon`
+(join `couverture.troncon_etat` for the passages) and `couverture.objet` (passages per OSM way).
 
 ## Remote access
 
@@ -175,9 +177,9 @@ from the home network.
 
 Until 2026-11-05 `GET /streets` returned every street around Paris cut into ridden and not ridden parts (`street_part`,
 from a monthly copy of OpenStreetMap in `street`, with the places of the Ville de Paris register and the zones of the
-State's API Géo). All of that was removed: the coverage is to be measured again from what each ride brought, on
-`osm.lieu`. Until then `GET /streets` is empty and `GET /stats` counts no street ridden; its zones, their rings and
-the kilometres a bike may ride in each come from `osm.lieu`.
+State's API Géo). All of that was removed: the coverage is now measured again from what each ride brought, on
+`osm.lieu` (below). `GET /streets` stays empty until the map draws it; `GET /stats` takes the kilometres a bike may
+ride and the kilometres ridden in each zone from it, the zones and their rings from `osm.lieu`.
 
 ## OpenStreetMap's places
 
@@ -211,3 +213,28 @@ One pipeline, `python -m streetnav_server.osm`, run in full every week and in be
   as a multipolygon) is read again from Overpass when it changed or when one of its member ways did; when Overpass's
   copy is older than the changes, it is read again at the next run. The state (the last changeset closed, the ones
   applied, the relations to read again) is in `/var/lib/streetnav/osm-state.json`.
+
+## Coverage
+
+The streets each bike ride went along (`sql/009_coverage.sql`, `streetnav_server/coverage.py`), from the rides'
+cropped tracks (gold `activity`) and `osm.lieu`, with the rules of the note « Règles des segments Streetnav »
+(Metanotes). Everything in the `couverture` schema can be computed again at will, so the nightly dumps leave its rows
+out.
+
+- `troncon`: the streets a bike may ride, cut at their crossroads. Each is a stretch of one OSM way between two nodes it
+  shares with another street; bike paths running along a street, the other carriageway of a dual carriageway and
+  contre-allées are merged into the street (`membre`), so riding them rides the street. With its zone, surface class
+  (`revetu`, `stabilise`, `terre`, `inconnu`), tunnel flag and dead end (`impasse`).
+- `passage`: each time a ride went along a tronçon (the ride's points within the tronçon's reach, half its width plus
+  5 m of GPS, or a merged way's), one row per ride, tronçon and run (cut where the ride turns back), with the part
+  ridden, when, and whether it rode the tronçon all along (90 % of it; an impasse but its last 20 m, on the way in).
+  A ride merely crossing a street leaves no passage.
+- `troncon_etat`: per tronçon, the metres ridden by all passages together, done or not, the number of complete
+  passages and of rides, the first passage, when it was done and by which ride, the last passage.
+- `objet` (a view, for QGIS): per OSM way, the number of passages that rode one of its tronçons, or one of the
+  tronçons it is merged into, all along.
+
+`python -m streetnav_server.coverage` brings it up to date (`streetnav-coverage.timer`, every 10 minutes): everything
+again when `osm.lieu` changed since the tronçons were cut (after each OpenStreetMap run that changed something),
+otherwise only the rides added, changed or deleted since (`sortie` keeps the version of each ride measured). `coverage
+full` measures everything again. It runs in one transaction: readers see the previous coverage until it is done.
