@@ -3,13 +3,19 @@ import SwiftUI
 import UIKit
 import os
 
-/// The lock's vibration once it is let go past the mark: iOS's success, as before, or an impact from UIKit's generator,
-/// alone or twice at once. The VanMoof app plays two at once (journal of 8 Nov 2026): the doubled ones are there to
-/// find which, by the kernel's measures of each.
+/// The lock's vibration once it is let go past the mark: iOS's success, as before, an impact from UIKit's generator,
+/// alone or twice at once, or a Core Haptics tap. The VanMoof app plays two medium impacts landing at the same instant,
+/// which add up (kernel's measures, 8 Nov 2026): UIKit's two do not always land together, so Core Haptics plays two taps
+/// in one pattern at the very same time, at a few sharpnesses to find the one that matches.
 enum StreetnavUnlockHaptic: String, CaseIterable, Identifiable {
     case success
     case light, medium, heavy, soft, rigid
     case doubleLight, doubleMedium, doubleHeavy, doubleSoft, doubleRigid
+    case tap060, tap2x020, tap2x040, tap2x060, tap2x080, tap2x100, players2x060
+
+    /// Played in a row by « Mesurer » in the laboratory, to compare with VanMoof's in a capture of the log.
+    static let measured: [StreetnavUnlockHaptic] = [.medium, .tap060, .tap2x020, .tap2x040, .tap2x060, .tap2x080, .tap2x100,
+                                                    .players2x060]
 
     static let key = "streetnav.unlockHaptic"
     var id: String { rawValue }
@@ -27,6 +33,27 @@ enum StreetnavUnlockHaptic: String, CaseIterable, Identifiable {
         case .doubleHeavy: "Impact lourd ×2"
         case .doubleSoft: "Impact souple ×2"
         case .doubleRigid: "Impact rigide ×2"
+        case .tap060: "Coup Core Haptics, netteté 0,6"
+        case .tap2x020: "2 coups superposés, netteté 0,2"
+        case .tap2x040: "2 coups superposés, netteté 0,4"
+        case .tap2x060: "2 coups superposés, netteté 0,6"
+        case .tap2x080: "2 coups superposés, netteté 0,8"
+        case .tap2x100: "2 coups superposés, netteté 1"
+        case .players2x060: "2 lecteurs au même instant, netteté 0,6"
+        }
+    }
+
+    /// The Core Haptics ones: how many taps at the same instant, their sharpness, and whether each has its own player.
+    private var taps: (count: Int, sharpness: Double, players: Bool)? {
+        switch self {
+        case .tap060: (1, 0.6, false)
+        case .tap2x020: (2, 0.2, false)
+        case .tap2x040: (2, 0.4, false)
+        case .tap2x060: (2, 0.6, false)
+        case .tap2x080: (2, 0.8, false)
+        case .tap2x100: (2, 1, false)
+        case .players2x060: (2, 0.6, true)
+        default: nil
         }
     }
 
@@ -38,6 +65,7 @@ enum StreetnavUnlockHaptic: String, CaseIterable, Identifiable {
         case .heavy, .doubleHeavy: .heavy
         case .soft, .doubleSoft: .soft
         case .rigid, .doubleRigid: .rigid
+        default: nil
         }
     }
 
@@ -46,6 +74,11 @@ enum StreetnavUnlockHaptic: String, CaseIterable, Identifiable {
     /// Played at once by as many generators, as VanMoof's app does; nothing for `success`, which the lock plays itself
     /// once the bike confirms.
     @MainActor func play() {
+        if let taps {
+            let events = (0..<taps.count).map { _ in StreetnavHapticEngine.tap(1, taps.sharpness) }
+            StreetnavHapticEngine.shared.playTogether(events, separatePlayers: taps.players)
+            return
+        }
         guard let style else { return }
         let generators = (0..<count).map { _ in UIImpactFeedbackGenerator(style: style) }
         generators.forEach { $0.prepare() }
@@ -59,7 +92,7 @@ private let hapticLog = Logger(subsystem: "com.felixchevalier.streetnav", catego
 /// choosing the lock's. iOS's ready-made feedback, impacts by weight and by texture, then Core Haptics: a tap and a
 /// continuous vibration set by hand, a few patterns, and a track whose vibration follows the finger.
 struct StreetnavHapticLab: View {
-    @StateObject private var engine = StreetnavHapticEngine()
+    @ObservedObject private var engine = StreetnavHapticEngine.shared
     @State private var feedback: SensoryFeedback?
     @State private var plays = 0
     @State private var impactIntensity = 1.0
@@ -99,7 +132,7 @@ struct StreetnavHapticLab: View {
                 ForEach(StreetnavUnlockHaptic.allCases.filter { $0 != .success }) { choice in
                     Button { mark(choice.rawValue); choice.play() } label: { row(choice.title, choice.rawValue) }
                 }
-                Button(measuring ? "Mesure en cours…" : "Tout jouer, 3 s d'écart") { measureAll() }
+                Button(measuring ? "Mesure en cours…" : "Mesurer les coups superposés, 3 s d'écart") { measureAll() }
                     .disabled(measuring)
             } header: {
                 Text("Cadenas, façon VanMoof")
@@ -181,7 +214,7 @@ struct StreetnavHapticLab: View {
     private func measureAll() {
         measuring = true
         Task {
-            for choice in StreetnavUnlockHaptic.allCases where choice != .success {
+            for choice in StreetnavUnlockHaptic.measured {
                 mark(choice.rawValue)
                 choice.play()
                 try? await Task.sleep(for: .seconds(3))
@@ -270,6 +303,7 @@ private struct StreetnavHapticTrack: View {
 /// an intensity and a sharpness, and one player whose intensity and sharpness are changed live.
 @MainActor
 final class StreetnavHapticEngine: ObservableObject {
+    static let shared = StreetnavHapticEngine()
     let supported = CHHapticEngine.capabilitiesForHardware().supportsHaptics
     private var engine: CHHapticEngine?
     private var follower: CHHapticAdvancedPatternPlayer?
@@ -302,6 +336,18 @@ final class StreetnavHapticEngine: ObservableObject {
               let player = try? engine.makePlayer(with: pattern) else { return }
         try? engine.start()
         try? player.start(atTime: CHHapticTimeImmediate)
+    }
+
+    /// The events at the very same instant: in one pattern, or each in its own player started at the same engine time.
+    func playTogether(_ events: [CHHapticEvent], separatePlayers: Bool) {
+        guard separatePlayers else { return play(events) }
+        guard let engine = started() else { return }
+        try? engine.start()
+        let players = events.compactMap { event in
+            (try? CHHapticPattern(events: [event], parameters: [])).flatMap { try? engine.makePlayer(with: $0) }
+        }
+        let at = engine.currentTime + 0.03
+        players.forEach { try? $0.start(atTime: at) }
     }
 
     static func tap(_ intensity: Double, _ sharpness: Double, at time: TimeInterval = 0) -> CHHapticEvent {
