@@ -45,7 +45,7 @@ LIMITS = [
 STREET = way(100, [(1001, 2.31, 48.85), (1002, 2.32, 48.85), (1003, 2.33, 48.85)],
              {"highway": "residential", "name": "Rue A"})
 SIDEWALK = way(101, [(1011, 2.36, 48.84), (1012, 2.37, 48.84)], {"highway": "footway", "footway": "sidewalk", "name": "Rue G"})
-PATH = way(102, [(1021, 2.25, 48.86), (1022, 2.26, 48.86)], {"highway": "path"})  # unnamed path: not kept
+PATH = way(102, [(1021, 2.25, 48.86), (1022, 2.26, 48.86)], {"highway": "footway"})  # unnamed footway: not kept
 SQUARE = way(103, [(1031, 2.36, 48.86), (1032, 2.37, 48.86), (1033, 2.37, 48.87), (1034, 2.36, 48.87), (1031, 2.36, 48.86)],
              {"place": "square", "name": "Place C"})
 # A square drawn crossing itself (a bow tie): no polygon GEOS can intersect, kept all the same.
@@ -72,7 +72,8 @@ def way_xml(osm_id, refs, tags, version=2):
 class RulesTest(unittest.TestCase):
     def test_kinds(self):
         self.assertEqual(osm.kind_of("w", {"highway": "residential"}), "voie")
-        self.assertEqual(osm.kind_of("w", {"highway": "path"}), None)
+        self.assertEqual(osm.kind_of("w", {"highway": "path"}), "voie")
+        self.assertEqual(osm.kind_of("w", {"highway": "footway"}), None)
         self.assertEqual(osm.kind_of("w", {"highway": "path", "name": "Allée E"}), "voie")
         self.assertEqual(osm.kind_of("w", {"highway": "path", "bicycle": "designated"}), "voie")
         self.assertEqual(osm.kind_of("w", {"highway": "proposed", "name": "Rue F"}), None)
@@ -87,6 +88,22 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(osm.bike_access({"highway": "footway", "bicycle": "yes"}), (True, "bicycle=yes"))
         self.assertEqual(osm.bike_access({"highway": "residential", "access": "private"}), (False, "access=private"))
         self.assertFalse(osm.counted({"highway": "footway", "footway": "sidewalk"}))
+        # Wandrer's rules, but named alleys, tunnels and pedestrian streets kept, access=no closed
+        self.assertEqual(osm.bike_access({"highway": "pedestrian"}), (True, "highway=pedestrian"))
+        self.assertEqual(osm.bike_access({"highway": "residential", "tunnel": "yes"}), (True, "highway=residential"))
+        self.assertEqual(osm.bike_access({"highway": "service", "service": "alley"}), (True, "highway=service"))
+        self.assertEqual(osm.bike_access({"highway": "service"}), (True, "highway=service"))
+        self.assertEqual(osm.bike_access({"highway": "service", "service": "parking_aisle"}), (False, "service=parking_aisle"))
+        self.assertEqual(osm.bike_access({"highway": "primary", "bicycle": "use_sidepath"}), (False, "bicycle=use_sidepath"))
+        self.assertEqual(osm.bike_access({"highway": "trunk"}), (False, "highway=trunk"))
+        self.assertEqual(osm.bike_access({"highway": "trunk", "bicycle": "yes"}), (True, "bicycle=yes"))
+        self.assertEqual(osm.bike_access({"highway": "busway"}), (False, "highway=busway"))
+        self.assertEqual(osm.bike_access({"highway": "residential", "access": "no"}), (False, "access=no"))
+        self.assertEqual(osm.bike_access({"highway": "footway", "bicycle": "no", "bicycle:conditional": "yes @ (Su)"}),
+                         (True, "bicycle:conditional"))
+        self.assertEqual(osm.bike_access({"highway": "cycleway", "indoor": "yes"}), (False, "indoor=yes"))
+        self.assertFalse(osm.counted({"highway": "cycleway", "cycleway": "crossing"}))
+        self.assertTrue(osm.counted({"highway": "residential", "cycleway": "crossing"}))
 
     def test_parse_change(self):
         parsed = osm.parse_change(change(("modify", node_xml(1, 2.3, 48.8)),

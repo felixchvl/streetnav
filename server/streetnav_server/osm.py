@@ -3,14 +3,20 @@ ways (kind voie: streets, roads, paths), the squares drawn as areas (place) and 
 departments, communes, the arrondissements of Paris and its quartiers), each with its tags as OSM has them: the one
 copy of OSM in this database.
 
-What is kept: every way of the kinds in HIGHWAYS, named or not, every named way and every way marked open to bikes
-(voie); place=square and the highway areas (place); boundary=administrative relations of LIMIT_LEVELS (limite). Only
-what lies in the four departments stays. Whether a bike may ride a voie (bike) and whether it is a way of its own
-rather than part of a street (counted):
-- open: bicycle=yes, designated, permissive, destination or use_sidepath;
-- closed: bicycle=no, dismount or private; access or vehicle closed (no, private, customers...); motor roads,
-  motorways; steps, footways, pedestrian streets, bridleways; works;
-- open otherwise: streets, service roads, cycleways, tracks, and paths (open to bikes in France).
+What is kept: every way of the kinds in HIGHWAYS (paths and tracks included), named or not, every named way and every
+way marked open to bikes (voie); place=square and the highway areas (place); boundary=administrative relations of
+LIMIT_LEVELS (limite). Only what lies in the four departments stays. Whether a bike may ride a voie (bike), after
+Wandrer's rules (the note « Règles des segments Streetnav » in Metanotes), and whether it is a way of its own rather
+than part of a street (counted: not a sidewalk, a crossing or a traffic island):
+- open: bicycle=yes, designated, permissive, official, mtb or destination, bicycle:designated, bicycle=no with a
+  bicycle:conditional;
+- closed: bicycle=no, dismount, private or use_sidepath (the bike path beside it is the way); access or vehicle closed
+  (no, private, customers, military...); motor roads, indoor ways; motorways, trunk roads, bus ways, steps, footways,
+  bridleways, works; service roads tagged as parking aisles, driveways, emergency accesses...;
+- open otherwise: streets, pedestrian streets (bikes at walking pace), service roads (alleys among them), tunnels,
+  cycleways, tracks, and paths (open to bikes in France).
+The members of bicycle route relations, which Wandrer keeps, are not looked at: in the four departments, only some
+3 km of them are not open already (2026-11-08).
 
 The zones are the arrondissements of Paris and the communes of the 92, 93 and 94. Paris is ring 0; a commune is in ring
 n when it shares a border with one of ring n - 1: the two overlap over at least TOUCH_M2 once the other is widened by
@@ -65,12 +71,19 @@ WANTED = "osm-wanted"
 WAIT_S = 30.0  # how long the app's button waits for the run
 
 HIGHWAYS = ("primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|"
-            "living_street|pedestrian|cycleway")
-OPEN = {"yes", "designated", "permissive", "destination", "use_sidepath"}
-CLOSED = {"no", "private", "customers", "delivery", "permit", "emergency", "agricultural", "forestry"}
-NO_BIKES = {"motorway", "motorway_link", "steps", "footway", "pedestrian", "bridleway", "corridor", "construction"}
+            "living_street|pedestrian|cycleway|path|track")
+# Wandrer's rules (wandrer.earth/filters, read on 2026-11-08), but for named alleys and tunnels, kept, and access=no,
+# closed: the note « Règles des segments Streetnav » in Metanotes.
+OPEN = {"yes", "designated", "permissive", "official", "mtb", "MTB", "destination"}
+CLOSED = {"no", "private", "customers", "delivery", "permit", "emergency", "agricultural", "forestry", "military"}
+NO_BIKES = {"motorway", "motorway_link", "trunk", "trunk_link", "busway", "bus_guideway", "steps", "footway",
+            "bridleway", "corridor", "construction", "raceway", "escape", "elevator", "services", "rest_area",
+            "bus_stop", "platform", "via_ferrata", "no"}
+# Service roads: kept when named, but parking aisles, driveways, emergency accesses... (alleys are streets).
+SERVICES_KEPT = {"alley"}
 NOT_WAYS = {"proposed", "abandoned", "razed", "disused", "platform"}
 PARTS_OF_A_STREET = {"sidewalk", "crossing", "traffic_island"}
+PATHS = {"cycleway", "footway", "path"}
 WIDEN_M = 25
 TOUCH_M2 = 2500
 
@@ -158,19 +171,28 @@ def bike_access(tags: dict) -> tuple[bool, str]:
     bicycle = tags.get("bicycle")
     if bicycle in OPEN:
         return True, f"bicycle={bicycle}"
-    if bicycle in {"no", "dismount", "private"}:
+    if tags.get("bicycle:designated", "no") != "no":
+        return True, "bicycle:designated"
+    if bicycle == "no" and "bicycle:conditional" in tags:
+        return True, "bicycle:conditional"
+    if bicycle in {"no", "dismount", "private", "use_sidepath"}:
         return False, f"bicycle={bicycle}"
     for key in ("access", "vehicle"):
         if tags.get(key) in CLOSED:
             return False, f"{key}={tags[key]}"
-    if tags.get("motorroad") == "yes":
-        return False, "motorroad=yes"
+    for key in ("motorroad", "indoor"):
+        if tags.get(key) == "yes":
+            return False, f"{key}=yes"
+    if tags["highway"] == "service" and tags.get("service", "alley") not in SERVICES_KEPT:
+        return False, f"service={tags['service']}"
     return tags["highway"] not in NO_BIKES, f"highway={tags['highway']}"
 
 
 def counted(tags: dict) -> bool:
-    """A way of its own, not a sidewalk, a crossing or a traffic island."""
-    return tags.get("footway") not in PARTS_OF_A_STREET
+    """A way of its own, not a sidewalk, a crossing or a traffic island (a bike path along the sidewalk becomes part of
+    its street, coverage.py)."""
+    keys = ("footway", "cycleway", "path") if tags.get("highway") in PATHS else ("footway",)
+    return not any(tags.get(key) in PARTS_OF_A_STREET for key in keys)
 
 
 def is_place(tags: dict) -> bool:
