@@ -7,6 +7,10 @@ struct StreetnavRecommendedView: View {
     @StateObject private var places = StreetnavPlaceSearch()
     @ObservedObject private var history = StreetnavRideHistory.shared
     @ObservedObject private var live = StreetnavLiveStreets.shared
+    @ObservedObject private var bike = StreetnavVanMoofBike.shared
+    /// The start screen, with the large lock, while the VanMoof account is connected; until the map is explored or the
+    /// bike unlocked (and with the sample bike, -sampleBike YES, to lay it out).
+    @State private var showsStart = StreetnavVanMoofAccount.shared.isSignedIn || UserDefaults.standard.bool(forKey: "sampleBike")
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentedSheet: StreetnavSheet?
     @State private var showsEndConfirmation = false
@@ -50,7 +54,8 @@ struct StreetnavRecommendedView: View {
                 isThreeD: $isThreeD,
                 recenter: locationTapped,
                 choosePoint: model.flowState == .home
-                    ? { coordinate, building in Task { await places.choose(pointAt: coordinate, building: building) } } : nil
+                    ? { coordinate, building in Task { await places.choose(pointAt: coordinate, building: building) } } : nil,
+                hidesButtons: startVisible
             )
 
             switch model.flowState {
@@ -64,11 +69,26 @@ struct StreetnavRecommendedView: View {
         }
         // The bike, as Maps shows the weather: top left, while exploring.
         .overlay(alignment: .topLeading) {
-            if [.home, .planner, .routePreview, .readiness].contains(model.flowState), panelDetent != .large {
+            if [.home, .planner, .routePreview, .readiness].contains(model.flowState), panelDetent != .large, startVisible == false {
                 StreetnavBikeChip()
                     .padding(.leading, 16)
                     .padding(.top, 6)
                     .transition(.opacity)
+            }
+        }
+        .overlay {
+            if startVisible {
+                StreetnavStartScreen { showsStart = false }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.snappy(duration: 0.35), value: startVisible)
+        // Unlocked: a moment for the lock to open, then the map.
+        .onChange(of: bike.isLocked) { _, locked in
+            guard locked == false, showsStart else { return }
+            Task {
+                try? await Task.sleep(for: .seconds(1.2))
+                showsStart = false
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { safeAreaBottom = $0 }
@@ -132,10 +152,13 @@ struct StreetnavRecommendedView: View {
         .animation(StreetnavMotion.spring(model.tuning, reduceMotion: reduceMotion || model.tuning.simulateReducedMotion), value: model.flowState)
     }
 
+    private var startVisible: Bool { showsStart && embedded == false && model.flowState == .home }
+
     /// The panel stays up, like the card in Maps, everywhere but during the ride and its summary.
     private var panelIsPresented: Binding<Bool> {
         Binding(
-            get: { embedded == false && (model.flowState == .home || model.flowState == .planner || model.flowState.isRouteStep) },
+            get: { embedded == false && startVisible == false
+                && (model.flowState == .home || model.flowState == .planner || model.flowState.isRouteStep) },
             set: { _ in }
         )
     }

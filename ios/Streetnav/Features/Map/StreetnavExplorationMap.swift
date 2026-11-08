@@ -35,6 +35,8 @@ struct StreetnavExplorationMap: View {
     var recenter: () -> Void = {}
     /// A point held while exploring, a building or not, to ride to.
     var choosePoint: ((CLLocationCoordinate2D, _ building: Bool) -> Void)?
+    /// No map buttons, while the start screen covers the map.
+    var hidesButtons = false
 
     /// The building held, drawn selected while its place is shown.
     @State private var building: StandardBuildingsFeature?
@@ -44,8 +46,8 @@ struct StreetnavExplorationMap: View {
     @AppStorage(StreetnavStreetFilter.key) private var streetFilter: StreetnavStreetFilter = .all
     @State private var camera = CameraBox()
     @State private var sunLight = StreetnavSunlight.preset(at: .now)
-    /// The zoom, tilt and other map buttons step aside while the map is moved by hand, to look around; they come back
-    /// once it has been still for a moment, or with a tap on the map, which also hides them.
+    /// The zoom, tilt and other map buttons step aside by themselves while the map is moved by hand, to look around, and
+    /// come back once it has been still for a moment: no tap to show or hide them.
     @State private var buttonsAside = false
     @State private var buttonsReturn: Task<Void, Never>?
     @Environment(\.colorScheme) private var colorScheme
@@ -213,12 +215,6 @@ struct StreetnavExplorationMap: View {
                 FeatureState(.standardBuildings, id: id, state: .init(select: true))
             }
 
-            TapInteraction { _ in
-                buttonsReturn?.cancel()
-                buttonsAside.toggle()
-                return true
-            }
-
             // Where the phone points while exploring, where the bike goes while riding.
             Puck2D(bearing: mode.isNavigationLike ? .course : .heading)
                 .showsAccuracyRing(true)
@@ -374,7 +370,9 @@ struct StreetnavExplorationMap: View {
         var state: CameraState?
     }
 
-    private var showsButtons: Bool { mode.isNavigationLike == false && mode != .arrived && panelOverlap < 380 }
+    private var showsButtons: Bool {
+        hidesButtons == false && mode.isNavigationLike == false && mode != .arrived && panelOverlap < 380
+    }
 
     private var threeDButton: some View {
         Button {

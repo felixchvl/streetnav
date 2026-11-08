@@ -261,7 +261,7 @@ struct StreetnavBikeChip: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 14)
-                .frame(height: StreetnavUnlockSlider.knob)
+                .frame(height: StreetnavUnlockSlider.chipHeight)
                 .streetnavGlass(in: Capsule(), interactive: true)
         }
         // The menu would tint its label with the accent.
@@ -273,6 +273,78 @@ struct StreetnavBikeChip: View {
                 bike.refreshStatus()
                 try? await Task.sleep(for: .seconds(20))
             }
+        }
+    }
+}
+
+/// The screen the app opens on while the bike may be locked: the lock, large, to slide down, over the map dimmed behind
+/// it; « Explorer la carte » leaves it for the map. It goes by itself once the bike reports its lock open.
+struct StreetnavStartScreen: View {
+    @ObservedObject private var bike = StreetnavVanMoofBike.shared
+    @ObservedObject private var account = StreetnavVanMoofAccount.shared
+    let explore: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 6) {
+                Text(account.bike?.name ?? "Ton vélo")
+                    .font(.largeTitle.weight(.bold))
+                HStack(spacing: 10) {
+                    if bike.state == .ready, bike.battery != nil {
+                        StreetnavBikeBattery(percent: bike.battery)
+                    }
+                    Text(status)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 32)
+
+            Spacer(minLength: 24)
+            // The track hangs below the lock: room for it, then the way to go.
+            StreetnavUnlockSlider(large: true)
+                .frame(height: 104 + 232, alignment: .top)
+            Text("Glisse le cadenas vers le bas")
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.secondary)
+                .padding(.top, 16)
+                .opacity(bike.isLocked == false ? 0 : 1)
+            Spacer(minLength: 24)
+
+            Button(action: explore) {
+                Label("Explorer la carte", systemImage: "map")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, minHeight: 58)
+                    .contentShape(Capsule())
+                    .streetnavGlass(in: Capsule(), interactive: true)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            // The map stays in sight, darker where the words are.
+            LinearGradient(colors: [.black.opacity(0.6), .black.opacity(0.25), .black.opacity(0.65)],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+        }
+        .environment(\.colorScheme, .dark)
+        .task { if bike.state == .idle { await bike.connect() } }
+    }
+
+    private var status: String {
+        switch bike.state {
+        case .idle: "Non connecté"
+        case .searching: "Recherche du vélo…"
+        case .connecting: "Connexion…"
+        case .authenticating: "Authentification…"
+        case .ready: bike.isLocked == false ? "Déverrouillé" : "Verrouillé"
+        case .failed(let reason): reason
         }
     }
 }
@@ -293,14 +365,25 @@ struct StreetnavUnlockSlider: View {
     @State private var successes = 0
     @State private var failures = 0
 
-    /// The lock's size, and the battery chip's height beside it.
-    static let knob: CGFloat = 44
+    /// The small lock's size on the map, and the battery chip's height beside it.
+    static let chipHeight: CGFloat = 44
+
+    /// Small on the map, large on the start screen.
+    private let large: Bool
+    /// The lock's size.
+    private let knob: CGFloat
     /// How far it slides.
-    static let travel: CGFloat = 128
+    private let travel: CGFloat
+
+    init(large: Bool = false) {
+        self.large = large
+        knob = large ? 104 : Self.chipHeight
+        travel = large ? 232 : 128
+    }
     /// The share of the way past which letting go unlocks.
     static let threshold: CGFloat = 0.72
 
-    private var progress: CGFloat { min(1, offset / Self.travel) }
+    private var progress: CGFloat { min(1, offset / travel) }
     private var armed: Bool { progress >= Self.threshold }
     private var opening: Bool { armed || phase == .unlocking || phase == .unlocked }
 
@@ -313,7 +396,8 @@ struct StreetnavUnlockSlider: View {
     var body: some View {
         if bike.isLocked != false || phase != .resting {
             ZStack(alignment: .top) {
-                if phase == .sliding || phase == .unlocking || phase == .unlocked {
+                // Large, the way down shows at rest too: where to slide is plain.
+                if large || phase == .sliding || phase == .unlocking || phase == .unlocked {
                     track
                         .transition(.opacity.combined(with: .scale(scale: 0.4, anchor: .top)))
                 }
@@ -321,8 +405,8 @@ struct StreetnavUnlockSlider: View {
                     .offset(y: offset)
             }
             // Only the lock takes room: the track hangs below, over the map.
-            .frame(width: Self.knob, height: Self.knob, alignment: .top)
-            .overlay(alignment: .topLeading) {
+            .frame(width: knob, height: knob, alignment: .top)
+            .overlay(alignment: large ? .top : .topLeading) {
                 if let caption {
                     Text(caption)
                         .font(.footnote.weight(.medium))
@@ -332,9 +416,9 @@ struct StreetnavUnlockSlider: View {
                         .padding(.vertical, 8)
                         .streetnavGlass(in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         // As wide as its words, up to 240 points, beyond the lock's own width.
-                        .frame(width: 240, alignment: .leading)
+                        .frame(width: 240, alignment: large ? .center : .leading)
                         // Below the lock, or below the track while it is down.
-                        .offset(y: Self.knob + 8 + (phase == .unlocking ? Self.travel : 0))
+                        .offset(y: knob + 8 + (phase == .unlocking ? travel : 0))
                         .transition(.opacity)
                 }
             }
@@ -354,25 +438,25 @@ struct StreetnavUnlockSlider: View {
         ZStack(alignment: .top) {
             Capsule()
                 .fill(Color.green.opacity(opening ? 0.9 : 0.12 + 0.3 * progress))
-                .frame(height: Self.knob + offset)
-            StreetnavDownChevrons()
-                .frame(height: Self.travel - Self.knob)
-                .padding(.top, Self.knob)
-                .opacity(phase == .sliding ? max(0, 1 - progress * 1.6) : 0)
+                .frame(height: knob + offset)
+            StreetnavDownChevrons(size: large ? 34 : 20)
+                .frame(height: travel - knob)
+                .padding(.top, knob)
+                .opacity(phase == .sliding ? max(0, 1 - progress * 1.6) : large && phase == .resting ? 1 : 0)
             Image(systemName: "lock.open")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: knob * 0.39, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: Self.knob, height: Self.knob)
-                .padding(.top, Self.travel)
+                .frame(width: knob, height: knob)
+                .padding(.top, travel)
                 .opacity(armed ? 0 : 0.8)
         }
-        .frame(width: Self.knob, height: Self.knob + Self.travel, alignment: .top)
+        .frame(width: knob, height: knob + travel, alignment: .top)
         .streetnavGlass(in: Capsule())
     }
 
     private var knobView: some View {
         Image(systemName: opening ? "lock.open.fill" : "lock.fill")
-            .font(.system(size: 18, weight: .semibold))
+            .font(.system(size: knob * 0.41, weight: .semibold))
             .foregroundStyle(opening ? Color.white : phase == .failed ? Color.orange : Color.primary)
             // The shackle opens as the symbol changes.
             .contentTransition(.symbolEffect(.replace.magic(fallback: .downUp.byLayer)))
@@ -381,7 +465,7 @@ struct StreetnavUnlockSlider: View {
             .symbolEffect(.pulse, isActive: phase == .unlocking)
             .symbolEffect(.bounce, value: successes)
             .symbolEffect(.wiggle, value: failures)
-            .frame(width: Self.knob, height: Self.knob)
+            .frame(width: knob, height: knob)
             .background(Circle().fill(Color.green).opacity(opening ? 1 : 0))
             .streetnavGlass(in: Circle(), interactive: true)
             .contentShape(Circle())
@@ -402,12 +486,12 @@ struct StreetnavUnlockSlider: View {
                 }
                 // Straight under the finger, then a little resistance past the end.
                 let y = max(0, value.translation.height)
-                offset = y <= Self.travel ? y : Self.travel + min(16, (y - Self.travel) * 0.2)
+                offset = y <= travel ? y : travel + min(16, (y - travel) * 0.2)
             }
             .onEnded { value in
                 guard phase == .sliding else { return }
                 // A flick down past the middle unlocks too.
-                let flicked = progress >= 0.5 && value.predictedEndTranslation.height >= Self.travel * 1.2
+                let flicked = progress >= 0.5 && value.predictedEndTranslation.height >= travel * 1.2
                 if armed || flicked { unlock() } else { rest() }
             }
     }
@@ -435,7 +519,7 @@ struct StreetnavUnlockSlider: View {
     private func unlock() {
         guard phase != .unlocking else { return }
         withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
-            offset = Self.travel
+            offset = travel
             phase = .unlocking
             failure = nil
         }
@@ -476,6 +560,8 @@ struct StreetnavUnlockSlider: View {
 
 /// Three chevrons lighting up one after the other, downwards: the way to slide.
 private struct StreetnavDownChevrons: View {
+    var size: CGFloat = 20
+
     var body: some View {
         PhaseAnimator([0, 1, 2, 3]) { lit in
             VStack(spacing: -6) {
@@ -485,7 +571,7 @@ private struct StreetnavDownChevrons: View {
                 }
             }
         } animation: { _ in .easeInOut(duration: 0.22) }
-        .font(.system(size: 20, weight: .semibold))
+        .font(.system(size: size, weight: .semibold))
         .foregroundStyle(.secondary)
         .accessibilityHidden(true)
     }
