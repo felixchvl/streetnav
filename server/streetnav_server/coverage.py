@@ -232,8 +232,9 @@ HITS_SQL = f"""
         UNION ALL
         SELECT p.i, p.t, t.osm_id, t.a + ST_LineLocatePoint(t.geom, p.g) * (t.b - t.a), ST_Distance(m.geom, p.g)
         FROM pts p JOIN couverture.membre m ON ST_DWithin(m.geom, p.g, {MAX_HALF_WIDTH_M + GPS_M})
+        -- ST_Distance, not <->: the few tronçons of that way, never a walk through the spatial index of all of them.
         CROSS JOIN LATERAL (SELECT * FROM couverture.troncon t WHERE t.osm_id = m.ref_osm_id
-                            ORDER BY t.geom <-> p.g, t.id LIMIT 1) t
+                            ORDER BY ST_Distance(t.geom, p.g), t.id LIMIT 1) t
         WHERE ST_Distance(m.geom, p.g) <= m.reach_m)
     SELECT DISTINCT ON (osm_id, i) osm_id, i, t, f FROM hits ORDER BY osm_id, i, d, f"""
 
@@ -335,6 +336,8 @@ def build(conn) -> int:
         count = cur.rowcount
         cur.execute(ZONES_SQL)
         cur.execute(MEMBERS_SQL)
+        # Statistics of what this transaction wrote, or the planner measures the rides against tables it thinks empty.
+        cur.execute("ANALYZE couverture.troncon; ANALYZE couverture.membre")
         cur.execute(OSM_STATE_SQL)
         state = cur.fetchone()[0]
         cur.execute("""INSERT INTO couverture.build (osm_state, troncons) VALUES (%s, %s)
@@ -530,6 +533,8 @@ def update(conn, full: bool = False) -> dict:
     changed or deleted since. Returns what it did."""
     started = time.monotonic()
     with conn.cursor() as cur:
+        # The rides' query looks costly enough to be compiled with LLVM each time: some 0.25 s per ride, for nothing.
+        cur.execute("SET LOCAL jit = off")
         cur.execute(OSM_STATE_SQL)
         osm_state = cur.fetchone()[0]
         cur.execute("SELECT osm_state FROM couverture.build")

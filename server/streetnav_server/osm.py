@@ -308,6 +308,10 @@ def store(conn, elements, check: bool = True) -> dict:
         if check and (voies < MIN_VOIES or arrondissements != 20 or departments != len(DEPARTMENTS)):
             raise SystemExit(f"only {voies} voies, {arrondissements} arrondissements and {departments} departments "
                              "from Overpass: nothing changed")
+        # A coverage run reads osm.lieu for minutes: wait for it here, where waiting blocks no one, rather than in the
+        # queue of TRUNCATE, where every reader of osm.lieu (the app's map) would wait behind it.
+        from .coverage import LOCK as COVERAGE_LOCK
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (COVERAGE_LOCK,))
         cur.execute("TRUNCATE osm.lieu")
         cur.execute("DROP TABLE IF EXISTS osm_area")
         cur.execute(AREA_SQL)
