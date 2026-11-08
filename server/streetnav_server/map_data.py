@@ -2,8 +2,10 @@
 
 GET /tracks: one GeoJSON feature per ride with a track, simplified to about 5 metres (2,273 rides: 2 MB, much less
 gzipped), with an ETag so that the app only downloads them again when a ride was added or changed.
-GET /streets: the streets ridden and not ridden, for the map's two colours; empty since 2026-11-05, until the map
-draws the coverage measured again on OpenStreetMap's osm.lieu (coverage.py).
+GET /streets: the streets ridden and not ridden, for the map's two colours: the tronçons of the coverage (coverage.py)
+in the four departments, those of an OSM way in the same state drawn as one line, with the ways merged into them (bike
+paths along a street, other carriageways, contre-allées) in their state. Properties: r 1 when ridden all along, k the
+road class (for its width), p the complete passages.
 GET /stats: totals, this year, this month, the last 30 days, records, kilometres by year, and the kilometres of streets a
 bike may ride and of those ridden, overall and in each arrondissement of Paris and commune of the inner suburbs, with
 its ring (the tronçons of coverage.py).
@@ -28,9 +30,40 @@ from .registry import connect
 # About 5 metres in Paris (degrees of longitude / latitude): below what a phone screen shows at street level.
 SIMPLIFY_DEGREES = 0.00005
 
+# The width classes of Mapbox Standard's roads (its "roads" and "road-path" layers), from OpenStreetMap's highway tag:
+# 0 motorway or trunk, 1 primary, 2 secondary or tertiary, 3 street (the rest: residential, unclassified, links of
+# motorways…), 4 link of a primary, secondary or tertiary, 5 service, track…, 6 path, footway, cycleway, pedestrian.
+ROAD_CLASS = """CASE
+    WHEN highway IN ('motorway', 'trunk') THEN 0
+    WHEN highway = 'primary' THEN 1
+    WHEN highway IN ('secondary', 'tertiary') THEN 2
+    WHEN highway IN ('primary_link', 'secondary_link', 'tertiary_link') THEN 4
+    WHEN highway IN ('service', 'track') THEN 5
+    WHEN highway IN ('path', 'footway', 'cycleway', 'pedestrian', 'steps', 'bridleway') THEN 6
+    ELSE 3 END"""
 # Bumped whenever the street features change shape, so that the app downloads them again.
-STREETS_FORMAT = 3
-EMPTY = '{"type": "FeatureCollection", "features": []}'
+STREETS_FORMAT = 4
+# A merged way is ridden when the tronçons it lies along all are; its passages, the fewest of theirs.
+STREETS_SQL = f"""
+    WITH part AS (
+        SELECT t.osm_id, t.geom, t.highway, coalesce(e.done, false) AS done, coalesce(e.passages, 0) AS passages
+        FROM couverture.troncon t LEFT JOIN couverture.troncon_etat e ON e.troncon_id = t.id
+        WHERE t.zone IS NOT NULL
+        UNION ALL
+        SELECT m.osm_id, m.geom, w.tags->>'highway', bool_and(coalesce(e.done, false)), coalesce(min(e.passages), 0)
+        FROM couverture.membre m JOIN osm.lieu w ON w.osm_type = 'w' AND w.osm_id = m.osm_id
+        JOIN couverture.troncon t ON t.osm_id = m.ref_osm_id AND t.a < m.ref_b AND t.b > m.ref_a AND t.zone IS NOT NULL
+        LEFT JOIN couverture.troncon_etat e ON e.troncon_id = t.id
+        GROUP BY m.osm_id, m.a, m.geom, w.tags->>'highway'),
+    line AS (
+        SELECT highway, done, passages, (ST_Dump(ST_LineMerge(ST_Collect(geom)))).geom AS geom
+        FROM part GROUP BY osm_id, highway, done, passages)
+    SELECT json_build_object('type', 'FeatureCollection', 'features', coalesce(json_agg(
+               json_build_object('type', 'Feature',
+                                 'geometry', ST_AsGeoJSON(ST_Transform(ST_Simplify(geom, 1.5), 4326), 5)::json,
+                                 'properties', json_build_object('r', done::int, 'k', {ROAD_CLASS}, 'p', passages))),
+               '[]'::json))::text
+    FROM line"""
 ZONES = f"osm.lieu z WHERE {ZONE.format(t='z')}"
 DEPARTMENTS_SQL = f"""SELECT ST_Union(geom) FROM osm.lieu
                       WHERE kind = 'limite' AND admin_level = 6 AND code = ANY('{{{",".join(DEPARTMENTS)}}}')"""
@@ -62,10 +95,16 @@ def router(require_token) -> APIRouter:
 
     @api.get("/streets")
     def streets(if_none_match: str | None = Header(default=None)) -> Response:
-        etag = '"' + hashlib.sha256(f"streets:none:{STREETS_FORMAT}".encode()).hexdigest()[:16] + '"'
-        if if_none_match == etag:
-            return Response(status_code=304, headers={"ETag": etag})
-        return Response(EMPTY, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
+        with connect() as conn:
+            # The coverage changes when the tronçons are cut again or a ride is measured again.
+            version = conn.execute("""SELECT (SELECT max(built_at) FROM couverture.build),
+                                             (SELECT count(*) || ':' || coalesce(max(measured_at)::text, '')
+                                              FROM couverture.sortie)""").fetchone()
+            etag = '"' + hashlib.sha256(f"streets:{version}:{STREETS_FORMAT}".encode()).hexdigest()[:16] + '"'
+            if if_none_match == etag:
+                return Response(status_code=304, headers={"ETag": etag})
+            body = conn.execute(STREETS_SQL).fetchone()[0]
+        return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
     @api.get("/tracks/outside")
     def tracks_outside(if_none_match: str | None = Header(default=None)) -> Response:

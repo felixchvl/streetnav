@@ -124,6 +124,11 @@ class ApiTest(unittest.TestCase):
                          [("75101", 0, 0), ("75102", 0, 0), ("92001", 1, 0), ("92002", 2, 0)])
         self.assertAlmostEqual(stats["zones"][0]["total_km"], 1.5, delta=0.1)
         self.assertEqual(stats["streets"]["ridden_km"], 0)
+        # The map draws the same tronçons, none ridden
+        features = self.client.get("/streets").json()["features"]
+        self.assertTrue(features)
+        self.assertEqual({(f["geometry"]["type"], f["properties"]["r"], f["properties"]["p"]) for f in features},
+                         {("LineString", 0, 0)})
 
 if __name__ == "__main__":
     unittest.main()

@@ -178,8 +178,10 @@ from the home network.
 Until 2026-11-05 `GET /streets` returned every street around Paris cut into ridden and not ridden parts (`street_part`,
 from a monthly copy of OpenStreetMap in `street`, with the places of the Ville de Paris register and the zones of the
 State's API Géo). All of that was removed: the coverage is now measured again from what each ride brought, on
-`osm.lieu` (below). `GET /streets` stays empty until the map draws it; `GET /stats` takes the kilometres a bike may
-ride and the kilometres ridden in each zone from it, the zones and their rings from `osm.lieu`.
+`osm.lieu` (below). `GET /streets` draws it again since 2026-11-08: the tronçons in the four departments, those of a
+way in the same state as one line, with the ways merged into them (`r` ridden all along, `k` road class, `p` complete
+passages); `GET /stats` takes the kilometres a bike may ride and the kilometres ridden in each zone from it, the zones
+and their rings from `osm.lieu`.
 
 ## OpenStreetMap's places
 
