@@ -590,6 +590,20 @@ struct StreetnavIntegrationSheet: View {
                 } header: {
                     header("Vélo")
                 }
+
+                #if DEBUG
+                Section {
+                    NavigationLink {
+                        StreetnavHapticLab()
+                    } label: {
+                        StreetnavSettingsRow(symbol: "waveform.path", title: "Laboratoire haptique")
+                    }
+                } header: {
+                    header("Développement")
+                } footer: {
+                    Text("Toutes les vibrations possibles, pour choisir celles du cadenas.")
+                }
+                #endif
             }
             .navigationTitle("Réglages")
             .navigationBarTitleDisplayMode(.inline)
