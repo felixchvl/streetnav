@@ -18,14 +18,14 @@ enum StreetnavVanMoofProtocol {
     /// Topics are ids in the bike's object dictionary, with their values as both community references give them
     /// (captured from the official app or read in its S6 code). Streetnav writes only those whose values are known.
     enum Topic: UInt16 {
-        case wake = 0x010C              // write [1]: wakes the bike, which unlocks it
+        case wake = 0x010C              // write [1], as `wakePayload`: wakes the bike, which unlocks it
         case assistLevel = 0x0110       // [level]: 0 off, 1 eco, 2 normal, 3 sport, 4 turbo
-        case lockState = 0x0112         // 0 unlocked, 1 locked
+        case lockState = 0x0112         // 0 unlocked, 1 locked; published, a GET of it goes unanswered
         case distance = 0x0113          // odometer, metres
         case errors = 0x011F            // diagnostic trouble codes: (device class << 8) | subcode
         case lightMode = 0x0131         // [mode, 1]: 0 off, 2 on, 3 auto (1 is not on)
         case bell = 0x0142              // write [1]: rings the bell (it does not unlock)
-        case wakeState = 0x0160         // read only, meaning undocumented
+        case kickLock = 0x0160          // 0 open, 1 closed: sent by the bike as its kick lock moves (8 Nov 2026)
         case notifyInterval = 0x0163    // read only here, unit undocumented
         case speed = 0x0164             // unit undocumented
         case alarmSensitivity = 0x0171  // [level]: 1 high, 2 medium, 4 low
@@ -148,8 +148,11 @@ enum StreetnavVanMoofProtocol {
 
     static func certificatePayload(_ certificate: Data) -> Data { wrap(CBOR.bytes(certificate).encoded) }
     static func signaturePayload(_ signature: Data) -> Data { wrap(CBOR.bytes(signature).encoded) }
-    /// A SET of a value made of integer fields, such as `[1]` for wake.
+    /// A SET of a value made of integer fields, such as `[3]` for assist level 3.
     static func valuePayload(_ fields: [Int]) -> Data { wrap(CBOR.array(fields.map(CBOR.int)).encoded) }
+    /// The wake as the official app sent it in a capture of 8 Nov 2026 (firmware 1.12.1): the array `[1]` itself, not
+    /// wrapped in a byte string. The wrapped form of `valuePayload` is acknowledged by the bike but does not unlock it.
+    static let wakePayload = CBOR.array([.int(1)]).encoded
 
     /// A value as the bike sent it, for registers whose meaning is undocumented: its numbers, text or bytes.
     static func raw(_ payload: Data) -> String {

@@ -51,7 +51,6 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
 
     /// Undocumented registers, as the bike sends them.
     @Published private(set) var motorState: String?
-    @Published private(set) var wakeState: String?
     @Published private(set) var bellMode: String?
     @Published private(set) var notifyInterval: String?
 
@@ -135,9 +134,9 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         reset(to: .idle)
     }
 
-    /// Wakes the bike, which unlocks it. True once the bike reports its lock open. Sent as the official app sends it in the
-    /// published captures (a SET with the app's usual QoS 1), then once more "at least once" (QoS 0), which the bike
-    /// acknowledges: the journal then shows whether it got it. A sleeping bike gets more time, to be woken from a button,
+    /// Wakes the bike, which unlocks it. True once the bike reports its lock open (lock state or kick lock at 0). Sent as
+    /// the official app sent it in a capture of 8 Nov 2026 (a SET with QoS 1 of the bare array [1]), then once more "at
+    /// least once" (QoS 0), which the bike acknowledges: the journal then shows whether it got it. A sleeping bike gets more time, to be woken from a button,
     /// and the wake again as soon as it is up.
     @discardableResult
     func unlock() async -> Bool {
@@ -174,21 +173,21 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         if locked == nil {
             note(isAsleep == true ? "Pas d'ouverture : le vélo dort toujours" : "Pas d'ouverture annoncée par le vélo")
             // No news from the bike: ask it.
-            request(.lockState)
+            request(.kickLock)
             try? await Task.sleep(for: .seconds(2))
         }
         return (locked ?? isLocked) == false
     }
 
     private func sendWake(qos: UInt8 = 1) {
-        send(.set, .wake, P.valuePayload([1]), qos: qos)
+        send(.set, .wake, P.wakePayload, qos: qos)
     }
 
     /// Asks the bike for the values Streetnav shows.
     func refresh() {
         guard state == .ready else { return }
         let topics: [P.Topic] = [.batteryLevel, .lockState, .distance, .firmware, .assistLevel, .lightMode, .alarm,
-                                 .alarmSensitivity, .chargeLimit, .speed, .errors, .motorState, .wakeState, .bellMode,
+                                 .alarmSensitivity, .chargeLimit, .speed, .errors, .motorState, .kickLock, .bellMode,
                                  .notifyInterval]
         for topic in topics { request(topic) }
     }
@@ -367,7 +366,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
                 // Woken during an unlock: the wake again, now that it is heard.
                 if lockWaiters.isEmpty == false { sendWake() }
             }
-        case .lockState:
+        case .lockState, .kickLock:
             let locked = firstInt(message.payload).map { $0 != 0 }
             isLocked = locked
             lockWaiters.forEach { $0.resume(returning: locked) }
@@ -401,7 +400,6 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
                 }
             }
         case .motorState: motorState = P.raw(message.payload)
-        case .wakeState: wakeState = P.raw(message.payload)
         case .bellMode: bellMode = P.raw(message.payload)
         case .notifyInterval: notifyInterval = P.raw(message.payload)
         default: break

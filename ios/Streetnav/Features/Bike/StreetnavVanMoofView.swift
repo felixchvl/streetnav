@@ -184,7 +184,6 @@ struct StreetnavVanMoofView: View {
         Section {
             LabeledContent("Erreurs", value: errorsText)
             LabeledContent("État du moteur", value: bike.motorState ?? "—")
-            LabeledContent("État de veille", value: bike.wakeState ?? "—")
             LabeledContent("Mode de sonnette", value: bike.bellMode ?? "—")
             LabeledContent("Intervalle des notifications", value: bike.notifyInterval ?? "—")
         } header: {
