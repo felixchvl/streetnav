@@ -18,6 +18,7 @@ enum StreetnavVanMoofProtocol {
     /// Topics are ids in the bike's object dictionary, with their values as both community references give them
     /// (captured from the official app or read in its S6 code). Streetnav writes only those whose values are known.
     enum Topic: UInt16 {
+        case power = 0x0100             // 0 off, 1 on: the wake turns it to 1 (captures of 8 Nov 2026)
         case wake = 0x010C              // write [1], as `wakePayload`: wakes the bike, which unlocks it
         case assistLevel = 0x0110       // [level]: 0 off, 1 eco, 2 normal, 3 sport, 4 turbo
         case lockState = 0x0112         // 0 unlocked, 1 locked; published, a GET of it goes unanswered

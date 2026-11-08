@@ -105,30 +105,36 @@ struct StreetnavVanMoofView: View {
         if bike.state == .ready { settingsSections }
 
         Section {
-            Button {
-                Task {
-                    isUnlocking = true
-                    unlockText = await bike.unlock() ? "Vélo déverrouillé." : "Le vélo n'a pas confirmé le déverrouillage."
-                    isUnlocking = false
+            // The result right under the capsule, on the same bare row: no card of its own with other corners.
+            VStack(spacing: 8) {
+                Button {
+                    Task {
+                        isUnlocking = true
+                        unlockText = await bike.unlock() ? "Vélo déverrouillé." : "Le vélo n'a pas confirmé le déverrouillage."
+                        isUnlocking = false
+                    }
+                } label: {
+                    // Text alone, centred: a padlock beside it pulled it off the middle.
+                    Text(isUnlocking ? "Déverrouillage…" : "Déverrouiller")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
                 }
-            } label: {
-                // Text alone, centred: a padlock beside it pulled it off the middle.
-                Text(isUnlocking ? "Déverrouillage…" : "Déverrouiller")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .disabled(isUnlocking)
+                if let unlockText {
+                    Text(unlockText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .transition(.opacity)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
             .frame(maxWidth: .infinity)
-            .disabled(isUnlocking)
+            .animation(.snappy, value: unlockText)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets())
-            if let unlockText {
-                Text(unlockText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
         } footer: {
             Text("Le vélo se verrouille sur lui-même, avec la béquille : il n'y a pas de commande pour le verrouiller. Ferme l'app VanMoof avant, le vélo n'accepte qu'une connexion à la fois.")
         }

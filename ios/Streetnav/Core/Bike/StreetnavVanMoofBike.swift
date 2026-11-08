@@ -18,7 +18,11 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
 
     @Published private(set) var state: State = .idle
     @Published private(set) var battery: Int?
+    /// Locked while the kick lock is closed or the bike is off, which the kick lock alone does not tell: open and off,
+    /// the bike still waits for the wake (journal of 8 Nov 2026). Unknown until both are known, or the lock closed.
     @Published private(set) var isLocked: Bool?
+    private var kickLocked: Bool?
+    private var isOn: Bool?
     /// True while only the bike's Bluetooth answers (`P.Topic.access` 1 · 7): it then ignores every request and the unlock
     /// until it wakes, from one of its buttons or, says VanMoof, for an iPhone paired with it in the Bluetooth settings.
     @Published private(set) var isAsleep: Bool?
@@ -173,6 +177,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         if locked == nil {
             note(isAsleep == true ? "Pas d'ouverture : le vélo dort toujours" : "Pas d'ouverture annoncée par le vélo")
             // No news from the bike: ask it.
+            request(.power)
             request(.kickLock)
             try? await Task.sleep(for: .seconds(2))
         }
@@ -186,7 +191,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     /// Asks the bike for the values Streetnav shows.
     func refresh() {
         guard state == .ready else { return }
-        let topics: [P.Topic] = [.batteryLevel, .lockState, .distance, .firmware, .assistLevel, .lightMode, .alarm,
+        let topics: [P.Topic] = [.batteryLevel, .power, .distance, .firmware, .assistLevel, .lightMode, .alarm,
                                  .alarmSensitivity, .chargeLimit, .speed, .errors, .motorState, .kickLock, .bellMode,
                                  .notifyInterval]
         for topic in topics { request(topic) }
@@ -224,7 +229,7 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
     /// What the map and the navigation show, now and then.
     func refreshStatus() {
         guard state == .ready else { return }
-        for topic in [P.Topic.batteryLevel, .lockState, .assistLevel, .lightMode] { request(topic) }
+        for topic in [P.Topic.batteryLevel, .power, .kickLock, .assistLevel, .lightMode] { request(topic) }
     }
 
     /// The GPS speed, to find the unit the bike sends its own in: once eight readings above 9 km/h agree on one unit, it
@@ -367,10 +372,11 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
                 if lockWaiters.isEmpty == false { sendWake() }
             }
         case .lockState, .kickLock:
-            let locked = firstInt(message.payload).map { $0 != 0 }
-            isLocked = locked
-            lockWaiters.forEach { $0.resume(returning: locked) }
-            lockWaiters.removeAll()
+            kickLocked = firstInt(message.payload).map { $0 != 0 }
+            updateLock()
+        case .power:
+            isOn = firstInt(message.payload).map { $0 != 0 }
+            updateLock()
         case .batteryLevel: battery = firstInt(message.payload)
         case .distance: odometerMeters = firstInt(message.payload)
         case .firmware:
@@ -570,6 +576,15 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         reset(to: .failed(reason))
     }
 
+    /// From the kick lock and the power together; an unlock under way ends once the bike is on with its lock open.
+    private func updateLock() {
+        let locked: Bool? = kickLocked == true || isOn == false ? true : isOn == true ? false : nil
+        isLocked = locked
+        guard locked == false else { return }
+        lockWaiters.forEach { $0.resume(returning: false) }
+        lockWaiters.removeAll()
+    }
+
     private func reset(to state: State) {
         peripheral = nil
         characteristic = nil
@@ -582,6 +597,8 @@ final class StreetnavVanMoofBike: NSObject, ObservableObject {
         accessWait?.cancel()
         accessWait = nil
         isAsleep = nil
+        kickLocked = nil
+        isOn = nil
         otherCharacteristics.removeAll()
         lockWaiters.forEach { $0.resume(returning: nil) }
         lockWaiters.removeAll()
