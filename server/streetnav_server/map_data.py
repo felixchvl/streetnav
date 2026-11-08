@@ -6,6 +6,9 @@ GET /streets: the streets ridden and not ridden, for the map's two colours: the 
 in the four departments, those of an OSM way in the same state drawn as one line, with the ways merged into them (bike
 paths along a street, other carriageways, contre-allées) in their state. Properties: r 1 when ridden all along, k the
 road class (for its width), p the complete passages.
+GET /activities/{id}/streets: the tronçons one ride went along (coverage.py), in the order it rode them: the part
+ridden (the whole tronçon when it rode it all along), the street's name and OSM way, complete, new (that ride rode it
+all along first) and its passages (p, all rides); with the ride's totals (summary).
 GET /stats: totals, this year, this month, the last 30 days, records, kilometres by year, and the kilometres of streets a
 bike may ride and of those ridden, overall and in each arrondissement of Paris and commune of the inner suburbs, with
 its ring (the tronçons of coverage.py).
@@ -21,7 +24,7 @@ from __future__ import annotations
 
 import hashlib
 
-from fastapi import APIRouter, Depends, Header, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 
 from . import osm
 from .osm import DEPARTMENTS, ZONE
@@ -64,6 +67,34 @@ STREETS_SQL = f"""
                                  'properties', json_build_object('r', done::int, 'k', {ROAD_CLASS}, 'p', passages))),
                '[]'::json))::text
     FROM line"""
+# One ride's tronçons (%(id)s), by the index of passages on activity_id: a few milliseconds.
+ACTIVITY_STREETS_SQL = f"""
+    WITH ridden AS (
+        SELECT p.troncon_id, bool_or(p.complete) AS complete, min(p.entered_at) AS entered_at,
+               ST_LineMerge(ST_Collect(ST_LineSubstring(t.geom, least(greatest(least(p.from_m, p.to_m) / t.length_m, 0), 1),
+                                                        least(greatest(p.from_m, p.to_m) / t.length_m, 1)))) AS part
+        FROM couverture.passage p JOIN couverture.troncon t ON t.id = p.troncon_id
+        WHERE p.activity_id = %(id)s GROUP BY p.troncon_id),
+    street AS (
+        SELECT t.id, t.osm_id, t.name, t.highway, t.length_m, r.complete, r.entered_at,
+               coalesce(e.done_activity = %(id)s, false) AS new, coalesce(e.passages, 0) AS passages,
+               CASE WHEN r.complete THEN t.geom ELSE r.part END AS geom
+        FROM ridden r JOIN couverture.troncon t ON t.id = r.troncon_id
+        LEFT JOIN couverture.troncon_etat e ON e.troncon_id = t.id)
+    SELECT json_build_object(
+        'type', 'FeatureCollection',
+        'features', coalesce(json_agg(json_build_object(
+            'type', 'Feature', 'id', id,
+            'geometry', ST_AsGeoJSON(ST_Transform(geom, 4326), 6)::json,
+            'properties', json_build_object('osm_id', osm_id, 'name', name, 'k', {ROAD_CLASS}, 'complete', complete,
+                                            'new', new, 'p', passages, 'm', round(length_m::numeric)))
+            ORDER BY entered_at, id), '[]'::json),
+        'summary', json_build_object(
+            'troncons', count(*), 'complete', count(*) FILTER (WHERE complete), 'new', count(*) FILTER (WHERE new),
+            'streets', count(DISTINCT coalesce(name, osm_id::text)),
+            'km', round((coalesce(sum(ST_Length(geom)), 0) / 1000)::numeric, 2),
+            'new_km', round((coalesce(sum(length_m) FILTER (WHERE new), 0) / 1000)::numeric, 2)))::text
+    FROM street"""
 ZONES = f"osm.lieu z WHERE {ZONE.format(t='z')}"
 DEPARTMENTS_SQL = f"""SELECT ST_Union(geom) FROM osm.lieu
                       WHERE kind = 'limite' AND admin_level = 6 AND code = ANY('{{{",".join(DEPARTMENTS)}}}')"""
@@ -104,6 +135,20 @@ def router(require_token) -> APIRouter:
             if if_none_match == etag:
                 return Response(status_code=304, headers={"ETag": etag})
             body = conn.execute(STREETS_SQL).fetchone()[0]
+        return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
+
+    @api.get("/activities/{activity_id}/streets")
+    def activity_streets(activity_id: int, if_none_match: str | None = Header(default=None)) -> Response:
+        with connect() as conn:
+            version = conn.execute("""SELECT a.id, s.measured_at, (SELECT max(built_at) FROM couverture.build)
+                                      FROM activity a LEFT JOIN couverture.sortie s ON s.activity_id = a.id
+                                      WHERE a.id = %s""", (activity_id,)).fetchone()
+            if version is None:
+                raise HTTPException(status_code=404, detail="unknown activity")
+            etag = '"' + hashlib.sha256(f"ride-streets:{version}:{STREETS_FORMAT}".encode()).hexdigest()[:16] + '"'
+            if if_none_match == etag:
+                return Response(status_code=304, headers={"ETag": etag})
+            body = conn.execute(ACTIVITY_STREETS_SQL, {"id": activity_id}).fetchone()[0]
         return Response(body, media_type="application/geo+json", headers={"ETag": etag, "Cache-Control": "no-cache"})
 
     @api.get("/tracks/outside")

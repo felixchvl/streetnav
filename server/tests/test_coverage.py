@@ -1,5 +1,6 @@
 """Coverage: tronçons cut from osm.lieu, ways merged into streets, rides' passages and the counters. The database test
 needs STREETNAV_TEST_DATABASE_URL (a throwaway database these tests EMPTY)."""
+import json
 import math
 import os
 import tempfile
@@ -7,7 +8,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from streetnav_server import coverage, osm, registry
+from streetnav_server import coverage, map_data, osm, registry
 from test_osm import LIMITS, way
 from test_registry import URL
 
@@ -155,6 +156,17 @@ class CoverageTest(unittest.TestCase):
         done = coverage.update(self.conn)
         self.assertEqual((done["full"], done["removed"]), (False, 1))
         self.assertEqual(self.rows("SELECT count(*) FROM couverture.troncon_etat WHERE done_activity = 3"), [(0,)])
+
+    def test_the_streets_of_one_ride(self):
+        coverage.update(self.conn, full=True)
+        ride = json.loads(self.rows(map_data.ACTIVITY_STREETS_SQL.replace("%(id)s", "2"))[0][0])
+        # Up Rue B and back: its south tronçon twice, its impasse once, both ridden all along first by that ride
+        self.assertEqual([(f["properties"]["osm_id"], f["properties"]["complete"], f["properties"]["new"], f["properties"]["p"])
+                          for f in ride["features"]], [(202, True, True, 2), (202, True, True, 1)])
+        self.assertEqual({f["geometry"]["type"] for f in ride["features"]}, {"LineString"})
+        self.assertEqual((ride["summary"]["troncons"], ride["summary"]["new"], ride["summary"]["streets"]), (2, 2, 1))
+        self.assertGreater(ride["summary"]["new_km"], 0.9)
+        self.assertEqual(json.loads(self.rows(map_data.ACTIVITY_STREETS_SQL.replace("%(id)s", "99"))[0][0])["features"], [])
 
     def test_a_ride_through_a_place_rides_all_of_it(self):
         # Place G, a square of 100 m, crossed corner to corner by Rue H and Rue I, which meet in its middle

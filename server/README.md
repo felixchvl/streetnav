@@ -62,7 +62,7 @@ gold from silver without importing anything again (`--dry-run` to see the counts
 - `streetnav_server/osm.py` - OpenStreetMap's places of the 75, 92, 93 and 94 (`osm.lieu`), see below.
 - `streetnav_server/coverage.py` - the streets each bike ride went along (schema `couverture`), see below.
 - `streetnav_server/map_data.py` - what the app's map and statistics read (`GET /tracks`, `/streets`, `/zones`,
-  `/tracks/outside`, `/stats`).
+  `/tracks/outside`, `/stats`, and `/activities/{id}/streets`: the streets one ride went along, new ones marked).
 - `tests/` - `python -m unittest discover -s tests`. The database tests also need
   `STREETNAV_TEST_DATABASE_URL`, a throwaway PostGIS database they empty, and the API tests httpx;
   without them they are skipped.

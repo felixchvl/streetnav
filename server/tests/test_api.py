@@ -85,6 +85,10 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(streets.json(), {"type": "FeatureCollection", "features": []})
         self.assertEqual(self.client.get("/streets", headers={"If-None-Match": streets.headers["ETag"]}).status_code, 304)
         self.assertEqual(self.client.get("/stats", headers={"Authorization": ""}).status_code, 401)
+        # The ride's streets: none measured yet; an unknown ride
+        ride = self.client.get("/activities/1/streets").json()
+        self.assertEqual((ride["features"], ride["summary"]["troncons"]), ([], 0))
+        self.assertEqual(self.client.get("/activities/99/streets").status_code, 404)
 
     def test_zone_outlines(self):
         with registry.connect() as conn:
